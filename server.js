@@ -7,7 +7,7 @@ const multer = require('multer');
 const db = require('./database');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 const expressLayouts = require('express-ejs-layouts');
 
@@ -882,7 +882,7 @@ app.use((err, req, res, next) => {
     next(err);
 });
 
-// Start server
-app.listen(PORT, () => {
-    console.log(`Server is running at http://localhost:${PORT}`);
+// Start server - 0.0.0.0 untuk Railway/Docker
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server is running at http://0.0.0.0:${PORT}`);
 });
