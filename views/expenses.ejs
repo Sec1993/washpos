@@ -1,0 +1,190 @@
+<h2 class="mb-4">Modul Pengeluaran</h2>
+
+<div class="row">
+    <div class="col-md-5">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-warning text-dark">Input Pengeluaran Baru</div>
+            <div class="card-body">
+                <form action="/expenses" method="POST" enctype="multipart/form-data" onsubmit="return validateRupiahForm(this)">
+                    <div class="mb-3">
+                        <label class="form-label">Kategori Pengeluaran <small class="text-muted">(dinamis dari Master)</small></label>
+                        <select name="category" class="form-select" required>
+                            <option value="">-- Pilih Kategori --</option>
+                            <% categories.forEach(c => { %>
+                                <option value="<%= c.name %>"><%= c.name %></option>
+                            <% }) %>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nominal (Rp)</label>
+                        <input type="text" name="amount" class="form-control rupiah" required placeholder="50.000">
+                    </div>
+                    <% if (user.role==='owner') { %>
+                        <div class="mb-3">
+                            <label class="form-label">Bayar Dari Akun</label>
+                            <select name="akun_kas" class="form-select" required>
+                                <% accounts.forEach(a=>{ %>
+                                    <option value="<%= a.name %>" <%= a.name==='Kas Kecil'?'selected':'' %>><%= a.name %> — <%= a.type %></option>
+                                <% }) %>
+                            </select>
+                            <small class="text-muted">Pilih akun Kas/Bank/QRIS. Kelola di <a href="/akun">Akun</a>.</small>
+                        </div>
+                    <% } else { %>
+                        <input type="hidden" name="akun_kas" value="Kas Kecil">
+                        <small class="text-muted d-block mb-3">Keluar otomatis dari <strong>Kas Kecil (Outlet)</strong></small>
+                    <% } %>
+                    <div class="mb-3">
+                        <label class="form-label">Foto Nota <small class="text-muted">(opsional, max 3MB)</small></label>
+                        <div class="d-flex gap-2 mb-2">
+                            <label class="btn btn-outline-primary btn-sm flex-fill mb-0">
+                                <span>📁 Galeri</span>
+                                <input type="file" name="photo" id="photoGaleri" class="d-none" accept="image/*" onchange="previewNota(this)">
+                            </label>
+                            <button type="button" class="btn btn-outline-success btn-sm flex-fill" onclick="openKamera()">
+                                <span>📷 Kamera</span>
+                            </button>
+                        </div>
+                        <div id="previewNotaWrap" class="mt-2" style="display:none">
+                            <img id="previewNotaImg" src="" alt="Preview" style="max-width:100%; max-height:180px; border:1px solid #ddd; border-radius:6px;">
+                            <div class="d-flex gap-2 mt-2">
+                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="hapusFoto()">Hapus</button>
+                                <small class="text-muted align-self-center">Preview — akan diupload saat Simpan</small>
+                            </div>
+                        </div>
+                        <canvas id="canvasKamera" style="display:none"></canvas>
+                    </div>
+                    <!-- 5.4 Integrasi stok -->
+                    <div class="card border-success mb-3">
+                        <div class="card-body p-2">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="checkStok" onchange="toggleStok()">
+                                <label class="form-check-label fw-bold" for="checkStok">Tambah ke Stok? <small class="text-muted">(5.4 Beli bahan → Stok IN)</small></label>
+                            </div>
+                            <div id="stokFields" style="display:none" class="mt-2">
+                                <div class="row g-2">
+                                    <div class="col-7">
+                                        <select name="stock_item_id" class="form-select form-select-sm">
+                                            <option value="">-- Pilih Barang --</option>
+                                            <% inventory.forEach(it=>{ %>
+                                                <option value="<%= it.id %>"><%= it.name %> (<%= it.stock %> <%= it.unit %>)</option>
+                                            <% }) %>
+                                        </select>
+                                    </div>
+                                    <div class="col-5">
+                                        <input type="number" name="stock_qty" class="form-control form-control-sm" min="1" step="1" placeholder="Qty, mis 5">
+                                    </div>
+                                </div>
+                                <small class="text-muted">Jika dicentang, stok barang akan +Qty otomatis (history Masuk) + jurnal Biaya/Kas tetap.</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Keterangan</label>
+                        <textarea name="description" class="form-control" rows="2" placeholder="Catatan tambahan..."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-warning w-100">Simpan Pengeluaran</button>
+                </form>
+                <small class="text-muted d-block mt-2">Foto di <code>public/uploads</code>. Integrasi stok: centang + pilih barang + qty.</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-7">
+        <div class="card shadow-sm mb-3">
+            <div class="card-body">
+                <form method="GET" action="/expenses" class="row g-2 align-items-end">
+                    <div class="col-md-3"><label class="form-label small mb-1">Dari</label><input type="date" name="from" value="<%= query.from %>" class="form-control form-control-sm"></div>
+                    <div class="col-md-3"><label class="form-label small mb-1">Sampai</label><input type="date" name="to" value="<%= query.to %>" class="form-control form-control-sm"></div>
+                    <div class="col-md-4"><label class="form-label small mb-1">Cari</label><input type="text" name="search" value="<%= query.search %>" class="form-control form-control-sm" placeholder="Sabun / Budi"></div>
+                    <div class="col-md-2"><button type="submit" class="btn btn-warning btn-sm w-100">Filter</button><a href="/expenses" class="btn btn-outline-secondary btn-sm w-100 mt-1">Reset</a></div>
+                </form>
+            </div>
+        </div>
+        <div class="card shadow-sm">
+            <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                <span>Riwayat Pengeluaran</span>
+                <small><%= total %> data • Hal <%= currentPage %>/<%= totalPages %></small>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover mb-0 align-middle">
+                        <thead class="table-light"><tr><th>Waktu</th><th>Kategori</th><th>Nominal</th><th>Foto</th><th>Keterangan</th><th>Admin</th></tr></thead>
+                        <tbody>
+                            <% if (expenses.length === 0) { %>
+                                <tr><td colspan="6" class="text-center text-muted py-3">Tidak ada sesuai filter.</td></tr>
+                            <% } %>
+                            <% expenses.forEach(e => { %>
+                            <tr>
+                                <td><small><%= new Date(e.date).toLocaleString('id-ID') %></small></td>
+                                <td><span class="badge bg-warning text-dark"><%= e.category %></span></td>
+                                <td>Rp <%= e.amount.toLocaleString('id-ID') %></td>
+                                <td>
+                                    <% if (e.photo) { %>
+                                        <a href="<%= e.photo %>" target="_blank" onclick="event.preventDefault(); document.getElementById('modalImg<%= e.id %>').src='<%= e.photo %>'; new bootstrap.Modal(document.getElementById('fotoModal<%= e.id %>')).show();">
+                                            <img src="<%= e.photo %>" alt="Nota" style="width:50px; height:50px; object-fit:cover; border-radius:4px; border:1px solid #ddd;">
+                                        </a>
+                                        <div class="modal fade" id="fotoModal<%= e.id %>" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content"><div class="modal-header"><h6 class="modal-title">Foto Nota - <%= e.category %></h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body text-center"><img id="modalImg<%= e.id %>" src="" style="max-width:100%; max-height:70vh;"></div><div class="modal-footer"><a href="<%= e.photo %>" target="_blank" class="btn btn-sm btn-primary">Buka</a><button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Tutup</button></div></div></div></div>
+                                    <% } else { %><span class="text-muted">-</span><% } %>
+                                </td>
+                                <td><small><%= e.description || '-' %></small></td>
+                                <td><small><%= e.admin_name %></small></td>
+                            </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card-footer d-flex justify-content-between align-items-center">
+                <small class="text-muted">Tampil <%= expenses.length %> dari <%= total %></small>
+                <nav><ul class="pagination pagination-sm mb-0">
+                    <li class="page-item <%= currentPage<=1?'disabled':'' %>"><a class="page-link" href="/expenses?from=<%= query.from %>&to=<%= query.to %>&search=<%= encodeURIComponent(query.search) %>&page=<%= currentPage-1 %>&limit=<%= limit %>">«</a></li>
+                    <% for(let i=1;i<=totalPages;i++){ if(i===1||i===totalPages||(i>=currentPage-1&&i<=currentPage+1)){ %>
+                        <li class="page-item <%= i===currentPage?'active':'' %>"><a class="page-link" href="/expenses?from=<%= query.from %>&to=<%= query.to %>&search=<%= encodeURIComponent(query.search) %>&page=<%= i %>&limit=<%= limit %>"><%= i %></a></li>
+                    <% } else if(i===currentPage-2||i===currentPage+2){ %><li class="page-item disabled"><span class="page-link">…</span></li><% }} %>
+                    <li class="page-item <%= currentPage>=totalPages?'disabled':'' %>"><a class="page-link" href="/expenses?from=<%= query.from %>&to=<%= query.to %>&search=<%= encodeURIComponent(query.search) %>&page=<%= currentPage+1 %>&limit=<%= limit %>">»</a></li>
+                </ul></nav>
+                <form method="GET" action="/expenses" class="d-flex gap-1">
+                    <input type="hidden" name="from" value="<%= query.from %>"><input type="hidden" name="to" value="<%= query.to %>"><input type="hidden" name="search" value="<%= query.search %>">
+                    <select name="limit" class="form-select form-select-sm" style="width:70px" onchange="this.form.submit()"><option value="5" <%= limit==5?'selected':'' %>>5</option><option value="10" <%= limit==10?'selected':'' %>>10</option><option value="20" <%= limit==20?'selected':'' %>>20</option><option value="50" <%= limit==50?'selected':'' %>>50</option></select>
+                </form>
+            </div>
+        </div>
+        <div class="alert alert-warning mt-3 py-2"><small><strong>5.4:</strong> Centang “Tambah ke Stok” saat beli Sabun/Peralatan → stok <code>IN</code> otomatis + history. Dashboard low-stock jika <code>stock ≤ min_stock</code>.</small></div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalKamera" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header bg-success text-white"><h6 class="modal-title">Ambil Foto Nota</h6><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div><div class="modal-body text-center p-2"><video id="videoKamera" autoplay playsinline style="width:100%; max-height:320px; background:#000; border-radius:8px;"></video><canvas id="canvasCapture" style="display:none"></canvas><small id="kameraStatus" class="text-muted d-block mt-2">Izinkan kamera...</small></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Batal</button><button type="button" class="btn btn-success btn-sm" onclick="captureFoto()">📸 Ambil</button></div></div></div></div>
+
+<script>
+function previewNota(input){
+    const wrap=document.getElementById('previewNotaWrap');
+    const img=document.getElementById('previewNotaImg');
+    if(input.files && input.files[0]){
+        const f=input.files[0];
+        if(f.size > 3*1024*1024){ alert('Foto max 3MB'); input.value=''; wrap.style.display='none'; return; }
+        if(!f.type.startsWith('image/')){ alert('Hanya gambar'); input.value=''; wrap.style.display='none'; return; }
+        const reader=new FileReader(); reader.onload=e=>{ img.src=e.target.result; wrap.style.display='block'; }; reader.readAsDataURL(f);
+    } else wrap.style.display='none';
+}
+function hapusFoto(){ document.getElementById('photoGaleri').value=''; document.getElementById('previewNotaWrap').style.display='none'; document.getElementById('previewNotaImg').src=''; }
+function toggleStok(){ document.getElementById('stokFields').style.display=document.getElementById('checkStok').checked?'block':'none'; }
+let streamKamera=null;
+function openKamera(){
+    const modalEl=document.getElementById('modalKamera'); const video=document.getElementById('videoKamera'); const status=document.getElementById('kameraStatus');
+    const modal=new bootstrap.Modal(modalEl); modal.show(); status.textContent='Meminta izin...';
+    navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment'}, audio:false }).then(s=>{ streamKamera=s; video.srcObject=s; status.textContent='Kamera aktif.'; video.onloadedmetadata=()=>video.play(); }).catch(err=>{ status.textContent='Gagal: '+err.message; });
+    modalEl.addEventListener('hidden.bs.modal', function handler(){ if(streamKamera){ streamKamera.getTracks().forEach(t=>t.stop()); streamKamera=null; } video.srcObject=null; modalEl.removeEventListener('hidden.bs.modal', handler); });
+}
+function captureFoto(){
+    const video=document.getElementById('videoKamera'); const canvas=document.getElementById('canvasCapture'); const previewWrap=document.getElementById('previewNotaWrap'); const previewImg=document.getElementById('previewNotaImg'); const fileInput=document.getElementById('photoGaleri');
+    if(!video.videoWidth) return alert('Kamera belum siap');
+    canvas.width=video.videoWidth; canvas.height=video.videoHeight; canvas.getContext('2d').drawImage(video,0,0);
+    canvas.toBlob(blob=>{
+        if(blob.size>3*1024*1024) return alert('>3MB');
+        const file=new File([blob],'kamera_'+Date.now()+'.jpg',{type:'image/jpeg'}); const dt=new DataTransfer(); dt.items.add(file); fileInput.files=dt.files;
+        previewImg.src=URL.createObjectURL(blob); previewWrap.style.display='block';
+        bootstrap.Modal.getInstance(document.getElementById('modalKamera')).hide();
+        if(streamKamera){ streamKamera.getTracks().forEach(t=>t.stop()); streamKamera=null; } document.getElementById('videoKamera').srcObject=null;
+    },'image/jpeg',0.85);
+}
+</script>

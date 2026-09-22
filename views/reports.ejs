@@ -1,0 +1,215 @@
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h2 class="mb-0">Laporan Keuangan <small class="text-muted fs-6">(Owner Only)</small></h2>
+    <div class="d-flex gap-2">
+        <span class="badge bg-danger">RBAC Protected</span>
+        <button class="btn btn-sm btn-outline-primary" onclick="exportExcel()">📊 Excel</button>
+        <button class="btn btn-sm btn-primary" onclick="window.print()">🖨️ PDF/Cetak</button>
+    </div>
+</div>
+
+<!-- Filter 6.1 & 6.3 -->
+<div class="card shadow-sm mb-3">
+    <div class="card-body">
+        <form method="GET" action="/reports" class="row g-2 align-items-end">
+            <div class="col-md-3"><label class="form-label small mb-1">Dari Tanggal</label><input type="date" name="from" value="<%= query.from %>" class="form-control form-control-sm"></div>
+            <div class="col-md-3"><label class="form-label small mb-1">Sampai Tanggal</label><input type="date" name="to" value="<%= query.to %>" class="form-control form-control-sm"></div>
+            <div class="col-md-2"><button type="submit" class="btn btn-primary btn-sm w-100">Filter</button><a href="/reports" class="btn btn-outline-secondary btn-sm w-100 mt-1">Reset</a></div>
+            <div class="col-md-4"><small class="text-muted">Filter berlaku untuk Jurnal, Buku Besar, Laba Rugi. Pagination Jurnal: Hal <%= currentPage %>/<%= totalPages %> • <%= total %> entri</small></div>
+        </form>
+    </div>
+</div>
+
+<!-- KPI 6.3 & 6.11 + Kas Besar/Kecil -->
+<div class="row mb-3">
+    <div class="col-md-3"><div class="card text-bg-success"><div class="card-body"><h6>Pendapatan (filter)</h6><h4 class="mb-0">Rp <%= totalPendapatan.toLocaleString('id-ID') %></h4><small>Kredit - Debit</small></div></div></div>
+    <div class="col-md-3"><div class="card text-bg-danger"><div class="card-body"><h6>Biaya (filter)</h6><h4 class="mb-0">Rp <%= totalBiaya.toLocaleString('id-ID') %></h4><small>Debit - Kredit</small></div></div></div>
+    <div class="col-md-3"><div class="card <%= labaBersih>=0?'text-bg-primary':'text-bg-warning' %>"><div class="card-body"><h6>Laba Bersih</h6><h4 class="mb-0">Rp <%= labaBersih.toLocaleString('id-ID') %></h4><small>Pendapatan - Biaya</small></div></div></div>
+    <div class="col-md-3"><div class="card text-bg-dark"><div class="card-body"><h6>Total Kas</h6><h4 class="mb-0">Rp <%= totalKas.toLocaleString('id-ID') %></h4><small>Kecil Rp <%= totalKasKecil.toLocaleString('id-ID') %> • Besar Rp <%= totalKasBesar.toLocaleString('id-ID') %></small></div></div></div>
+</div>
+<div class="row mb-3">
+    <div class="col-md-6"><div class="card border-primary"><div class="card-body d-flex justify-content-between"><span>Kas Kecil (Outlet)</span><strong>Rp <%= totalKasKecil.toLocaleString('id-ID') %></strong></div></div></div>
+    <div class="col-md-6"><div class="card border-dark"><div class="card-body d-flex justify-content-between"><span>Kas Besar (Pusat)</span><strong>Rp <%= totalKasBesar.toLocaleString('id-ID') %></strong></div></div></div>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-4"><div class="card"><div class="card-body"><h6>Hari Ini</h6><div class="d-flex justify-content-between"><span><%= kpiToday.c %> trx</span><strong>Rp <%= (kpiToday.omzet||0).toLocaleString('id-ID') %></strong></div></div></div></div>
+    <div class="col-md-4"><div class="card"><div class="card-body"><h6>Bulan Ini</h6><div class="d-flex justify-content-between"><span>Omzet</span><strong>Rp <%= (kpiBulan.omzetBulan||0).toLocaleString('id-ID') %></strong></div></div></div></div>
+    <div class="col-md-4"><div class="card"><div class="card-body"><h6>Persediaan</h6><div class="d-flex justify-content-between"><span>Total stok unit</span><strong><%= totalStock %></strong></div></div></div></div>
+</div>
+
+<!-- Tren 6.11 -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-light">Tren 7 Hari (Omzet & Transaksi)</div>
+    <div class="card-body" style="height:220px">
+        <canvas id="trenChart"></canvas>
+    </div>
+</div>
+
+<!-- 6.1 Jurnal + pagination -->
+<div class="card shadow-sm mb-4" id="jurnalSection">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+        <span>6.1 Jurnal Umum (Chronological)</span>
+        <small><%= total %> entri • Hal <%= currentPage %>/<%= totalPages %></small>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive" style="max-height:380px; overflow-y:auto;">
+            <table class="table table-sm table-striped mb-0" id="jurnalTable">
+                <thead class="table-light sticky-top"><tr><th>Tanggal</th><th>Deskripsi</th><th>Akun</th><th class="text-end">Debit</th><th class="text-end">Kredit</th></tr></thead>
+                <tbody>
+                    <% if(journals.length===0){ %><tr><td colspan="5" class="text-center text-muted py-3">Tidak ada jurnal sesuai filter.</td></tr><% } %>
+                    <% journals.forEach(j=>{ %>
+                    <tr>
+                        <td><small><%= new Date(j.date).toLocaleString('id-ID') %></small></td>
+                        <td><small><%= j.description %></small></td>
+                        <td><span class="badge <%= j.account_type==='Kas Besar'?'bg-primary': j.account_type==='Kas Kecil'?'bg-info text-dark': j.account_type==='Kas'?'bg-dark': j.account_type==='Pendapatan'?'bg-success':'bg-danger' %>"><%= j.account_type %></span></td>
+                        <td class="text-end"><%= j.debit>0?'Rp '+j.debit.toLocaleString('id-ID'):'-' %></td>
+                        <td class="text-end"><%= j.credit>0?'Rp '+j.credit.toLocaleString('id-ID'):'-' %></td>
+                    </tr>
+                    <% }) %>
+                </tbody>
+                <tfoot class="table-light"><tr><th colspan="3" class="text-end">Total (filter)</th><th class="text-end">Rp <%= allJournals.filter(j=>j.debit>0).reduce((s,j)=>s+j.debit,0).toLocaleString('id-ID') %></th><th class="text-end">Rp <%= allJournals.filter(j=>j.credit>0).reduce((s,j)=>s+j.credit,0).toLocaleString('id-ID') %></th></tr></tfoot>
+            </table>
+        </div>
+    </div>
+    <div class="card-footer d-flex justify-content-between align-items-center">
+        <small class="text-muted">Tampil <%= journals.length %> dari <%= total %></small>
+        <nav><ul class="pagination pagination-sm mb-0">
+            <li class="page-item <%= currentPage<=1?'disabled':'' %>"><a class="page-link" href="/reports?from=<%= query.from %>&to=<%= query.to %>&page=<%= currentPage-1 %>&limit=<%= limit %>">«</a></li>
+            <% for(let i=1;i<=totalPages;i++){ if(i===1||i===totalPages||(i>=currentPage-1&&i<=currentPage+1)){ %>
+                <li class="page-item <%= i===currentPage?'active':'' %>"><a class="page-link" href="/reports?from=<%= query.from %>&to=<%= query.to %>&page=<%= i %>&limit=<%= limit %>"><%= i %></a></li>
+            <% } else if(i===currentPage-2||i===currentPage+2){ %><li class="page-item disabled"><span class="page-link">…</span></li><% }} %>
+            <li class="page-item <%= currentPage>=totalPages?'disabled':'' %>"><a class="page-link" href="/reports?from=<%= query.from %>&to=<%= query.to %>&page=<%= currentPage+1 %>&limit=<%= limit %>">»</a></li>
+        </ul></nav>
+        <form method="GET" action="/reports" class="d-flex gap-1">
+            <input type="hidden" name="from" value="<%= query.from %>"><input type="hidden" name="to" value="<%= query.to %>">
+            <select name="limit" class="form-select form-select-sm" style="width:70px" onchange="this.form.submit()"><option value="10" <%= limit==10?'selected':'' %>>10</option><option value="20" <%= limit==20?'selected':'' %>>20</option><option value="50" <%= limit==50?'selected':'' %>>50</option><option value="100" <%= limit==100?'selected':'' %>>100</option></select>
+        </form>
+    </div>
+</div>
+
+<!-- 6.2 Buku Besar -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-secondary text-white">6.2 Buku Besar (per Akun, running balance)</div>
+    <div class="card-body">
+        <% Object.keys(ledger).forEach(akun=>{ %>
+            <h6 class="mt-3"><%= akun %> <small class="text-muted">(<%= ledger[akun].length %> entri)</small></h6>
+            <div class="table-responsive" style="max-height:220px; overflow-y:auto;">
+                <table class="table table-sm table-hover mb-2">
+                    <thead class="table-light sticky-top"><tr><th>Tanggal</th><th>Deskripsi</th><th class="text-end">Debit</th><th class="text-end">Kredit</th><th class="text-end">Saldo</th></tr></thead>
+                    <tbody>
+                        <% ledger[akun].forEach(l=>{ %>
+                        <tr>
+                            <td><small><%= new Date(l.date).toLocaleString('id-ID') %></small></td>
+                            <td><small><%= l.description %></small></td>
+                            <td class="text-end"><%= l.debit>0?l.debit.toLocaleString('id-ID'):'-' %></td>
+                            <td class="text-end"><%= l.credit>0?l.credit.toLocaleString('id-ID'):'-' %></td>
+                            <td class="text-end fw-bold">Rp <%= l.balance.toLocaleString('id-ID') %></td>
+                        </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% }) %>
+        <% if(Object.keys(ledger).length===0){ %><p class="text-muted text-center">Tidak ada data ledger sesuai filter.</p><% } %>
+    </div>
+</div>
+
+<div class="row">
+    <!-- 6.3 Laba Rugi -->
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-success text-white">6.3 Laba Rugi (filter)</div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between"><span>Pendapatan</span><strong class="text-success">Rp <%= totalPendapatan.toLocaleString('id-ID') %></strong></div>
+                <hr class="my-2">
+                <div><strong>Biaya per Kategori</strong></div>
+                <% if(biayaPerKategori.length===0){ %><small class="text-muted">Tidak ada biaya sesuai filter.</small><% } %>
+                <% biayaPerKategori.forEach(b=>{ %>
+                    <div class="d-flex justify-content-between small"><span><%= b.category %></span><span>Rp <%= b.total.toLocaleString('id-ID') %></span></div>
+                <% }) %>
+                <hr>
+                <div class="d-flex justify-content-between"><span>Total Biaya</span><strong class="text-danger">Rp <%= totalBiaya.toLocaleString('id-ID') %></strong></div>
+                <hr>
+                <div class="d-flex justify-content-between fs-5"><span>Laba Bersih</span><strong class="<%= labaBersih>=0?'text-primary':'text-warning' %>">Rp <%= labaBersih.toLocaleString('id-ID') %></strong></div>
+            </div>
+        </div>
+    </div>
+    <!-- 6.4 Neraca -->
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-dark text-white">6.4 Neraca (as of filter) — Kas Pisah</div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between"><span>Aset - Kas Kecil (Outlet)</span><strong>Rp <%= totalKasKecil.toLocaleString('id-ID') %></strong></div>
+                <div class="d-flex justify-content-between"><span>Aset - Kas Besar (Pusat)</span><strong>Rp <%= totalKasBesar.toLocaleString('id-ID') %></strong></div>
+                <div class="d-flex justify-content-between border-top pt-2 mt-2"><span>Aset - Total Kas</span><strong>Rp <%= totalKas.toLocaleString('id-ID') %></strong></div>
+                <div class="d-flex justify-content-between"><span>Aset - Persediaan (unit)</span><strong><%= totalStock %> unit</strong></div>
+                <div class="d-flex justify-content-between"><span>Kewajiban (Hutang)</span><span>Rp 0</span></div>
+                <hr>
+                <div class="d-flex justify-content-between"><span>Ekuitas = Aset - Kewajiban</span><strong>Rp <%= totalKas.toLocaleString('id-ID') %></strong></div>
+                <hr>
+                <small class="text-muted">Cash basis pisah Kas Kecil/Besar. Total Kas = Kecil + Besar. Jurnal pisah akun.</small>
+            </div>
+            <div class="card-footer d-flex gap-2">
+                <button class="btn btn-outline-dark btn-sm" onclick="window.print()">Cetak PDF</button>
+                <button class="btn btn-outline-success btn-sm" onclick="exportExcel()">Excel Jurnal</button>
+                <a href="/" class="btn btn-outline-secondary btn-sm ms-auto">Dashboard</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="alert alert-info">
+    <small>Transfer antar akun kini di menu <a href="/akun" class="alert-link">Akun</a> (Owner). History perpindahan ada di Akun → History.</small>
+</div>
+
+<div class="alert alert-warning mt-4">
+    <small><strong>6.5 RBAC:</strong> Hanya Owner. Staff akses via URL → 403. Filter berlaku semua laporan. Kas pisah: penjualan/pengeluaran pilih Kas, transfer antar kas via form di atas.</small>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+const trenData = <%- JSON.stringify(tren) %>;
+const ctx=document.getElementById('trenChart');
+if(ctx && trenData.length){
+    new Chart(ctx, {
+        type:'bar',
+        data:{
+            labels: trenData.map(r=>r.tgl),
+            datasets:[
+                { label:'Omzet', data: trenData.map(r=>r.omzet||0), backgroundColor:'rgba(25,135,84,0.7)'},
+                { label:'Transaksi', data: trenData.map(r=>r.trx||0), backgroundColor:'rgba(13,110,253,0.6)', yAxisID:'y1'}
+            ]
+        },
+        options:{
+            responsive:true, maintainAspectRatio:false,
+            plugins:{ legend:{ position:'top'}},
+            scales:{ y:{ beginAtZero:true }, y1:{ beginAtZero:true, position:'right', grid:{ drawOnChartArea:false } } }
+        }
+    });
+}
+function exportExcel(){
+    const table=document.getElementById('jurnalTable');
+    const ws_data=[['Tanggal','Deskripsi','Akun','Debit','Kredit']];
+    table.querySelectorAll('tbody tr').forEach(tr=>{
+        const tds=[...tr.querySelectorAll('td')];
+        if(tds.length===5 && !tds[0].innerText.includes('Tidak ada')){
+            ws_data.push([tds[0].innerText, tds[1].innerText, tds[2].innerText, tds[3].innerText, tds[4].innerText]);
+        }
+    });
+    const ws=XLSX.utils.aoa_to_sheet(ws_data);
+    ws['!cols']=[{wch:18},{wch:40},{wch:12},{wch:15},{wch:15}];
+    // header style
+    const range=XLSX.utils.decode_range(ws['!ref']);
+    for(let c=range.s.c; c<=range.e.c; c++){
+        const cell=ws[XLSX.utils.encode_cell({r:0,c})];
+        if(cell){ cell.s={ font:{bold:true, color:{rgb:"FFFFFF"}}, fill:{fgColor:{rgb:"4472C4"}}, alignment:{horizontal:"center"} }; }
+    }
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Jurnal");
+    // tambah sheet Laba Rugi & Neraca ringkas
+    const ws2=XLSX.utils.aoa_to_sheet([['Laba Rugi'],['Pendapatan', document.querySelector('.card.text-bg-success h4')?.innerText||''],['Biaya', document.querySelector('.card.text-bg-danger h4')?.innerText||''],['Laba Bersih', document.querySelector('.card h4.text-primary, .card h4.text-warning')?.innerText||'']]);
+    XLSX.utils.book_append_sheet(wb, ws2, "Ringkasan");
+    XLSX.writeFile(wb, 'jurnal_'+new Date().toISOString().slice(0,10)+'.xlsx');
+}
+</script>

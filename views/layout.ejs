@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POS Cuci Kendaraan</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .navbar-brand { font-weight: bold; }
+        body { background-color: #f8f9fa; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">WashPOS</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <% if (typeof user !== 'undefined' && user) { %>
+                <ul class="navbar-nav me-auto">
+                    <% if (user.role === 'owner') { %>
+                        <li class="nav-item"><a class="nav-link" href="/">Dashboard</a></li>
+                    <% } %>
+                    <li class="nav-item"><a class="nav-link" href="/sales">Penjualan</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/expenses">Pengeluaran</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/inventory">Stok</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/absen">Absen</a></li>
+                    <% if (user.role === 'owner') { %>
+                        <li class="nav-item"><a class="nav-link" href="/master">Master</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/akun">Akun</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/reports">Laporan</a></li>
+                    <% } %>
+                </ul>
+                <div class="d-flex align-items-center text-white gap-2">
+                    <span>Halo, <strong><%= user.username %></strong> (<%= user.role %>)</span>
+                    <% if (typeof loginTime !== 'undefined' && loginTime) { %>
+                        <small class="badge bg-light text-dark">Login: <%= new Date(loginTime).toLocaleString('id-ID', {hour:'2-digit', minute:'2-digit'}) %> • <%= new Date(loginTime).toLocaleDateString('id-ID') %></small>
+                    <% } %>
+                    <% if (user.role==='owner') { %><a href="/karyawan-aktif" class="btn btn-sm btn-warning">Karyawan Aktif</a><% } %>
+                    <a href="/logout" class="btn btn-sm btn-danger">Logout</a>
+                </div>
+                <% } %>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <%- body %>
+    </div>
+    <!-- Toast container 7.1 -->
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1080">
+        <div id="appToast" class="toast align-items-center text-bg-success border-0" role="alert"><div class="d-flex"><div class="toast-body" id="toastMsg">Berhasil</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function showToast(msg, type='success'){
+            const t=document.getElementById('appToast');
+            const m=document.getElementById('toastMsg');
+            if(m) m.textContent=msg;
+            t.className='toast align-items-center text-bg-'+type+' border-0';
+            new bootstrap.Toast(t, {delay:3000}).show();
+        }
+        // loading state untuk semua form submit
+        document.addEventListener('DOMContentLoaded', ()=>{
+            document.querySelectorAll('form').forEach(f=>{
+                f.addEventListener('submit', ()=>{
+                    const btn=f.querySelector('button[type=submit]');
+                    if(btn){ btn.dataset.orig=btn.innerHTML; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span> Memproses...'; btn.disabled=true; setTimeout(()=>{btn.disabled=false; btn.innerHTML=btn.dataset.orig;}, 4000); }
+                });
+            });
+            // empty state sudah di tiap view, toast untuk flash
+            const urlParams=new URLSearchParams(window.location.search);
+            if(urlParams.get('success')) showToast(urlParams.get('success'));
+            if(urlParams.get('error')) showToast(urlParams.get('error'),'danger');
+        });
+    </script>
+    <script>
+        // Rupiah helper: format 15000 -> "15.000"
+        function formatRupiah(angka) {
+            if(!angka) return '';
+            const digits = String(angka).replace(/[^0-9]/g,'');
+            if(!digits) return '';
+            return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+        }
+        function parseRupiah(str) {
+            const d = String(str).replace(/[^0-9]/g,'');
+            return d ? parseInt(d,10) : NaN;
+        }
+        // Auto-fetch harga & format
+        function updatePrice() {
+            const el = document.getElementById('service_name');
+            const priceEl = document.getElementById('price');
+            if(el && priceEl && el.value) {
+                fetch('/api/service-price?name=' + encodeURIComponent(el.value))
+                    .then(res => res.json())
+                    .then(data => {
+                        priceEl.value = formatRupiah(data.price);
+                    });
+            }
+        }
+        // Apply live formatting to all .rupiah inputs
+        document.addEventListener('DOMContentLoaded', function(){
+            document.querySelectorAll('.rupiah').forEach(function(inp){
+                // format initial value
+                if(inp.value) inp.value = formatRupiah(inp.value);
+                inp.addEventListener('input', function(e){
+                    const pos = e.target.selectionStart;
+                    const beforeLen = e.target.value.length;
+                    e.target.value = formatRupiah(e.target.value);
+                    const afterLen = e.target.value.length;
+                    // keep cursor near end (simple)
+                    try { e.target.setSelectionRange(e.target.selectionStart + (afterLen-beforeLen), e.target.selectionStart + (afterLen-beforeLen)); } catch {}
+                });
+                // on submit, strip formatting? server handles, but keep as is
+            });
+        });
+        // Validasi umum sebelum submit (dipanggil via onsubmit)
+        function validateRupiahForm(form) {
+            const rupiahInputs = form.querySelectorAll('.rupiah');
+            for(const inp of rupiahInputs){
+                const v = parseRupiah(inp.value);
+                if(isNaN(v) || v < 1000){
+                    alert('Validasi gagal: Harga/Nominal harus angka ≥ 1.000 (contoh: 15.000). Nilai sekarang: ' + inp.value);
+                    inp.focus();
+                    return false;
+                }
+            }
+            // cek nama min 2 karakter untuk input text required
+            const textInputs = form.querySelectorAll('input[type="text"][required]');
+            for(const inp of textInputs){
+                if(inp.value.trim().length < 2){
+                    alert('Validasi gagal: '+ (inp.placeholder || inp.name || 'Field') +' minimal 2 karakter.');
+                    inp.focus();
+                    return false;
+                }
+            }
+            return true;
+        }
+    </script>
+</body>
+</html>

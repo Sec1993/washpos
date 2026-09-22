@@ -1,0 +1,66 @@
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h2 class="mb-0">Kas Kecil (Outlet) — History</h2>
+    <div class="d-flex gap-2 align-items-center">
+        <span class="badge bg-success fs-6">Saldo: Rp <%= saldo.toLocaleString('id-ID') %></span>
+        <a href="/sales" class="btn btn-sm btn-outline-secondary">Kembali Penjualan</a>
+        <a href="/reports" class="btn btn-sm btn-outline-primary">Laporan</a>
+    </div>
+</div>
+<small class="text-muted d-block mb-3">Semua transaksi pemasukan (penjualan) & pengeluaran outlet tercatat ke Kas Kecil. Karyawan hanya akses ini. Klik badge di Penjualan untuk ke sini.</small>
+
+<div class="card shadow-sm mb-3">
+    <div class="card-body">
+        <form method="GET" action="/kas/kecil" class="row g-2 align-items-end">
+            <div class="col-md-3"><label class="form-label small mb-1">Dari Tanggal</label><input type="date" name="from" value="<%= query.from %>" class="form-control form-control-sm"></div>
+            <div class="col-md-3"><label class="form-label small mb-1">Sampai Tanggal</label><input type="date" name="to" value="<%= query.to %>" class="form-control form-control-sm"></div>
+            <div class="col-md-2"><button type="submit" class="btn btn-success btn-sm w-100">Filter</button><a href="/kas/kecil" class="btn btn-outline-secondary btn-sm w-100 mt-1">Reset</a></div>
+            <div class="col-md-4"><small class="text-muted">Filter tanggal • Pagination Hal <%= currentPage %>/<%= totalPages %> • <%= total %> mutasi</small></div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header bg-success text-white d-flex justify-content-between">
+        <span>History Kas Masuk & Keluar (Kecil)</span>
+        <small><%= total %> entri</small>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive" style="max-height:500px; overflow-y:auto;">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-light sticky-top">
+                    <tr><th>Waktu (Jam)</th><th>Transaksi</th><th class="text-end">Masuk (Debit)</th><th class="text-end">Keluar (Kredit)</th><th class="text-end">Saldo</th></tr>
+                </thead>
+                <tbody>
+                    <% if(journals.length===0){ %><tr><td colspan="5" class="text-center text-muted py-3">Tidak ada mutasi sesuai filter.</td></tr><% } %>
+                    <% journals.forEach(j=>{ %>
+                    <tr>
+                        <td><small><%= new Date(j.date).toLocaleString('id-ID', {dateStyle:'short', timeStyle:'medium'}) %></small><br><small class="text-muted"><%= new Date(j.date).toLocaleDateString('id-ID') %> <%= new Date(j.date).toLocaleTimeString('id-ID') %></small></td>
+                        <td><small><%= j.description %></small><br><span class="badge <%= j.debit>0?'bg-success':'bg-danger' %>"><%= j.debit>0?'Masuk':'Keluar' %></span></td>
+                        <td class="text-end <%= j.debit>0?'fw-bold text-success':'' %>"><%= j.debit>0?'Rp '+j.debit.toLocaleString('id-ID'):'-' %></td>
+                        <td class="text-end <%= j.credit>0?'fw-bold text-danger':'' %>"><%= j.credit>0?'Rp '+j.credit.toLocaleString('id-ID'):'-' %></td>
+                        <td class="text-end fw-bold">Rp <%= j.saldo.toLocaleString('id-ID') %></td>
+                    </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="card-footer d-flex justify-content-between align-items-center">
+        <small class="text-muted">Tampil <%= journals.length %> dari <%= total %></small>
+        <nav><ul class="pagination pagination-sm mb-0">
+            <li class="page-item <%= currentPage<=1?'disabled':'' %>"><a class="page-link" href="/kas/kecil?from=<%= query.from %>&to=<%= query.to %>&page=<%= currentPage-1 %>&limit=<%= limit %>">«</a></li>
+            <% for(let i=1;i<=totalPages;i++){ if(i===1||i===totalPages||(i>=currentPage-1&&i<=currentPage+1)){ %>
+                <li class="page-item <%= i===currentPage?'active':'' %>"><a class="page-link" href="/kas/kecil?from=<%= query.from %>&to=<%= query.to %>&page=<%= i %>&limit=<%= limit %>"><%= i %></a></li>
+            <% } else if(i===currentPage-2||i===currentPage+2){ %><li class="page-item disabled"><span class="page-link">…</span></li><% }} %>
+            <li class="page-item <%= currentPage>=totalPages?'disabled':'' %>"><a class="page-link" href="/kas/kecil?from=<%= query.from %>&to=<%= query.to %>&page=<%= currentPage+1 %>&limit=<%= limit %>">»</a></li>
+        </ul></nav>
+        <form method="GET" action="/kas/kecil" class="d-flex gap-1">
+            <input type="hidden" name="from" value="<%= query.from %>"><input type="hidden" name="to" value="<%= query.to %>">
+            <select name="limit" class="form-select form-select-sm" style="width:70px" onchange="this.form.submit()"><option value="10" <%= limit==10?'selected':'' %>>10</option><option value="20" <%= limit==20?'selected':'' %>>20</option><option value="50" <%= limit==50?'selected':'' %>>50</option></select>
+        </form>
+    </div>
+</div>
+
+<div class="alert alert-info mt-3">
+    <small><strong>Info:</strong> Masuk = Penjualan (Debit Kas Kecil), Keluar = Pengeluaran (Kredit Kas Kecil) atau Transfer ke Kas Besar. Jam & deskripsi transaksi tampil per baris. Saldo = running `debit-credit`.</small>
+</div>

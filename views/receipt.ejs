@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Struk Pembayaran - WashPOS</title>
+    <style>
+        body { font-family: 'Courier New', Courier, monospace; font-size: 14px; max-width: 320px; margin: 0 auto; padding: 20px; }
+        .text-center { text-align: center; }
+        .bold { font-weight: bold; }
+        hr { border-top: 1px dashed #000; }
+        .row { display: flex; justify-content: space-between; margin-bottom: 5px; }
+        .layanan-list { text-align:right; }
+        @media print {
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="text-center">
+        <h2 style="margin-bottom:0;">WashPOS</h2>
+        <p style="margin-top:5px;">Struk Bukti Pembayaran</p>
+    </div>
+    <hr>
+    <div class="row"><span>Waktu:</span> <span><%= new Date(sale.date).toLocaleString('id-ID') %></span></div>
+    <div class="row"><span>No. Struk:</span> <span>#<%= sale.id %></span></div>
+    <hr>
+    <div class="row"><span>Pelanggan:</span> <span><%= sale.customer_name %></span></div>
+    <div class="row"><span>Plat Nomor:</span> <span><%= sale.license_plate %></span></div>
+    <div class="row"><span>Pencuci:</span> <span><%= sale.worker_name %></span></div>
+    <hr>
+    <div style="margin-bottom:8px;">
+        <div style="display:flex; justify-content:space-between; font-weight:bold; border-bottom:1px solid #000; padding-bottom:4px;"><span>Layanan</span><span> </span></div>
+        <% (sale.service_name||'').split(',').forEach(lay=>{ %>
+            <div class="row"><span>- <%= lay.trim() %></span></div>
+        <% }) %>
+    </div>
+    <hr>
+    <div class="row bold"><span>Total Bayar:</span> <span>Rp <%= sale.price.toLocaleString('id-ID') %></span></div>
+    <hr>
+    <div class="row"><span>Kasir:</span> <span><%= sale.admin_name %></span></div>
+    <div class="text-center" style="margin-top:20px;">
+        <p>Terima Kasih Atas Kunjungan Anda!</p>
+    </div>
+    
+    <div class="text-center no-print" style="margin-top:30px;">
+        <button onclick="window.print()" style="padding:10px 20px; cursor:pointer;">Cetak Struk</button>
+        <br><br>
+        <a href="/sales">Kembali ke Kasir</a>
+    </div>
+</body>
+</html>

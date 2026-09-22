@@ -1,0 +1,90 @@
+<div class="row mt-2">
+    <div class="col-12 text-center mb-3">
+        <h1 class="display-6">Selamat Datang di WashPOS</h1>
+        <p class="lead">Dashboard Owner - Ringkasan operasional, keuangan & stok</p>
+        <div class="d-flex justify-content-center gap-2 flex-wrap">
+            <a href="/sales" class="btn btn-outline-primary">Kasir Penjualan</a>
+            <a href="/reports" class="btn btn-outline-success">Laporan Keuangan</a>
+            <a href="/inventory" class="btn btn-outline-dark">Kelola Stok</a>
+            <a href="/expenses" class="btn btn-outline-warning">Pengeluaran</a>
+        </div>
+        <hr>
+    </div>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-3"><div class="card text-bg-success"><div class="card-body"><h6>Kas Kecil (Outlet)</h6><h4 class="mb-0">Rp <%= kasKecil.toLocaleString('id-ID') %></h4><small>Karyawan hanya ini • Outlet</small></div></div></div>
+    <div class="col-md-3"><div class="card text-bg-primary"><div class="card-body"><h6>Kas Besar (Pusat)</h6><h4 class="mb-0">Rp <%= kasBesar.toLocaleString('id-ID') %></h4><small>Owner only • Pusat • Total Rp <%= totalKas.toLocaleString('id-ID') %></small></div></div></div>
+    <div class="col-md-3"><div class="card text-bg-dark"><div class="card-body"><h6>Transaksi Hari Ini</h6><h4 class="mb-0"><%= kpiTodaySales.c %> trx</h4><small>Rp <%= (kpiTodaySales.omzet||0).toLocaleString('id-ID') %> omzet</small></div></div></div>
+    <div class="col-md-3"><div class="card text-bg-warning"><div class="card-body"><h6>Stok Menipis</h6><h3 class="mb-0"><%= lowStock.length %></h3><small>Item ≤ min_stock</small></div></div></div>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-4"><div class="card"><div class="card-body"><h6>Omzet Bulan Ini</h6><h4>Rp <%= (kpiBulanOmzet||0).toLocaleString('id-ID') %></h4><small>Laba bulan Rp <%= labaBulan.toLocaleString('id-ID') %></small></div></div></div>
+    <div class="col-md-4"><div class="card"><div class="card-body"><h6>Laba Hari Ini</h6><h4 class="<%= labaHari>=0?'text-success':'text-danger' %>">Rp <%= labaHari.toLocaleString('id-ID') %></h4><small>Omzet - Biaya hari ini</small></div></div></div>
+    <div class="col-md-4"><div class="card"><div class="card-body"><h6>Total Sales / Expenses</h6><h4><%= totalSales %> / <%= totalExpenses %></h4><small>Biaya hari Rp <%= (kpiTodayExp||0).toLocaleString('id-ID') %></small></div></div></div>
+</div>
+
+<% if (lowStock.length>0) { %>
+<div class="alert alert-danger d-flex align-items-center" role="alert">
+    <div class="me-3">⚠️</div>
+    <div>
+        <strong>Low stock alert (5.7):</strong> <%= lowStock.length %> item ≤ min_stock
+        <ul class="mb-0 mt-2">
+            <% lowStock.forEach(item=>{ %>
+                <li><strong><%= item.name %></strong> — sisa <strong><%= item.stock %> <%= item.unit %></strong> (min <%= item.min_stock %>) — <a href="/inventory" class="alert-link">Kelola</a></li>
+            <% }) %>
+        </ul>
+    </div>
+</div>
+<% } else { %>
+<div class="alert alert-success"><small>✅ Semua stok aman. Kelola di <a href="/inventory">Inventory</a>.</small></div>
+<% } %>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-light">Grafik Tren 7 Hari (6.11) — Kas Pisah</div>
+    <div class="card-body" style="height:220px"><canvas id="dashTren"></canvas></div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header bg-light"><strong>Ringkasan Kas & Login</strong></div>
+    <div class="card-body small">
+        <div class="d-flex justify-content-between"><span>Kas Kecil (Outlet)</span><strong>Rp <%= kasKecil.toLocaleString('id-ID') %></strong></div>
+        <div class="d-flex justify-content-between"><span>Kas Besar (Pusat)</span><strong>Rp <%= kasBesar.toLocaleString('id-ID') %></strong></div>
+        <div class="d-flex justify-content-between border-top pt-2 mt-2"><span>Total Kas</span><strong>Rp <%= totalKas.toLocaleString('id-ID') %></strong></div>
+        <hr class="my-2">
+        <div>Login: <strong><%= user.username %></strong> (<%= user.role %>) — <span class="badge bg-primary">Mulai <%= new Date(loginTime).toLocaleString('id-ID') %></span> • Durasi <strong id="durasiLogin">-</strong> • <a href="/karyawan-aktif" class="btn btn-sm btn-outline-primary py-0">Karyawan Aktif</a></div>
+        <div class="mt-1 text-muted">Penjualan & Pengeluaran pilih Kas. Transfer di <a href="/reports">Laporan</a>.</div>
+    </div>
+</div>
+<script>
+(function(){
+    const login=new Date("<%= loginTime %>");
+    function upd(){
+        const now=new Date(); const diff=now-login;
+        const m=Math.floor(diff/60000); const h=Math.floor(m/60); const men=m%60;
+        const el=document.getElementById('durasiLogin');
+        if(el) el.textContent=(h?h+' jam ':'')+men+' menit';
+    }
+    upd(); setInterval(upd,60000);
+})();
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const trenDash = <%- JSON.stringify(tren) %>;
+const ctxDash=document.getElementById('dashTren');
+if(ctxDash && trenDash.length){
+    new Chart(ctxDash, {
+        type:'bar',
+        data:{
+            labels: trenDash.map(r=>r.tgl),
+            datasets:[
+                { label:'Omzet', data: trenDash.map(r=>r.omzet||0), backgroundColor:'rgba(25,135,84,0.7)'},
+                { label:'Trx', data: trenDash.map(r=>r.trx||0), backgroundColor:'rgba(13,110,253,0.5)', yAxisID:'y1'}
+            ]
+        },
+        options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'top'}}, scales:{ y:{ beginAtZero:true }, y1:{ beginAtZero:true, position:'right', grid:{ drawOnChartArea:false } } } }
+    });
+}
+</script>

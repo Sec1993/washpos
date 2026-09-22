@@ -1,0 +1,65 @@
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">Karyawan Aktif Login <small class="text-muted fs-6">(Owner)</small></h2>
+    <span class="badge bg-success"><%= list.length %> aktif</span>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header bg-primary text-white d-flex justify-content-between">
+        <span>Daftar Sesi Login (30 menit terakhir aktif)</span>
+        <small><%= new Date().toLocaleString('id-ID') %></small>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>#</th>
+                        <th>Karyawan / Owner</th>
+                        <th>Role</th>
+                        <th>Jam Login</th>
+                        <th>Durasi</th>
+                        <th>Terakhir Aktif</th>
+                        <th>IP</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% if (list.length===0) { %>
+                        <tr><td colspan="7" class="text-center text-muted py-4">Tidak ada login aktif.</td></tr>
+                    <% } %>
+                    <% list.forEach((u, idx)=>{ 
+                        const login=new Date(u.loginTime);
+                        const now=new Date();
+                        const durMs=now - login;
+                        const durMenit=Math.floor(durMs/60000);
+                        const jam=Math.floor(durMenit/60);
+                        const menit=durMenit%60;
+                    %>
+                    <tr>
+                        <td><%= idx+1 %></td>
+                        <td class="fw-bold"><%= u.username %> <small class="text-muted">#<%= u.id %></small></td>
+                        <td><span class="badge <%= u.role==='owner'?'bg-danger':'bg-success' %>"><%= u.role %></span></td>
+                        <td><span class="badge bg-light text-dark"><%= login.toLocaleString('id-ID') %></span><br><small class="text-muted"><%= login.toLocaleDateString('id-ID') %> <%= login.toLocaleTimeString('id-ID') %></small></td>
+                        <td><span class="badge bg-primary"><%= jam>0? jam+' jam ':'' %><%= menit %> menit</span></td>
+                        <td><small><%= new Date(u.lastSeen).toLocaleString('id-ID') %></small></td>
+                        <td><small class="text-muted"><%= u.ip %></small></td>
+                    </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="card-footer d-flex gap-2">
+        <small class="text-muted">Data dari <code>activeLogins</code> in-memory. Auto-hapus jika tidak aktif &gt;30 menit. LoginTime dicatat di <code>req.session.loginTime</code> saat <code>POST /login</code>.</small>
+        <a href="/" class="btn btn-sm btn-outline-secondary ms-auto">Dashboard</a>
+        <button class="btn btn-sm btn-outline-primary" onclick="location.reload()">Refresh</button>
+    </div>
+</div>
+
+<div class="alert alert-info mt-3">
+    <small><strong>Info:</strong> Navbar tampil <code>Login: jam</code> untuk setiap user. Owner bisa lihat semua yang sedang login di halaman ini. Karyawan biasa tidak bisa akses (403).</small>
+</div>
+
+<script>
+// Auto-refresh setiap 60 detik
+setTimeout(()=>location.reload(), 60000);
+</script>

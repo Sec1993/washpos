@@ -1,0 +1,187 @@
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">Modul Penjualan</h2>
+    <a href="/kas/kecil" class="badge bg-success fs-6 text-decoration-none" title="Klik lihat history Kas Kecil">Kas Kecil (Outlet): Rp <%= kasKecil.toLocaleString('id-ID') %> • Klik history</a>
+</div>
+<small class="text-muted d-block mb-3">Kas outlet real-time — setiap penjualan/pengeluaran mengubah Kas/QRIS terpilih. Karyawan: Kas Kecil & QRIS.</small>
+
+<div class="row">
+    <div class="col-md-5">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-success text-white">Input Transaksi Baru</div>
+            <div class="card-body">
+                <form action="/sales" method="POST" onsubmit="return validatePenjualan(this)">
+                    <div class="mb-3">
+                        <label class="form-label">Nama Pelanggan</label>
+                        <input type="text" name="customer_name" class="form-control" required minlength="2" maxlength="50" placeholder="Nama Pemilik Kendaraan">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Plat Nomor</label>
+                        <input type="text" name="license_plate" class="form-control" required minlength="2" maxlength="20" placeholder="B 1234 ABC">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Jenis Layanan <small class="text-muted">(bisa pilih beberapa)</small></label>
+                        <div class="border rounded p-2" style="max-height:180px; overflow-y:auto; background:#fff;">
+                            <% if (services.length===0) { %>
+                                <small class="text-muted">Belum ada layanan. Tambah di Master.</small>
+                            <% } %>
+                            <% services.forEach(s => { %>
+                                <div class="form-check">
+                                    <input class="form-check-input layanan-check" type="checkbox" name="service_names" value="<%= s.name %>" data-price="<%= s.price %>" id="svc_<%= s.id %>" onchange="updatePriceMulti()">
+                                    <label class="form-check-label d-flex justify-content-between w-100" for="svc_<%= s.id %>">
+                                        <span><%= s.name %></span>
+                                        <small class="text-muted">Rp <%= s.price.toLocaleString('id-ID') %></small>
+                                    </label>
+                                </div>
+                            <% }) %>
+                        </div>
+                        <small class="text-muted">Centang 1 atau lebih (misal Cuci + Poles). Kelola di <a href="/master">Master</a>. Dipilih <span id="layananCount">0</span> layanan.</small>
+                        <div class="invalid-feedback d-block" id="layananError" style="display:none !important;">Pilih minimal 1 layanan.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Harga Penjualan (Rp)</label>
+                        <input type="text" name="price" id="price" class="form-control rupiah" required placeholder="Otomatis jumlah layanan (15.000)">
+                        <small class="text-muted">Otomatis sum layanan, bisa edit manual (≥1.000).</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Pekerja (Pencuci)</label>
+                        <select name="worker_name" class="form-select" required>
+                            <option value="">-- Pilih Pekerja --</option>
+                            <% workers.forEach(w => { %>
+                                <option value="<%= w.name %>"><%= w.name %></option>
+                            <% }) %>
+                        </select>
+                        <small class="text-muted">Kelola karyawan di <a href="/master">Master</a>.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Bayar Ke <small class="text-muted">(Kas Kecil / QRIS)</small></label>
+                        <select name="akun_kas" class="form-select" required>
+                            <% accounts.forEach(a=>{ %>
+                                <option value="<%= a.name %>" <%= a.name==='Kas Kecil'?'selected':'' %>><%= a.name %> — <%= a.type %></option>
+                            <% }) %>
+                        </select>
+                        <small class="text-muted">Karyawan & Owner pilih <strong>Kas Kecil</strong> (tunai) atau <strong>QRIS</strong>. Kelola QRIS di <a href="/akun">Akun</a>.</small>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">Simpan & Cetak Struk</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-7">
+        <!-- Filter & Search Phase 3 -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-body">
+                <form method="GET" action="/sales" class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1">Dari Tanggal</label>
+                        <input type="date" name="from" value="<%= query.from %>" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1">Sampai Tanggal</label>
+                        <input type="date" name="to" value="<%= query.to %>" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small mb-1">Cari Plat/Nama/Layanan/Pekerja</label>
+                        <input type="text" name="search" value="<%= query.search %>" class="form-control form-control-sm" placeholder="B 1234 / Budi / Cuci">
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary btn-sm w-100">Filter</button>
+                        <a href="/sales" class="btn btn-outline-secondary btn-sm w-100 mt-1">Reset</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                <span>Riwayat Transaksi</span>
+                <small><%= total %> data • Hal <%= currentPage %>/<%= totalPages %></small>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Waktu</th>
+                                <th>Plat & Pelanggan</th>
+                                <th>Layanan</th>
+                                <th>Total (Rp)</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% if (recentSales.length === 0) { %>
+                                <tr><td colspan="5" class="text-center text-muted py-3">Tidak ada transaksi sesuai filter.</td></tr>
+                            <% } %>
+                            <% recentSales.forEach(s => { %>
+                            <tr>
+                                <td><small><%= new Date(s.date).toLocaleString('id-ID') %></small></td>
+                                <td><%= s.license_plate %><br><small class="text-muted"><%= s.customer_name %></small><br><small class="badge bg-light text-dark"><%= s.worker_name %></small></td>
+                                <td>
+                                    <% (s.service_name||'').split(',').forEach((lay,idx)=>{ %>
+                                        <span class="badge bg-success mb-1"><%= lay.trim() %></span><% if(idx < (s.service_name.split(',').length-1)) { %><br><% } %>
+                                    <% }) %>
+                                </td>
+                                <td>Rp <%= s.price.toLocaleString('id-ID') %></td>
+                                <td>
+                                    <a href="/receipt/<%= s.id %>" class="btn btn-sm btn-outline-info" target="_blank">Struk</a>
+                                </td>
+                            </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <!-- Pagination -->
+            <div class="card-footer d-flex justify-content-between align-items-center">
+                <small class="text-muted">Tampil <%= recentSales.length %> dari <%= total %> • <%= limit %> per hal</small>
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item <%= currentPage<=1?'disabled':'' %>"><a class="page-link" href="/sales?from=<%= query.from %>&to=<%= query.to %>&search=<%= encodeURIComponent(query.search) %>&page=<%= currentPage-1 %>&limit=<%= limit %>">«</a></li>
+                        <% for(let i=1;i<=totalPages;i++){ if(i===1 || i===totalPages || (i>=currentPage-1 && i<=currentPage+1)){ %>
+                            <li class="page-item <%= i===currentPage?'active':'' %>"><a class="page-link" href="/sales?from=<%= query.from %>&to=<%= query.to %>&search=<%= encodeURIComponent(query.search) %>&page=<%= i %>&limit=<%= limit %>"><%= i %></a></li>
+                        <% } else if(i===currentPage-2 || i===currentPage+2){ %>
+                            <li class="page-item disabled"><span class="page-link">…</span></li>
+                        <% }} %>
+                        <li class="page-item <%= currentPage>=totalPages?'disabled':'' %>"><a class="page-link" href="/sales?from=<%= query.from %>&to=<%= query.to %>&search=<%= encodeURIComponent(query.search) %>&page=<%= currentPage+1 %>&limit=<%= limit %>">»</a></li>
+                    </ul>
+                </nav>
+                <form method="GET" action="/sales" class="d-flex gap-1">
+                    <input type="hidden" name="from" value="<%= query.from %>">
+                    <input type="hidden" name="to" value="<%= query.to %>">
+                    <input type="hidden" name="search" value="<%= query.search %>">
+                    <select name="limit" class="form-select form-select-sm" style="width:70px" onchange="this.form.submit()">
+                        <option value="5" <%= limit==5?'selected':'' %>>5</option>
+                        <option value="10" <%= limit==10?'selected':'' %>>10</option>
+                        <option value="20" <%= limit==20?'selected':'' %>>20</option>
+                        <option value="50" <%= limit==50?'selected':'' %>>50</option>
+                    </select>
+                </form>
+            </div>
+        </div>
+        <div class="alert alert-success mt-3 py-2">
+            <small><strong>Phase 3:</strong> Filter tanggal, search plat/nama/layanan/pekerja, pagination. Jurnal otomatis tetap: <code>Debit Kas / Kredit Pendapatan</code> per transaksi (cek Laporan).</small>
+        </div>
+    </div>
+</div>
+<script>
+function updatePriceMulti(){
+    const checks=document.querySelectorAll('.layanan-check:checked');
+    let sum=0;
+    checks.forEach(c=> sum+= parseInt(c.dataset.price||0,10));
+    document.getElementById('layananCount').textContent=checks.length;
+    const priceEl=document.getElementById('price');
+    if(sum>0) priceEl.value=formatRupiah(sum);
+}
+function validatePenjualan(form){
+    const checked=document.querySelectorAll('.layanan-check:checked');
+    const errEl=document.getElementById('layananError');
+    if(checked.length===0){
+        if(errEl){ errEl.style.display='block'; errEl.textContent='Validasi gagal: Pilih minimal 1 layanan.'; }
+        alert('Validasi gagal: Pilih minimal 1 layanan.');
+        return false;
+    } else if(errEl) errEl.style.display='none';
+    // also handle toast for server 400 via URL param
+    return validateRupiahForm(form);
+}
+</script>

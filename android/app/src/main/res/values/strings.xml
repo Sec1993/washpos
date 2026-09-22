@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">WashPOS</string>
+    <string name="title_activity_main">WashPOS</string>
+    <string name="package_name">com.washpos.app</string>
+    <string name="custom_url_scheme">com.washpos.app</string>
+</resources>

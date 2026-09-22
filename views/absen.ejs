@@ -1,0 +1,308 @@
+<h2 class="mb-3">Absen Karyawan — Foto + Lokasi + Jam</h2>
+
+<div class="row">
+    <div class="col-md-5">
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-primary text-white d-flex justify-content-between">
+                <span>Absen Hari Ini — <%= today %> — <%= user.username %> (<%= user.role %>)</span>
+                <small id="jamLive" class="badge bg-light text-dark"></small>
+            </div>
+            <div class="card-body">
+                <% 
+                    const hasMasuk = todayRows.some(r=>r.type==='masuk');
+                    const hasKeluar = todayRows.some(r=>r.type==='keluar');
+                %>
+                <div class="alert <%= hasMasuk && hasKeluar ? 'alert-success' : hasMasuk ? 'alert-warning' : 'alert-info' %> py-2">
+                    <% if (!hasMasuk) { %>Belum absen masuk hari ini.<% } else if (hasMasuk && !hasKeluar) { %>Sudah masuk jam <%= todayRows.find(r=>r.type==='masuk').time %>. Silakan absen keluar nanti.<% } else { %>Sudah lengkap masuk & keluar hari ini.<% } %>
+                </div>
+
+                <form action="/absen" method="POST" enctype="multipart/form-data" onsubmit="return validateAbsen(this)">
+                    <div class="mb-2">
+                        <label class="form-label">Jenis Absen</label>
+                        <select name="type" class="form-select" required>
+                            <option value="masuk" <%= !hasMasuk ? 'selected' : (hasKeluar?'disabled':'') %>>Masuk</option>
+                            <option value="keluar" <%= hasMasuk && !hasKeluar ? 'selected' : (!hasMasuk?'disabled':'') %>>Keluar</option>
+                        </select>
+                        <small class="text-muted">Satu kali per jenis per hari. Validasi server cegah double.</small>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label">Lokasi <small class="text-muted" id="lokasiStatus">— belum ambil</small></label>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-primary flex-fill" onclick="ambilLokasi()">📍 Ambil Lokasi</button>
+                            <small class="text-muted align-self-center" id="koordinatText">-</small>
+                        </div>
+                        <input type="hidden" name="latitude" id="latitude" required>
+                        <input type="hidden" name="longitude" id="longitude" required>
+                        <input type="hidden" name="address" id="address">
+                        <div id="alamatPreview" class="small text-muted mt-1"></div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label">Foto Absen <small class="text-muted">(wajib via Kamera aplikasi, max 4MB)</small></label>
+                        <input type="file" name="photo" id="photoAbsen" class="d-none" accept="image/*" required>
+                        <button type="button" class="btn btn-success w-100" onclick="openKameraAbsen()">📷 Ambil Foto dari Kamera Aplikasi</button>
+                        <small class="text-muted d-block mt-1">Wajib ambil via kamera aplikasi (tidak bisa galeri) — foto akan di-overlay lokasi & jam otomatis.</small>
+                        <div id="previewAbsenWrap" class="mt-2" style="display:none">
+                            <canvas id="canvasPreview" style="max-width:100%; border:1px solid #ddd; border-radius:8px;"></canvas>
+                            <img id="previewAbsenImg" src="" style="display:none">
+                            <div class="d-flex gap-2 mt-2">
+                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="hapusAbsen()">Hapus & Ambil Ulang</button>
+                                <small class="text-muted">Preview overlay lokasi & jam — akan diupload saat Kirim.</small>
+                            </div>
+                        </div>
+                        <canvas id="canvasAbsen" style="display:none"></canvas>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label">Jam Saat Ini (auto)</label>
+                        <input type="text" id="jamInput" class="form-control" readonly placeholder="--:--:--">
+                        <small class="text-muted">Jam diambil server saat submit + overlay di foto (<span id="jamOverlayPreview">-</span>).</small>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">Kirim Absen</button>
+                </form>
+                <small class="text-muted d-block mt-2">Foto tersimpan di <code>public/uploads/absen</code>. Lokasi & jam tertampil di dalam foto (overlay).</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-7">
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-secondary text-white">Absen Hari Ini (<%= isOwner ? 'semua karyawan — Owner' : 'saya' %>)</div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light"><tr><th>Jam</th><th>User</th><th>Tipe</th><th>Foto</th><th>Lokasi</th></tr></thead>
+                        <tbody>
+                            <% if (recent.length===0) { %><tr><td colspan="5" class="text-center text-muted py-3">Belum ada absen hari ini.</td></tr><% } %>
+                            <% recent.forEach(r=>{ %>
+                            <tr>
+                                <td><span class="badge bg-light text-dark"><%= r.time %></span><br><small class="text-muted"><%= r.date %></small></td>
+                                <td><strong><%= r.username %></strong><br><small class="badge <%= r.type==='masuk'?'bg-success':'bg-danger' %>"><%= r.type %></small></td>
+                                <td><span class="badge <%= r.type==='masuk'?'bg-success':'bg-danger' %>"><%= r.type %></span></td>
+                                <td><% if(r.photo){ %><a href="<%= r.photo %>" target="_blank"><img src="<%= r.photo %>" style="width:60px; height:60px; object-fit:cover; border-radius:6px; border:1px solid #ddd;"></a><% } else { %>-<% } %></td>
+                                <td>
+                                    <small><%= r.address || (r.latitude + ', ' + r.longitude) %></small><br>
+                                    <a href="https://www.google.com/maps?q=<%= r.latitude %>,<%= r.longitude %>" target="_blank" class="btn btn-sm btn-outline-primary py-0">Maps</a>
+                                </td>
+                            </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-header bg-dark text-white">History Absen Saya (30 terbaru)</div>
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height:300px; overflow-y:auto;">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light sticky-top"><tr><th>Tanggal</th><th>Jam</th><th>Tipe</th><th>Foto</th><th>Lokasi</th></tr></thead>
+                        <tbody>
+                            <% if(history.length===0){ %><tr><td colspan="5" class="text-center text-muted py-3">Belum ada history.</td></tr><% } %>
+                            <% history.forEach(h=>{ %>
+                            <tr>
+                                <td><%= h.date %></td>
+                                <td><%= h.time %></td>
+                                <td><span class="badge <%= h.type==='masuk'?'bg-success':'bg-danger' %>"><%= h.type %></span></td>
+                                <td><% if(h.photo){ %><a href="<%= h.photo %>" target="_blank"><img src="<%= h.photo %>" style="width:45px; height:45px; object-fit:cover; border-radius:4px;"></a><% } %></td>
+                                <td><small><%= h.address || (h.latitude+', '+h.longitude) %></small></td>
+                            </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Kamera Absen -->
+<div class="modal fade" id="modalKameraAbsen" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white"><h6 class="modal-title">Ambil Foto Absen</h6><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body text-center p-2">
+        <video id="videoAbsen" autoplay playsinline style="width:100%; max-height:320px; background:#000; border-radius:8px;"></video>
+        <canvas id="canvasCaptureAbsen" style="display:none"></canvas>
+        <small id="kameraStatusAbsen" class="text-muted d-block mt-2">Izinkan kamera...</small>
+        <small id="lokasiKameraPreview" class="text-muted d-block"></small>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
+        <button type="button" class="btn btn-success btn-sm" onclick="captureAbsen()">📸 Ambil</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let lokasiData={lat:null,lng:null,addr:''};
+let streamAbsen=null;
+
+function updateJam(){
+    const now=new Date();
+    const jam=now.toLocaleString('id-ID', {hour:'2-digit', minute:'2-digit', second:'2-digit', timeZone:'Asia/Makassar'});
+    const el=document.getElementById('jamLive');
+    const inp=document.getElementById('jamInput');
+    const preview=document.getElementById('jamOverlayPreview');
+    if(el) el.textContent=jam;
+    if(inp) inp.value=jam;
+    if(preview) preview.textContent=jam;
+}
+setInterval(updateJam,1000); updateJam();
+
+function ambilLokasi(){
+    const status=document.getElementById('lokasiStatus');
+    const koor=document.getElementById('koordinatText');
+    const alamat=document.getElementById('alamatPreview');
+    const latIn=document.getElementById('latitude');
+    const lngIn=document.getElementById('longitude');
+    const addrIn=document.getElementById('address');
+    status.textContent='Mengambil...';
+    if(!navigator.geolocation){ status.textContent='Geolocation tidak didukung'; return; }
+    navigator.geolocation.getCurrentPosition(pos=>{
+        const lat=pos.coords.latitude; const lng=pos.coords.longitude;
+        lokasiData.lat=lat; lokasiData.lng=lng;
+        latIn.value=lat; lngIn.value=lng;
+        koor.textContent=lat.toFixed(6)+', '+lng.toFixed(6);
+        status.textContent='✓ Lokasi didapat';
+        alamat.textContent='Mencari alamat...';
+        // reverse geocode via OSM Nominatim
+        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16`)
+            .then(r=>r.json()).then(d=>{
+                const addr=d.display_name||`${lat}, ${lng}`;
+                lokasiData.addr=addr;
+                addrIn.value=addr;
+                alamat.textContent=addr;
+                document.getElementById('lokasiKameraPreview').textContent=addr;
+            }).catch(()=>{
+                addrIn.value=lat+', '+lng;
+                alamat.textContent=lat+', '+lng;
+            });
+    }, err=>{
+        status.textContent='Gagal: '+err.message;
+        alert('Gagal ambil lokasi: '+err.message+' — Aktifkan GPS dan izinkan lokasi.');
+    }, {enableHighAccuracy:true, timeout:10000});
+}
+
+function resizeImgForUpload(img, maxW=1280){
+    if(img.width <= maxW) return img;
+    const scale=maxW/img.width;
+    const c=document.createElement('canvas');
+    c.width=maxW; c.height=img.height*scale;
+    c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+    const nImg=new Image();
+    nImg.src=c.toDataURL('image/jpeg',0.85);
+    return nImg;
+}
+function overlayCanvas(canvas, img, lokasi, jam){
+    // resize dulu jika >1280 agar <4MB
+    let useImg=img;
+    if(img.width > 1280){
+        const c=document.createElement('canvas');
+        const scale=1280/img.width;
+        c.width=1280; c.height=img.height*scale;
+        c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+        const tmp=new Image();
+        tmp.src=c.toDataURL('image/jpeg',0.85);
+        useImg=tmp;
+        // tunggu load sync: jika belum complete, pakai c sebagai sumber
+        canvas.width=c.width; canvas.height=c.height;
+        canvas.getContext('2d').drawImage(c,0,0);
+        // overlay setelah resize
+        const ctx=canvas.getContext('2d');
+        const barH = Math.max(60, canvas.height*0.12);
+        ctx.fillStyle='rgba(0,0,0,0.6)';
+        ctx.fillRect(0, canvas.height-barH, canvas.width, barH);
+        ctx.fillStyle='#fff';
+        ctx.font=`bold ${Math.max(14, canvas.width*0.025)}px sans-serif`;
+        ctx.fillText(`📍 ${lokasi}`, 12, canvas.height - barH + 22);
+        ctx.font=`${Math.max(12, canvas.width*0.02)}px sans-serif`;
+        ctx.fillText(`🕒 ${jam}`, 12, canvas.height - 18);
+        ctx.font=`${Math.max(10, canvas.width*0.015)}px sans-serif`;
+        ctx.fillStyle='rgba(255,255,255,0.8)';
+        ctx.fillText('WashPOS Absen', canvas.width - 120, 20);
+        return;
+    }
+    const ctx=canvas.getContext('2d');
+    canvas.width=useImg.width; canvas.height=useImg.height;
+    ctx.drawImage(useImg,0,0);
+    // semi-transparent bar bawah
+    const barH = Math.max(60, canvas.height*0.12);
+    ctx.fillStyle='rgba(0,0,0,0.6)';
+    ctx.fillRect(0, canvas.height-barH, canvas.width, barH);
+    ctx.fillStyle='#fff';
+    ctx.font=`bold ${Math.max(14, canvas.width*0.025)}px sans-serif`;
+    ctx.fillText(`📍 ${lokasi}`, 12, canvas.height - barH + 22);
+    ctx.font=`${Math.max(12, canvas.width*0.02)}px sans-serif`;
+    ctx.fillText(`🕒 ${jam}`, 12, canvas.height - 18);
+    // watermark kecil
+    ctx.font=`${Math.max(10, canvas.width*0.015)}px sans-serif`;
+    ctx.fillStyle='rgba(255,255,255,0.8)';
+    ctx.fillText('WashPOS Absen', canvas.width - 120, 20);
+}
+
+function hapusAbsen(){
+    document.getElementById('photoAbsen').value='';
+    document.getElementById('previewAbsenWrap').style.display='none';
+    document.getElementById('previewAbsenWrap').querySelector('canvas').width=0;
+}
+
+let streamAbsenTmp=null;
+function openKameraAbsen(){
+    if(!lokasiData.lat){ alert('Ambil lokasi dulu'); return; }
+    const modalEl=document.getElementById('modalKameraAbsen');
+    const video=document.getElementById('videoAbsen');
+    const status=document.getElementById('kameraStatusAbsen');
+    const modal=new bootstrap.Modal(modalEl); modal.show();
+    status.textContent='Meminta kamera...';
+    navigator.mediaDevices.getUserMedia({ video:{ facingMode:'user'}, audio:false }).then(s=>{
+        streamAbsen=s; video.srcObject=s; status.textContent='Kamera aktif. Arahkan wajah + nota lokasi terlihat.';
+        video.onloadedmetadata=()=>video.play();
+    }).catch(err=>{ status.textContent='Gagal kamera: '+err.message; });
+    modalEl.addEventListener('hidden.bs.modal', function handler(){
+        if(streamAbsen){ streamAbsen.getTracks().forEach(t=>t.stop()); streamAbsen=null; }
+        video.srcObject=null; modalEl.removeEventListener('hidden.bs.modal', handler);
+    });
+}
+function captureAbsen(){
+    const video=document.getElementById('videoAbsen');
+    const canvas=document.getElementById('canvasPreview');
+    const fileInput=document.getElementById('photoAbsen');
+    if(!video.videoWidth) return alert('Kamera belum siap');
+    if(!lokasiData.lat) return alert('Lokasi belum diambil');
+    const tmpCanvas=document.getElementById('canvasCapture');
+    // ambil frame
+    tmpCanvas.width=video.videoWidth; tmpCanvas.height=video.videoHeight;
+    tmpCanvas.getContext('2d').drawImage(video,0,0);
+    // buat image dari tmpCanvas lalu overlay
+    const img=new Image();
+    img.onload=()=>{
+        const jam=document.getElementById('jamInput').value || new Date().toLocaleString('id-ID');
+        const lokasi=document.getElementById('address').value || (lokasiData.lat+', '+lokasiData.lng);
+        overlayCanvas(canvas, img, lokasi, jam);
+        document.getElementById('previewAbsenWrap').style.display='block';
+        canvas.toBlob(blob=>{
+            const file=new File([blob], 'absen_kamera_'+Date.now()+'.jpg', {type:'image/jpeg'});
+            const dt=new DataTransfer(); dt.items.add(file);
+            fileInput.files=dt.files;
+            bootstrap.Modal.getInstance(document.getElementById('modalKameraAbsen')).hide();
+            if(streamAbsen){ streamAbsen.getTracks().forEach(t=>t.stop()); streamAbsen=null; }
+            document.getElementById('videoAbsen').srcObject=null;
+        }, 'image/jpeg', 0.85);
+    };
+    img.src=tmpCanvas.toDataURL('image/jpeg',0.85);
+}
+
+function validateAbsen(form){
+    if(!form.latitude.value || !form.longitude.value){ alert('Ambil lokasi dulu'); return false; }
+    if(!form.photo.files || !form.photo.files[0]){ alert('Foto wajib'); return false; }
+    if(form.photo.files[0].size>4*1024*1024){ alert('Foto >4MB'); return false; }
+    return true;
+}
+// auto ambil lokasi saat load
+window.addEventListener('load', ()=>{ setTimeout(ambilLokasi, 800); });
+</script>

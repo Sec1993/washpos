@@ -1,0 +1,131 @@
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">Akun Kas / Bank / QRIS <small class="text-muted fs-6">(Owner)</small></h2>
+    <span class="badge bg-primary"><%= accounts.length %> akun</span>
+</div>
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-primary text-white">Tambah Akun Baru</div>
+            <div class="card-body">
+                <form action="/akun/tambah" method="POST" onsubmit="return validateAkun(this)">
+                    <div class="mb-3">
+                        <label class="form-label">Nama Akun</label>
+                        <input type="text" name="name" class="form-control" required minlength="2" maxlength="50" placeholder="BCA 123456, QRIS Gopay, Kas Kecil...">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Tipe</label>
+                        <select name="type" class="form-select" required>
+                            <option value="Kas">Kas</option>
+                            <option value="Bank">Bank</option>
+                            <option value="QRIS">QRIS</option>
+                            <option value="E-Wallet">E-Wallet</option>
+                            <option value="Lainnya">Lainnya</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Tambah Akun</button>
+                </form>
+                <small class="text-muted d-block mt-2">Nama unik, akan muncul di Penjualan & Pengeluaran sebagai pilihan akun. Contoh: Bank BCA, QRIS BRI.</small>
+            </div>
+        </div>
+        <div class="alert alert-info py-2">
+            <small><strong>Info:</strong> Kas Kecil (Outlet) untuk transaksi harian karyawan. Kas Besar untuk setor owner. Bank/QRIS untuk pembayaran non-tunai.</small>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-dark text-white">Daftar Akun & Saldo</div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr><th>Nama Akun (edit)</th><th class="text-end">Saldo</th><th class="text-end">Aksi</th></tr>
+                        </thead>
+                        <tbody>
+                            <% if (accounts.length===0) { %>
+                                <tr><td colspan="3" class="text-center text-muted py-3">Belum ada akun.</td></tr>
+                            <% } %>
+                            <% accounts.forEach(a=>{ %>
+                            <tr>
+                                <td>
+                                    <form action="/akun/edit" method="POST" class="d-flex gap-1" onsubmit="return confirm('Yakin ubah <%= a.name %>? Saldo & jurnal akan ikut nama baru.')">
+                                        <input type="hidden" name="id" value="<%= a.id %>">
+                                        <input type="text" name="name" value="<%= a.name %>" class="form-control form-control-sm" required minlength="2" maxlength="50" style="min-width:140px">
+                                        <select name="type" class="form-select form-select-sm" style="width:110px">
+                                            <option value="Kas" <%= a.type==='Kas'?'selected':'' %>>Kas</option>
+                                            <option value="Bank" <%= a.type==='Bank'?'selected':'' %>>Bank</option>
+                                            <option value="QRIS" <%= a.type==='QRIS'?'selected':'' %>>QRIS</option>
+                                            <option value="E-Wallet" <%= a.type==='E-Wallet'?'selected':'' %>>E-Wallet</option>
+                                            <option value="Lainnya" <%= a.type==='Lainnya'?'selected':'' %>>Lainnya</option>
+                                        </select>
+                                        <button type="submit" class="btn btn-sm btn-outline-primary">Ubah</button>
+                                    </form>
+                                </td>
+                                <td class="text-end fw-bold <%= (saldoMap[a.name]||0) <0 ? 'text-danger' : 'text-success' %>">Rp <%= (saldoMap[a.name]||0).toLocaleString('id-ID') %></td>
+                                <td class="text-end">
+                                    <form action="/akun/hapus" method="POST" class="d-inline" onsubmit="return confirm('Hapus akun <%= a.name %>? Hanya bisa jika saldo 0.')">
+                                        <input type="hidden" name="id" value="<%= a.id %>">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card-footer">
+                <small class="text-muted">Saldo dihitung dari Jurnal: <code>SUM(debit - credit WHERE account_type = nama_akun)</code>. Hapus hanya jika saldo 0.</small>
+            </div>
+        </div>
+
+        <!-- Transfer Antar Akun (pindah dari Laporan) -->
+        <div class="card shadow-sm mt-4 border-primary">
+            <div class="card-header bg-primary text-white">Transfer Antar Akun</div>
+            <div class="card-body">
+                <form action="/kas/transfer" method="POST" class="row g-2 align-items-end" onsubmit="return confirm('Yakin transfer '+this.amount.value+' dari '+this.from_kas.value+' ke '+this.to_kas.value+'?')">
+                    <div class="col-md-3"><label class="form-label small">Dari Akun</label><select name="from_kas" class="form-select form-select-sm" required><% accounts.forEach(a=>{ %><option value="<%= a.name %>"><%= a.name %> — <%= a.type %> — Rp <%= (saldoMap[a.name]||0).toLocaleString('id-ID') %></option><% }) %></select></div>
+                    <div class="col-md-3"><label class="form-label small">Ke Akun</label><select name="to_kas" class="form-select form-select-sm" required><% accounts.slice().reverse().forEach(a=>{ %><option value="<%= a.name %>"><%= a.name %> — <%= a.type %> — Rp <%= (saldoMap[a.name]||0).toLocaleString('id-ID') %></option><% }) %></select></div>
+                    <div class="col-md-3"><label class="form-label small">Nominal (Rp)</label><input type="text" name="amount" class="form-control form-control-sm rupiah" required placeholder="50.000"></div>
+                    <div class="col-md-3"><label class="form-label small">Keterangan</label><input type="text" name="description" class="form-control form-control-sm" placeholder="Setor outlet ke pusat"></div>
+                    <div class="col-12"><button type="submit" class="btn btn-primary btn-sm w-100">Transfer</button><small class="text-muted">Nominal tiap akun tampil. Validasi saldo cukup, jurnal Debit tujuan / Kredit asal.</small></div>
+                </form>
+            </div>
+        </div>
+
+        <!-- History Perpindahan Dana -->
+        <div class="card shadow-sm mt-4">
+            <div class="card-header bg-secondary text-white d-flex justify-content-between">
+                <span>History Perpindahan Dana Antar Akun (50 terbaru)</span>
+                <small><%= history.length %> transfer</small>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height:400px; overflow-y:auto;">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light sticky-top"><tr><th>Waktu</th><th>Deskripsi</th><th>Akun</th><th class="text-end">Nominal</th></tr></thead>
+                        <tbody>
+                            <% if(history.length===0){ %><tr><td colspan="4" class="text-center text-muted py-3">Belum ada transfer.</td></tr><% } %>
+                            <% history.forEach(h=>{ %>
+                            <tr>
+                                <td><small><%= new Date(h.date).toLocaleString('id-ID') %></small></td>
+                                <td><small><%= h.description %></small></td>
+                                <td><span class="badge <%= h.debit>0?'bg-success':'bg-danger' %>"><%= h.account_type %></span> <%= h.debit>0?'Masuk':'Keluar' %></td>
+                                <td class="text-end fw-bold">Rp <%= (h.debit||h.credit).toLocaleString('id-ID') %></td>
+                            </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card-footer"><small class="text-muted">Setiap transfer buat 2 jurnal: <code>Debit tujuan</code> & <code>Kredit asal</code>. Filter lengkap di Laporan → Jurnal.</small></div>
+        </div>
+    </div>
+</div>
+
+<script>
+function validateAkun(form){
+    if(form.name.value.trim().length<2){ alert('Nama akun min 2 karakter'); return false; }
+    return true;
+}
+</script>

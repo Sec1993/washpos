@@ -1,0 +1,181 @@
+<h2 class="mb-4">Manajemen Stok Bahan Baku</h2>
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-info text-white">Tambah Item Baru</div>
+            <div class="card-body">
+                <form action="/inventory/add" method="POST" onsubmit="return validateStokAdd(this)">
+                    <div class="mb-3">
+                        <label class="form-label">Nama Barang</label>
+                        <input type="text" name="name" class="form-control" required minlength="2" maxlength="50" placeholder="Sabun Cuci, Semir Ban...">
+                    </div>
+                    <div class="row">
+                        <div class="col-6">
+                            <label class="form-label">Satuan</label>
+                            <select name="unit" class="form-select" required>
+                                <option value="pcs">pcs</option>
+                                <option value="liter">liter</option>
+                                <option value="botol">botol</option>
+                                <option value="kg">kg</option>
+                                <option value="pack">pack</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Min Stok <small class="text-muted">(alert)</small></label>
+                            <input type="number" name="min_stock" class="form-control" min="0" step="1" value="5" placeholder="5">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-info w-100 text-white mt-3">Tambah Barang</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-header bg-secondary text-white">Update Stok</div>
+            <div class="card-body">
+                <form action="/inventory/update" method="POST" onsubmit="return validateStokUpdate(this)">
+                    <div class="mb-2">
+                        <label class="form-label">Pilih Barang</label>
+                        <select name="id" class="form-select" required>
+                            <option value="">-- Pilih --</option>
+                            <% inventory.forEach(item => { %>
+                                <option value="<%= item.id %>"><%= item.name %> (stok: <%= item.stock %> <%= item.unit %> min:<%= item.min_stock %>)</option>
+                            <% }) %>
+                        </select>
+                    </div>
+                    <div class="row">
+                        <div class="col-6">
+                            <label class="form-label">Tipe</label>
+                            <select name="type" class="form-select" required>
+                                <option value="in">Masuk (In)</option>
+                                <option value="out">Keluar (Out)</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Jumlah</label>
+                            <input type="number" name="quantity" class="form-control" required min="1" step="1" placeholder="1">
+                            <small class="text-muted">Minimal 1 unit</small>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 mt-3">Update Stok</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <span>Daftar Stok Real-time (min_stock)</span>
+                <small class="badge bg-light text-dark"><%= inventory.length %> item</small>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>#</th>
+                                <th>Nama Barang</th>
+                                <th>Satuan</th>
+                                <th>Sisa Stok</th>
+                                <th>Min</th>
+                                <th>Status</th>
+                                <th class="text-end">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% if (inventory.length === 0) { %>
+                                <tr><td colspan="7" class="text-center text-muted py-4">Belum ada item. Tambahkan di samping.</td></tr>
+                            <% } %>
+                            <% inventory.forEach((item, idx) => { %>
+                            <tr class="<%= item.stock <= item.min_stock ? 'table-danger' : '' %>">
+                                <td><%= idx+1 %></td>
+                                <td class="fw-bold"><%= item.name %></td>
+                                <td><%= item.unit %></td>
+                                <td class="fw-bold <%= item.stock <= item.min_stock ? 'text-danger' : item.stock <= item.min_stock+5 ? 'text-warning' : 'text-success' %>">
+                                    <%= item.stock %>
+                                </td>
+                                <td><%= item.min_stock %></td>
+                                <td>
+                                    <% if (item.stock <= 0) { %>
+                                        <span class="badge bg-danger">Habis</span>
+                                    <% } else if (item.stock <= item.min_stock) { %>
+                                        <span class="badge bg-danger">Menipis</span>
+                                    <% } else if (item.stock <= item.min_stock+5) { %>
+                                        <span class="badge bg-warning text-dark">Rendah</span>
+                                    <% } else { %>
+                                        <span class="badge bg-success">Aman</span>
+                                    <% } %>
+                                </td>
+                                <td class="text-end">
+                                    <form action="/inventory/delete" method="POST" class="d-inline" onsubmit="return confirm('Hapus barang <%= item.name %>? Stok <%= item.stock %> <%= item.unit %> akan hilang permanen.')">
+                                        <input type="hidden" name="id" value="<%= item.id %>">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mt-4">
+            <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                <span>History Stok (20 terbaru)</span>
+                <small class="badge bg-light text-dark"><%= history.length %> mutasi</small>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Waktu</th>
+                                <th>Barang</th>
+                                <th>Tipe</th>
+                                <th>Jumlah</th>
+                                <th>Stok</th>
+                                <th>Admin</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% if (history.length===0) { %>
+                                <tr><td colspan="6" class="text-center text-muted py-3">Belum ada mutasi. Update stok untuk melihat history.</td></tr>
+                            <% } %>
+                            <% history.forEach(h=>{ %>
+                            <tr>
+                                <td><small><%= new Date(h.date).toLocaleString('id-ID') %></small></td>
+                                <td><span class="fw-bold"><%= h.item_name %></span> <small class="text-muted">#<%= h.inventory_id||'-' %></small></td>
+                                <td><span class="badge <%= h.type==='in'?'bg-success':'bg-danger' %>"><%= h.type==='in'?'Masuk':'Keluar' %></span></td>
+                                <td><%= h.quantity %></td>
+                                <td><small><%= h.stock_before %> → <strong><%= h.stock_after %></strong></small></td>
+                                <td><small><%= h.admin_name %></small></td>
+                            </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="alert alert-info mt-3">
+            <small><strong>5.5 & 5.6:</strong> Badge merah jika <code>stock ≤ min_stock</code>. History catat <code>before → after</code> + admin. Dashboard alert untuk low stock.</small>
+        </div>
+    </div>
+</div>
+<script>
+function validateStokAdd(form){
+    const name=form.name.value.trim();
+    if(name.length<2){ alert('Validasi gagal: Nama barang min 2 karakter'); form.name.focus(); return false; }
+    const minS=parseFloat(form.min_stock.value);
+    if(isNaN(minS) || minS<0){ alert('Min stok harus ≥0'); return false; }
+    return true;
+}
+function validateStokUpdate(form){
+    const qty=parseFloat(String(form.quantity.value).replace(',', '.'));
+    if(isNaN(qty) || qty < 1){ alert('Validasi gagal: Jumlah minimal 1 unit'); form.quantity.focus(); return false; }
+    return confirm('Yakin update stok '+(form.type.value==='in'?'Masuk':'Keluar')+' '+qty+'?');
+}
+</script>

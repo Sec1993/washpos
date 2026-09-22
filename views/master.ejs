@@ -1,0 +1,195 @@
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">Master Data <small class="text-muted fs-6">(Owner Only)</small></h2>
+    <span class="badge bg-primary">Phase 2 - Kategori & Validasi</span>
+</div>
+
+<% if (typeof error !== 'undefined' && error) { %>
+    <div class="alert alert-danger"><%= error %></div>
+<% } %>
+<% if (typeof success !== 'undefined' && success) { %>
+    <div class="alert alert-success"><%= success %></div>
+<% } %>
+
+<div class="row">
+    <!-- KELOLA KARYAWAN -->
+    <div class="col-md-4">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                <span>Karyawan Pencuci</span>
+                <span class="badge bg-light text-dark"><%= workers.length %> orang</span>
+            </div>
+            <div class="card-body">
+                <form action="/master/workers/add" method="POST" class="mb-4" onsubmit="return validateRupiahForm(this)">
+                    <label class="form-label fw-bold">Tambah Karyawan Baru</label>
+                    <div class="input-group">
+                        <input type="text" name="name" class="form-control" placeholder="Nama karyawan..." required minlength="2" maxlength="50">
+                        <button class="btn btn-success" type="submit">+ Tambah</button>
+                    </div>
+                    <small class="text-muted">Validasi: nama unik, 2-50 karakter. Muncul di dropdown Penjualan.</small>
+                </form>
+                <hr>
+                <h6>Daftar Karyawan</h6>
+                <div class="table-responsive" style="max-height:300px; overflow-y:auto;">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light sticky-top"><tr><th>#</th><th>Nama</th><th class="text-end">Aksi</th></tr></thead>
+                        <tbody>
+                            <% if (workers.length === 0) { %>
+                                <tr><td colspan="3" class="text-center text-muted">Belum ada karyawan.</td></tr>
+                            <% } %>
+                            <% workers.forEach((w, i) => { %>
+                            <tr>
+                                <td><%= i+1 %></td>
+                                <td class="fw-bold"><%= w.name %></td>
+                                <td class="text-end">
+                                    <form action="/master/workers/delete" method="POST" class="d-inline" onsubmit="return confirm('Hapus karyawan <%= w.name %>? Data penjualan lama tetap tersimpan.')">
+                                        <input type="hidden" name="id" value="<%= w.id %>">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- KATEGORI PENGELUARAN -->
+    <div class="col-md-4">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                <span>Kategori Pengeluaran</span>
+                <span class="badge bg-light text-dark"><%= expense_categories.length %> kategori</span>
+            </div>
+            <div class="card-body">
+                <form action="/master/expense-categories/add" method="POST" class="mb-4" onsubmit="return validateRupiahForm(this)">
+                    <label class="form-label fw-bold">Tambah Kategori Baru</label>
+                    <div class="input-group">
+                        <input type="text" name="name" class="form-control" placeholder="Misal: Sewa, BBM..." required minlength="2" maxlength="50">
+                        <button class="btn btn-warning" type="submit">+ Tambah</button>
+                    </div>
+                    <small class="text-muted">Validasi: nama unik, 2-50 karakter. Muncul di dropdown Pengeluaran.</small>
+                </form>
+                <hr>
+                <h6>Daftar Kategori</h6>
+                <div class="table-responsive" style="max-height:300px; overflow-y:auto;">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light sticky-top"><tr><th>#</th><th>Nama Kategori</th><th class="text-end">Aksi</th></tr></thead>
+                        <tbody>
+                            <% if (expense_categories.length === 0) { %>
+                                <tr><td colspan="3" class="text-center text-muted">Belum ada kategori.</td></tr>
+                            <% } %>
+                            <% expense_categories.forEach((c, i) => { %>
+                            <tr>
+                                <td><%= i+1 %></td>
+                                <td><span class="badge bg-warning text-dark"><%= c.name %></span></td>
+                                <td class="text-end">
+                                    <form action="/master/expense-categories/delete" method="POST" class="d-inline" onsubmit="return confirm('Hapus kategori <%= c.name %>?')">
+                                        <input type="hidden" name="id" value="<%= c.id %>">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="alert alert-light py-2 mt-3 mb-0 border">
+                    <small><strong>Seed awal:</strong> Sabun, Peralatan, Perlengkapan, Listrik/Air, Gaji, Lainnya.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- INFO VALIDASI -->
+    <div class="col-md-4">
+        <div class="card shadow-sm mb-4 border-primary">
+            <div class="card-header bg-primary text-white">Aturan Validasi Phase 2</div>
+            <div class="card-body">
+                <ul class="small mb-0">
+                    <li><strong>Layanan:</strong> nama unik, harga ≥ 1000 (tanpa kategori)</li>
+                    <li><strong>Karyawan:</strong> nama unik, tidak kosong</li>
+                    <li><strong>Kategori Pengeluaran:</strong> nama unik</li>
+                    <li>Semua Master <strong>hanya Owner</strong> (403 untuk Karyawan)</li>
+                    <li>Perubahan langsung live di modul Penjualan & Pengeluaran</li>
+                </ul>
+            </div>
+        </div>
+        <div class="card shadow-sm">
+            <div class="card-header bg-secondary text-white">Ringkasan</div>
+            <div class="card-body small">
+                <div class="d-flex justify-content-between"><span>Total Layanan</span><strong><%= services.length %></strong></div>
+                <div class="d-flex justify-content-between"><span>Total Karyawan</span><strong><%= workers.length %></strong></div>
+                <div class="d-flex justify-content-between"><span>Total Kategori Biaya</span><strong><%= expense_categories.length %></strong></div>
+                <hr class="my-2">
+                <small class="text-muted">PRD 4.2 & 4.3: Menu Layanan Lainnya dapat ditambah dinamis, kategori pengeluaran dinamis.</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MENU LAYANAN FULL WIDTH (tanpa kategori) -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+        <span>Menu / Jenis Layanan</span>
+        <span class="badge bg-light text-dark"><%= services.length %> menu</span>
+    </div>
+    <div class="card-body">
+        <form action="/master/services/add" method="POST" class="mb-4" onsubmit="return validateRupiahForm(this)">
+            <label class="form-label fw-bold">Tambah Menu Baru <small class="text-muted fw-normal">(nama unik)</small></label>
+            <div class="row g-2">
+                <div class="col-md-7">
+                    <input type="text" name="name" class="form-control" placeholder="Nama layanan... (unik, mis: Cuci Helm, Poles)" required minlength="2" maxlength="50">
+                </div>
+                <div class="col-md-3">
+                    <input type="text" name="price" class="form-control rupiah" placeholder="Harga (15.000)" required>
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-primary w-100" type="submit">+ Tambah</button>
+                </div>
+            </div>
+            <small class="text-muted">Validasi: nama unik 2-50 karakter, harga ≥1.000 (boleh ketik 15.000 atau 15000).</small>
+        </form>
+
+        <hr>
+
+        <h6>Daftar Layanan</h6>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover">
+                <thead class="table-light"><tr><th>Nama Layanan</th><th>Harga</th><th class="text-end">Aksi</th></tr></thead>
+                <tbody>
+                    <% if (services.length === 0) { %>
+                        <tr><td colspan="3" class="text-center text-muted">Belum ada layanan.</td></tr>
+                    <% } %>
+                    <% services.forEach(s => { %>
+                    <tr>
+                        <td style="min-width:340px">
+                            <form action="/master/services/update" method="POST" class="d-flex gap-1 align-items-center" onsubmit="return validateRupiahForm(this) && confirm('Yakin update layanan <%= s.name %> menjadi harga baru?')">
+                                <input type="hidden" name="id" value="<%= s.id %>">
+                                <input type="text" name="name" value="<%= s.name %>" class="form-control form-control-sm" required minlength="2" maxlength="50" style="min-width:180px">
+                                <input type="text" name="price" value="<%= s.price %>" class="form-control form-control-sm rupiah" required style="width:130px">
+                                <button type="submit" class="btn btn-sm btn-outline-primary">Update</button>
+                            </form>
+                        </td>
+                        <td><span class="fw-bold">Rp <%= s.price.toLocaleString('id-ID') %></span></td>
+                        <td class="text-end">
+                            <form action="/master/services/delete" method="POST" class="d-inline" onsubmit="return confirm('Hapus layanan <%= s.name %>?')">
+                                <input type="hidden" name="id" value="<%= s.id %>">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
+                            </form>
+                        </td>
+                    </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+        <div class="alert alert-info py-2 mt-3 mb-0">
+            <small><strong>Tips:</strong> Edit nama/harga langsung di baris lalu klik Update. Dropdown Penjualan update otomatis.</small>
+        </div>
+    </div>
+</div>
+
+<div class="alert alert-warning">
+    <small><strong>Catatan Phase 2:</strong> Semua Master hanya Owner. Karyawan tidak bisa akses - mereka hanya memakai dropdown di Penjualan/Pengeluaran yang sudah dinamis.</small>
+</div>

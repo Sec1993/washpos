@@ -1,0 +1,9 @@
+node_modules/
+pos.db
+pos.db-journal
+.env
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+dist/
