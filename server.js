@@ -89,6 +89,9 @@ const upload = multer({
     }
 });
 
+// Healthcheck untuk Railway
+app.get('/health', (req, res) => res.status(200).send('OK'));
+
 // Pass user + loginTime to all views
 app.use((req, res, next) => {
     res.locals.user = req.session.user;
