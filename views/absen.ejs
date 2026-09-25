@@ -41,6 +41,7 @@
                     <div class="mb-2">
                         <label class="form-label">Foto Absen <small class="text-muted">(wajib via Kamera aplikasi, max 4MB)</small></label>
                         <input type="file" name="photo" id="photoAbsen" class="d-none" accept="image/*" required>
+                        <input type="file" id="fallbackCamera" class="d-none" accept="image/*" capture="environment" onchange="handleFallbackCamera(event)">
                         <button type="button" class="btn btn-success w-100" onclick="openKameraAbsen()">📷 Ambil Foto dari Kamera Aplikasi</button>
                         <small class="text-muted d-block mt-1">Wajib ambil via kamera aplikasi (tidak bisa galeri) — foto akan di-overlay lokasi & jam otomatis.</small>
                         <div id="previewAbsenWrap" class="mt-2" style="display:none">
@@ -188,48 +189,13 @@ function ambilLokasi(){
     }, {enableHighAccuracy:true, timeout:10000});
 }
 
-function resizeImgForUpload(img, maxW=1280){
-    if(img.width <= maxW) return img;
-    const scale=maxW/img.width;
-    const c=document.createElement('canvas');
-    c.width=maxW; c.height=img.height*scale;
-    c.getContext('2d').drawImage(img,0,0,c.width,c.height);
-    const nImg=new Image();
-    nImg.src=c.toDataURL('image/jpeg',0.85);
-    return nImg;
-}
 function overlayCanvas(canvas, img, lokasi, jam){
-    // resize dulu jika >1280 agar <4MB
-    let useImg=img;
-    if(img.width > 1280){
-        const c=document.createElement('canvas');
-        const scale=1280/img.width;
-        c.width=1280; c.height=img.height*scale;
-        c.getContext('2d').drawImage(img,0,0,c.width,c.height);
-        const tmp=new Image();
-        tmp.src=c.toDataURL('image/jpeg',0.85);
-        useImg=tmp;
-        // tunggu load sync: jika belum complete, pakai c sebagai sumber
-        canvas.width=c.width; canvas.height=c.height;
-        canvas.getContext('2d').drawImage(c,0,0);
-        // overlay setelah resize
-        const ctx=canvas.getContext('2d');
-        const barH = Math.max(60, canvas.height*0.12);
-        ctx.fillStyle='rgba(0,0,0,0.6)';
-        ctx.fillRect(0, canvas.height-barH, canvas.width, barH);
-        ctx.fillStyle='#fff';
-        ctx.font=`bold ${Math.max(14, canvas.width*0.025)}px sans-serif`;
-        ctx.fillText(`📍 ${lokasi}`, 12, canvas.height - barH + 22);
-        ctx.font=`${Math.max(12, canvas.width*0.02)}px sans-serif`;
-        ctx.fillText(`🕒 ${jam}`, 12, canvas.height - 18);
-        ctx.font=`${Math.max(10, canvas.width*0.015)}px sans-serif`;
-        ctx.fillStyle='rgba(255,255,255,0.8)';
-        ctx.fillText('WashPOS Absen', canvas.width - 120, 20);
-        return;
-    }
+    const maxW=1280;
+    let w=img.width, h=img.height;
+    if(w > maxW){ h = h * maxW / w; w = maxW; }
     const ctx=canvas.getContext('2d');
-    canvas.width=useImg.width; canvas.height=useImg.height;
-    ctx.drawImage(useImg,0,0);
+    canvas.width=w; canvas.height=h;
+    ctx.drawImage(img,0,0,w,h);
     // semi-transparent bar bawah
     const barH = Math.max(60, canvas.height*0.12);
     ctx.fillStyle='rgba(0,0,0,0.6)';
@@ -247,22 +213,64 @@ function overlayCanvas(canvas, img, lokasi, jam){
 
 function hapusAbsen(){
     document.getElementById('photoAbsen').value='';
+    document.getElementById('fallbackCamera').value='';
     document.getElementById('previewAbsenWrap').style.display='none';
     document.getElementById('previewAbsenWrap').querySelector('canvas').width=0;
 }
 
+function handleFallbackCamera(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const img = new Image();
+    img.onload = () => {
+        const canvas = document.getElementById('canvasPreview');
+        const jam = document.getElementById('jamInput').value || new Date().toLocaleString('id-ID');
+        const lokasi = document.getElementById('address').value || (lokasiData.lat ? lokasiData.lat+', '+lokasiData.lng : 'Lokasi tidak tersedia');
+        
+        overlayCanvas(canvas, img, lokasi, jam);
+        document.getElementById('previewAbsenWrap').style.display='block';
+        
+        canvas.toBlob(blob => {
+            const newFile = new File([blob], 'absen_fallback_'+Date.now()+'.jpg', {type:'image/jpeg'});
+            const dt = new DataTransfer(); 
+            dt.items.add(newFile);
+            document.getElementById('photoAbsen').files = dt.files;
+        }, 'image/jpeg', 0.85);
+    };
+    img.src = URL.createObjectURL(file);
+}
+
 let streamAbsenTmp=null;
 function openKameraAbsen(){
-    if(!lokasiData.lat){ alert('Ambil lokasi dulu'); return; }
+    if(!lokasiData.lat){ if(!confirm('Lokasi belum diambil — tetap buka kamera? (absen tetap bisa, lokasi akan kosong)')) return; }
+    
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        document.getElementById('fallbackCamera').click();
+        return;
+    }
+
     const modalEl=document.getElementById('modalKameraAbsen');
     const video=document.getElementById('videoAbsen');
     const status=document.getElementById('kameraStatusAbsen');
     const modal=new bootstrap.Modal(modalEl); modal.show();
     status.textContent='Meminta kamera...';
-    navigator.mediaDevices.getUserMedia({ video:{ facingMode:'user'}, audio:false }).then(s=>{
-        streamAbsen=s; video.srcObject=s; status.textContent='Kamera aktif. Arahkan wajah + nota lokasi terlihat.';
-        video.onloadedmetadata=()=>video.play();
-    }).catch(err=>{ status.textContent='Gagal kamera: '+err.message; });
+    // coba environment dulu (belakang), fallback user (depan)
+    const tryCam = (mode) => navigator.mediaDevices.getUserMedia({ video:{ facingMode: mode, width:{ideal:1280}, height:{ideal:720} }, audio:false });
+    tryCam('environment').catch(()=> tryCam('user')).then(s=>{
+        streamAbsen=s; video.srcObject=s; video.muted=true; video.setAttribute('playsinline',''); video.setAttribute('autoplay','');
+        status.textContent='Kamera aktif. Jika hitam, coba tutup Buka lagi atau ganti kamera.';
+        const play = ()=> video.play().catch(e=>{ status.textContent='Tap video untuk play: '+e.message; video.addEventListener('click', ()=>video.play(), {once:true}); });
+        video.onloadedmetadata=play;
+        video.oncanplay=play;
+        setTimeout(play, 800);
+        // cek hitam
+        setTimeout(()=>{
+            if(video.videoWidth===0 && video.clientWidth<10){
+                status.textContent='Video hitam — coba Allow kamera + cek tidak dipakai app lain';
+            }
+        }, 1500);
+    }).catch(err=>{ status.textContent='Gagal kamera: '+err.message+' — Settings HP → Chrome → Camera Allow + pastikan tidak dipakai WA/Zoom'; });
     modalEl.addEventListener('hidden.bs.modal', function handler(){
         if(streamAbsen){ streamAbsen.getTracks().forEach(t=>t.stop()); streamAbsen=null; }
         video.srcObject=null; modalEl.removeEventListener('hidden.bs.modal', handler);
@@ -272,12 +280,13 @@ function captureAbsen(){
     const video=document.getElementById('videoAbsen');
     const canvas=document.getElementById('canvasPreview');
     const fileInput=document.getElementById('photoAbsen');
-    if(!video.videoWidth) return alert('Kamera belum siap');
-    if(!lokasiData.lat) return alert('Lokasi belum diambil');
-    const tmpCanvas=document.getElementById('canvasCapture');
-    // ambil frame
-    tmpCanvas.width=video.videoWidth; tmpCanvas.height=video.videoHeight;
-    tmpCanvas.getContext('2d').drawImage(video,0,0);
+    const w=video.videoWidth || video.clientWidth || 640;
+    const h=video.videoHeight || video.clientHeight || 480;
+    if(!w || w<10) return alert('Kamera belum siap — tunggu 2 detik video jalan lalu coba lagi');
+    if(!lokasiData.lat) console.warn('Lokasi belum ada, capture tetap lanjut');
+    const tmpCanvas=document.getElementById('canvasCaptureAbsen');
+    tmpCanvas.width=w; tmpCanvas.height=h;
+    tmpCanvas.getContext('2d').drawImage(video,0,0,w,h);
     // buat image dari tmpCanvas lalu overlay
     const img=new Image();
     img.onload=()=>{
@@ -298,8 +307,10 @@ function captureAbsen(){
 }
 
 function validateAbsen(form){
-    if(!form.latitude.value || !form.longitude.value){ alert('Ambil lokasi dulu'); return false; }
-    if(!form.photo.files || !form.photo.files[0]){ alert('Foto wajib'); return false; }
+    if(!form.latitude.value || !form.longitude.value){
+        if(!confirm('Lokasi belum ada — tetap kirim absen tanpa lokasi?')) return false;
+    }
+    if(!form.photo.files || !form.photo.files[0]){ alert('Foto wajib — ambil via Kamera'); return false; }
     if(form.photo.files[0].size>4*1024*1024){ alert('Foto >4MB'); return false; }
     return true;
 }
