@@ -14,18 +14,27 @@ const expressLayouts = require('express-ejs-layouts');
 // Setup Middleware
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+const uploadStaticDir = process.env.RAILWAY_ENVIRONMENT ? '/data/uploads' : path.join(__dirname, 'public', 'uploads');
+app.use('/uploads', express.static(uploadStaticDir));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(expressLayouts);
 app.set('layout', 'layout');
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-// Session config
+// Session config — allow cross-site via tunnel (https) & http local
 app.use(session({
-    secret: 'pos_cuci_motor_secret',
+    secret: process.env.SESSION_SECRET || 'pos_cuci_motor_secret',
     resave: false,
-    saveUninitialized: true
+    saveUninitialized: true,
+    cookie: {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: false, // false agar http 192.168 juga bisa, true hanya https (tunnel akan tetap kirim karena lax)
+        maxAge: 24*60*60*1000
+    }
 }));
+app.set('trust proxy', 1);
 
 // Track karyawan login aktif
 const activeLogins = {}; // sessionID -> {id, username, role, loginTime, lastSeen, ip}
@@ -68,7 +77,7 @@ function isValidPlat(plat){
 }
 
 // Multer setup untuk foto nota pengeluaran
-const uploadDir = path.join(__dirname, 'public', 'uploads');
+const uploadDir = process.env.RAILWAY_ENVIRONMENT ? '/data/uploads' : path.join(__dirname, 'public', 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, uploadDir),
@@ -141,7 +150,7 @@ app.get('/api/active-logins', requireOwner, (req,res)=>{
 });
 
 // --- Absen Karyawan dengan Foto + Lokasi + Jam ---
-const absenUploadDir = path.join(__dirname, 'public', 'uploads', 'absen');
+const absenUploadDir = process.env.RAILWAY_ENVIRONMENT ? '/data/uploads/absen' : path.join(__dirname, 'public', 'uploads', 'absen');
 if (!fs.existsSync(absenUploadDir)) fs.mkdirSync(absenUploadDir, { recursive: true });
 const absenStorage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, absenUploadDir),
@@ -184,17 +193,18 @@ app.post('/absen', requireLogin, absenUpload.single('photo'), (req, res) => {
     const { type, latitude, longitude, address } = req.body;
     const t = (type==='keluar' ? 'keluar' : 'masuk');
     if (!req.file) return res.status(400).send('Validasi gagal: Foto wajib. <a href="/absen">Kembali</a>');
-    if (!latitude || !longitude) {
-        fs.unlinkSync(req.file.path);
-        return res.status(400).send('Validasi gagal: Lokasi wajib (aktifkan GPS). <a href="/absen">Kembali</a>');
-    }
+    const lat = latitude ? parseFloat(latitude) : null;
+    const lng = longitude ? parseFloat(longitude) : null;
+    // lokasi opsional — jika tidak ada, tetap simpan dengan 0,0
+    const finalLat = lat || 0;
+    const finalLng = lng || 0;
+    const finalAddr = address || (lat ? `${lat}, ${lng}` : 'Lokasi tidak tersedia');
     const now = new Date();
     const date = now.toISOString().slice(0,10);
     const time = now.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
     const datetime = now.toISOString();
     const uid = req.session.user.id;
     const username = req.session.user.username;
-    // cegah double absen sama type di hari sama (optional)
     db.get("SELECT * FROM attendance WHERE user_id=? AND date=? AND type=?", [uid, date, t], (e,row)=>{
         if (row) {
             fs.unlinkSync(req.file.path);
@@ -202,7 +212,7 @@ app.post('/absen', requireLogin, absenUpload.single('photo'), (req, res) => {
         }
         const photo = '/uploads/absen/' + path.basename(req.file.path);
         db.run("INSERT INTO attendance (user_id, username, date, time, datetime, type, photo, latitude, longitude, address) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            [uid, username, date, time, datetime, t, photo, parseFloat(latitude), parseFloat(longitude), address||''], (err)=>{
+            [uid, username, date, time, datetime, t, photo, finalLat, finalLng, finalAddr], (err)=>{
                 if (err) { fs.unlinkSync(req.file.path); return res.status(500).send('Gagal simpan absen: '+err.message); }
                 res.redirect('/absen');
             });
