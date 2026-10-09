@@ -14,7 +14,7 @@ const expressLayouts = require('express-ejs-layouts');
 // Setup Middleware
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
-const uploadStaticDir = process.env.RAILWAY_ENVIRONMENT ? '/data/uploads' : path.join(__dirname, 'public', 'uploads');
+const uploadStaticDir = path.join(__dirname, 'data', 'uploads');
 app.use('/uploads', express.static(uploadStaticDir));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(expressLayouts);
@@ -77,7 +77,7 @@ function isValidPlat(plat){
 }
 
 // Multer setup untuk foto nota pengeluaran
-const uploadDir = process.env.RAILWAY_ENVIRONMENT ? '/data/uploads' : path.join(__dirname, 'public', 'uploads');
+const uploadDir = path.join(__dirname, 'data', 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, uploadDir),
@@ -150,7 +150,7 @@ app.get('/api/active-logins', requireOwner, (req,res)=>{
 });
 
 // --- Absen Karyawan dengan Foto + Lokasi + Jam ---
-const absenUploadDir = process.env.RAILWAY_ENVIRONMENT ? '/data/uploads/absen' : path.join(__dirname, 'public', 'uploads', 'absen');
+const absenUploadDir = path.join(__dirname, 'data', 'uploads', 'absen');
 if (!fs.existsSync(absenUploadDir)) fs.mkdirSync(absenUploadDir, { recursive: true });
 const absenStorage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, absenUploadDir),

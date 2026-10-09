@@ -2,7 +2,8 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const bcrypt = require('bcryptjs');
 
-const dbDir = process.env.RAILWAY_ENVIRONMENT ? '/data' : __dirname;
+const dbDir = path.join(__dirname, 'data');
+if (!require('fs').existsSync(dbDir)) require('fs').mkdirSync(dbDir, { recursive: true });
 const dbPath = path.resolve(dbDir, 'pos.db');
 const db = new sqlite3.Database(dbPath, (err) => {
     if (err) {
