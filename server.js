@@ -328,9 +328,10 @@ app.post('/sales', requireLogin, (req, res) => {
             if (invalid.length>0) return res.status(400).send('Validasi gagal: Layanan tidak valid: '+invalid.join(', ')+' <a href="/sales">Kembali</a>');
 
             db.serialize(() => {
-            db.run(`INSERT INTO sales (customer_name, license_plate, service_name, price, worker_name, admin_name) 
-                    VALUES (?, ?, ?, ?, ?, ?)`, 
-                    [customer_name, license_plate, service_name, salePrice, worker_name, admin_name], function(err) {
+            const phoneNum = String(req.body.phone || '').trim();
+            db.run(`INSERT INTO sales (customer_name, license_plate, service_name, price, worker_name, admin_name, phone) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?)`, 
+                    [customer_name, license_plate, service_name, salePrice, worker_name, admin_name, phoneNum], function(err) {
                 if (err) { console.error(err); return res.status(500).send('Gagal simpan penjualan: '+err.message+' <a href="/sales">Kembali</a>'); }
                 const saleId = this.lastID;
                 const layananDesc = serviceNames.length>1 ? `(${serviceNames.join(' + ')})` : serviceNames[0];
@@ -906,6 +907,7 @@ app.use((req, res, next) => {
 });
 
 // Start server - 0.0.0.0 untuk Railway/Docker
-app.listen(process.env.PORT || PORT, '0.0.0.0', () => {
-    console.log(`Server is running at port ${process.env.PORT || PORT}`);
+// Start server - 0.0.0.0 untuk Railway/Docker
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server is running at port ${PORT}`);
 });

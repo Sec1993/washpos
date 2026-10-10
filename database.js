@@ -47,7 +47,11 @@ db.serialize(() => {
         worker_name TEXT,
         admin_name TEXT,
         date DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
+    )`, () => {
+        db.run("ALTER TABLE sales ADD COLUMN phone TEXT", (e) => {
+            if (!e) console.log("Added phone column to sales");
+        });
+    });
 
     // 5. Expenses table (tambah photo_nota)
     db.run(`CREATE TABLE IF NOT EXISTS expenses (

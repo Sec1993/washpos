@@ -17,7 +17,8 @@
 </head>
 <body>
     <div class="text-center">
-        <h2 style="margin-bottom:0;">WashPOS</h2>
+        <!-- Tambahkan logo di sini jika ada -->
+        <h2 style="margin-bottom:0; font-size:24px;">WashPOS</h2>
         <p style="margin-top:5px;">Struk Bukti Pembayaran</p>
     </div>
     <hr>
@@ -39,13 +40,21 @@
     <hr>
     <div class="row"><span>Kasir:</span> <span><%= sale.admin_name %></span></div>
     <div class="text-center" style="margin-top:20px;">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=WashPOS-Struk-<%=sale.id%>" alt="QR Code Struk" style="margin-bottom:10px;">
         <p>Terima Kasih Atas Kunjungan Anda!</p>
     </div>
     
     <div class="text-center no-print" style="margin-top:30px;">
-        <button onclick="window.print()" style="padding:10px 20px; cursor:pointer;">Cetak Struk</button>
-        <br><br>
-        <a href="/sales">Kembali ke Kasir</a>
+        <button onclick="window.print()" style="padding:10px 20px; cursor:pointer; margin-bottom:10px; width:100%;">Cetak Struk</button>
+        <% if (sale.phone && sale.phone.length > 5) { 
+            // Format phone to international format (replace leading 0 with 62)
+            let waNum = sale.phone.replace(/^0/, '62').replace(/[^0-9]/g, '');
+            let waText = encodeURIComponent(`Halo ${sale.customer_name},\n\nKendaraan plat *${sale.license_plate}* Anda sudah selesai dicuci di *WashPOS*.\nTotal tagihan: Rp ${sale.price.toLocaleString('id-ID')}.\n\nTerima kasih atas kunjungan Anda!`);
+        %>
+            <a href="https://wa.me/<%= waNum %>?text=<%= waText %>" target="_blank" style="display:inline-block; padding:10px 20px; background-color:#25D366; color:white; text-decoration:none; margin-bottom:10px; font-family:sans-serif; width:calc(100% - 40px); border-radius:5px;">Kirim Notif WA</a>
+        <% } %>
+        <br>
+        <a href="/sales" style="display:inline-block; padding:10px; font-family:sans-serif;">Kembali ke Kasir</a>
     </div>
 </body>
 </html>
