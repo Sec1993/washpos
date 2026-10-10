@@ -1,5 +1,7 @@
 const express = require('express');
 const session = require('express-session');
+// Waktu WITA (+8)
+function getWitaTime() { return new Date(new Date().getTime() + 8 * 3600 * 1000); }
 const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
@@ -177,7 +179,7 @@ const absenUpload = multer({
 });
 
 app.get('/absen', requireLogin, (req, res) => {
-    const today = new Date().toISOString().slice(0,10);
+    const today = getWitaTime().toISOString().slice(0,10);
     const uid = req.session.user.id;
     const isOwner = req.session.user.role==='owner';
     // ambil absen hari ini untuk user ini
@@ -204,10 +206,10 @@ app.post('/absen', requireLogin, absenUpload.single('photo'), (req, res) => {
     const finalLat = lat || 0;
     const finalLng = lng || 0;
     const finalAddr = address || (lat ? `${lat}, ${lng}` : 'Lokasi tidak tersedia');
-    const now = new Date();
-    const date = now.toISOString().slice(0,10);
-    const time = now.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
-    const datetime = now.toISOString();
+    const wita = getWitaTime();
+    const date = wita.toISOString().slice(0,10);
+    const time = wita.toISOString().slice(11,19);
+    const datetime = wita.toISOString();
     const uid = req.session.user.id;
     const username = req.session.user.username;
     db.get("SELECT * FROM attendance WHERE user_id=? AND date=? AND type=?", [uid, date, t], (e,row)=>{
@@ -228,8 +230,8 @@ app.post('/absen', requireLogin, absenUpload.single('photo'), (req, res) => {
 app.get('/', requireLogin, (req, res) => {
     if (req.session.user.role === 'owner') {
         db.all("SELECT * FROM inventory WHERE stock <= COALESCE(min_stock,5) ORDER BY stock ASC", (err, lowStock) => {
-            const today=new Date().toISOString().slice(0,10);
-            const firstDay=new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
+            const today=getWitaTime().toISOString().slice(0,10);
+            const firstDay=getWitaTime().toISOString().slice(0,8) + '01';
             db.all("SELECT * FROM journals", (e, journals)=>{
                 let kasBesar=0, kasKecil=0, totalKasDynamic=0;
                 const isKasDynamic = (t)=> t!=='Pendapatan' && t!=='Biaya';
@@ -787,8 +789,8 @@ app.get('/reports', requireOwner, (req, res) => {
                     db.all("SELECT SUM(stock) as totalStock FROM inventory", (e, invRow)=>{
                         const totalStock = invRow && invRow[0] ? invRow[0].totalStock||0 : 0;
                         // KPI for dashboard-like
-                        const today=new Date().toISOString().slice(0,10);
-                        const firstDay=new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
+                        const today=getWitaTime().toISOString().slice(0,10);
+                        const firstDay=getWitaTime().toISOString().slice(0,8) + '01';
                         db.get("SELECT COUNT(*) as c, SUM(price) as omzet FROM sales WHERE date(date)=date('now')", (e, todayRow)=>{
                             db.get(`SELECT SUM(price) as omzetBulan FROM sales WHERE date(date) >= date(?)`, [firstDay], (e, bulanRow)=>{
                                 db.all("SELECT date(date) as tgl, COUNT(*) as trx, SUM(price) as omzet FROM sales WHERE date(date) >= date('now','-6 days') GROUP BY date(date) ORDER BY tgl ASC", (e, tren)=>{
@@ -926,3 +928,4 @@ app.listen(HARDCODED_PORT, '0.0.0.0', () => {
         });
     }, 3000);
 });
+
