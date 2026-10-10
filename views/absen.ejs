@@ -1,4 +1,4 @@
-<h2 class="mb-3">Absen Karyawan — Foto + Lokasi + Jam</h2>
+﻿<h2 class="mb-3">Absen Karyawan — Foto + Lokasi + Jam</h2>
 
 <div class="row">
     <div class="col-md-5">
@@ -132,6 +132,7 @@
         <small id="lokasiKameraPreview" class="text-muted d-block"></small>
       </div>
       <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="switchCameraAbsen()">🔄 Putar</button>
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
         <button type="button" class="btn btn-success btn-sm" onclick="captureAbsen()">📸 Ambil</button>
       </div>
@@ -242,38 +243,44 @@ function handleFallbackCamera(event) {
 }
 
 let streamAbsenTmp=null;
-function openKameraAbsen(){
-    if(!lokasiData.lat){ if(!confirm('Lokasi belum diambil — tetap buka kamera? (absen tetap bisa, lokasi akan kosong)')) return; }
-    
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        document.getElementById('fallbackCamera').click();
-        return;
-    }
-
-    const modalEl=document.getElementById('modalKameraAbsen');
+let currentFacingModeAbsen = 'user';
+function startCameraAbsen(mode) {
     const video=document.getElementById('videoAbsen');
     const status=document.getElementById('kameraStatusAbsen');
-    const modal=new bootstrap.Modal(modalEl); modal.show();
+    if(streamAbsen){ streamAbsen.getTracks().forEach(t=>t.stop()); streamAbsen=null; }
     status.textContent='Meminta kamera...';
-    // coba environment dulu (belakang), fallback user (depan)
-    const tryCam = (mode) => navigator.mediaDevices.getUserMedia({ video:{ facingMode: mode, width:{ideal:1280}, height:{ideal:720} }, audio:false });
-    tryCam('environment').catch(()=> tryCam('user')).then(s=>{
+    const tryCam = (m) => navigator.mediaDevices.getUserMedia({ video:{ facingMode: m, width:{ideal:1280}, height:{ideal:720} }, audio:false });
+    tryCam(mode).catch(()=> tryCam(mode === 'user' ? 'environment' : 'user')).then(s=>{
         streamAbsen=s; video.srcObject=s; video.muted=true; video.setAttribute('playsinline',''); video.setAttribute('autoplay','');
-        status.textContent='Kamera aktif. Jika hitam, coba tutup Buka lagi atau ganti kamera.';
+        status.textContent='Kamera aktif ('+ (mode==='user'?'Depan':'Belakang') +'). Jika hitam, coba ganti kamera.';
         const play = ()=> video.play().catch(e=>{ status.textContent='Tap video untuk play: '+e.message; video.addEventListener('click', ()=>video.play(), {once:true}); });
         video.onloadedmetadata=play;
         video.oncanplay=play;
         setTimeout(play, 800);
-        // cek hitam
         setTimeout(()=>{
             if(video.videoWidth===0 && video.clientWidth<10){
-                status.textContent='Video hitam — coba Allow kamera + cek tidak dipakai app lain';
+                status.textContent='Video hitam - coba ganti kamera';
             }
         }, 1500);
-    }).catch(err=>{ status.textContent='Gagal kamera: '+err.message+' — Settings HP → Chrome → Camera Allow + pastikan tidak dipakai WA/Zoom'; });
+    }).catch(err=>{ status.textContent='Gagal kamera: '+err.message; });
+}
+function switchCameraAbsen() {
+    currentFacingModeAbsen = (currentFacingModeAbsen === 'user') ? 'environment' : 'user';
+    startCameraAbsen(currentFacingModeAbsen);
+}
+function openKameraAbsen(){
+    if(!lokasiData.lat){ if(!confirm('Lokasi belum diambil? (absen tetap bisa, lokasi akan kosong)')) return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        document.getElementById('fallbackCamera').click();
+        return;
+    }
+    const modalEl=document.getElementById('modalKameraAbsen');
+    const modal=new bootstrap.Modal(modalEl); modal.show();
+    currentFacingModeAbsen = 'user';
+    startCameraAbsen(currentFacingModeAbsen);
     modalEl.addEventListener('hidden.bs.modal', function handler(){
         if(streamAbsen){ streamAbsen.getTracks().forEach(t=>t.stop()); streamAbsen=null; }
-        video.srcObject=null; modalEl.removeEventListener('hidden.bs.modal', handler);
+        document.getElementById('videoAbsen').srcObject=null; modalEl.removeEventListener('hidden.bs.modal', handler);
     });
 }
 function captureAbsen(){
@@ -317,3 +324,4 @@ function validateAbsen(form){
 // auto ambil lokasi saat load
 window.addEventListener('load', ()=>{ setTimeout(ambilLokasi, 800); });
 </script>
+
