@@ -5,6 +5,5 @@ COPY package*.json ./
 RUN npm install --omit=dev
 COPY . .
 RUN mkdir -p data/uploads data/uploads/absen
-EXPOSE ${PORT:-3000}
 ENV NODE_ENV=production
 CMD ["node", "server.js"]
