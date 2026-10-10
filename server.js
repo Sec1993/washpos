@@ -910,4 +910,17 @@ app.use((req, res, next) => {
 // Start server - 0.0.0.0 untuk Railway/Docker
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server is running at port ${PORT}`);
+    
+    // Self-test
+    setTimeout(() => {
+        require('http').get(`http://localhost:${PORT}/healthz`, (resp) => {
+            let data = '';
+            resp.on('data', (chunk) => { data += chunk; });
+            resp.on('end', () => {
+                console.log(`Self-test /healthz: ${resp.statusCode} ${data}`);
+            });
+        }).on("error", (err) => {
+            console.log("Self-test Error: " + err.message);
+        });
+    }, 3000);
 });
