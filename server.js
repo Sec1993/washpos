@@ -908,12 +908,14 @@ app.use((req, res, next) => {
 
 // Start server - 0.0.0.0 untuk Railway/Docker
 // Start server - 0.0.0.0 untuk Railway/Docker
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server is running at port ${PORT}`);
+// Ignore process.env.PORT because Railway proxy gets confused with Dockerfile EXPOSE
+const HARDCODED_PORT = 3000;
+app.listen(HARDCODED_PORT, '0.0.0.0', () => {
+    console.log(`Server is running at port ${HARDCODED_PORT}`);
     
     // Self-test
     setTimeout(() => {
-        require('http').get(`http://localhost:${PORT}/healthz`, (resp) => {
+        require('http').get(`http://localhost:${HARDCODED_PORT}/healthz`, (resp) => {
             let data = '';
             resp.on('data', (chunk) => { data += chunk; });
             resp.on('end', () => {
