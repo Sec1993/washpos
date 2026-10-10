@@ -905,15 +905,7 @@ app.use((req, res, next) => {
     next();
 });
 
-// Start server on multiple ports to ensure Railway proxy finds it
-const http = require('http');
-const portsToTry = [Number(PORT), 3000, 8080, 5000].filter((x, i, a) => x && a.indexOf(x) === i);
-portsToTry.forEach(p => {
-    try {
-        http.createServer(app).listen(p, '::', () => {
-            console.log(`Server bound to port ${p}`);
-        }).on('error', (e) => {
-            console.log(`Port ${p} in use or cannot bind.`);
-        });
-    } catch(e) {}
+// Start server - 0.0.0.0 untuk Railway/Docker
+app.listen(process.env.PORT || PORT, '0.0.0.0', () => {
+    console.log(`Server is running at port ${process.env.PORT || PORT}`);
 });
