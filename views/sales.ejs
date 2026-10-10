@@ -188,4 +188,106 @@ function validatePenjualan(form){
     // also handle toast for server 400 via URL param
     return validateRupiahForm(form);
 }
+
+// PWA Offline Logic
+const OFFLINE_KEY = 'washpos_offline_sales';
+
+function renderOfflineBanner() {
+    let pending = JSON.parse(localStorage.getItem(OFFLINE_KEY) || '[]');
+    let banner = document.getElementById('offlineBanner');
+    if (pending.length > 0) {
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'offlineBanner';
+            banner.className = 'alert alert-warning py-2 mt-3 mb-0';
+            banner.innerHTML = `<strong>Mode Offline:</strong> Ada <span id="offlineCount"></span> transaksi belum tersinkronisasi. Akan dikirim otomatis saat online. <button class="btn btn-sm btn-outline-dark ms-2" type="button" onclick="syncOfflineSales(true)">Sync Manual</button>`;
+            const formCard = document.querySelector('.col-md-4 .card');
+            if(formCard) formCard.parentNode.insertBefore(banner, formCard.nextSibling);
+        }
+        document.getElementById('offlineCount').textContent = pending.length;
+    } else if (banner) {
+        banner.remove();
+    }
+}
+
+async function syncOfflineSales(manual = false) {
+    if (!navigator.onLine) {
+        if (manual) alert("Masih tidak ada koneksi internet.");
+        return;
+    }
+    let pending = JSON.parse(localStorage.getItem(OFFLINE_KEY) || '[]');
+    if (pending.length === 0) return;
+    
+    let successCount = 0;
+    for (let i = 0; i < pending.length; i++) {
+        let p = pending[i];
+        let fd = new URLSearchParams();
+        for (let k in p) {
+            if (Array.isArray(p[k])) p[k].forEach(v => fd.append(k, v));
+            else fd.append(k, p[k]);
+        }
+        try {
+            let res = await fetch('/sales', {
+                method: 'POST',
+                body: fd,
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+            });
+            if (res.ok || res.status === 400 || res.redirected) {
+                pending.splice(i, 1);
+                i--;
+                successCount++;
+                localStorage.setItem(OFFLINE_KEY, JSON.stringify(pending));
+                renderOfflineBanner();
+            }
+        } catch (e) {
+            break; 
+        }
+    }
+    if (successCount > 0) {
+        showToast(`${successCount} transaksi offline berhasil disinkronkan!`);
+        setTimeout(() => window.location.reload(), 2000);
+    }
+}
+
+window.addEventListener('online', () => syncOfflineSales(false));
+document.addEventListener('DOMContentLoaded', () => {
+    renderOfflineBanner();
+    if (navigator.onLine) syncOfflineSales(false);
+    
+    const salesForm = document.querySelector('form[action="/sales"][method="POST"]');
+    if (salesForm) {
+        salesForm.addEventListener('submit', function(e) {
+            if (!navigator.onLine) {
+                e.preventDefault();
+                let formData = new FormData(salesForm);
+                let data = {};
+                for (let key of formData.keys()) {
+                    let vals = formData.getAll(key);
+                    data[key] = vals.length > 1 ? vals : vals[0];
+                }
+                
+                let pending = JSON.parse(localStorage.getItem(OFFLINE_KEY) || '[]');
+                pending.push(data);
+                localStorage.setItem(OFFLINE_KEY, JSON.stringify(pending));
+                
+                salesForm.reset();
+                const priceEl = document.getElementById('price');
+                if (priceEl) priceEl.value = '';
+                const lc = document.getElementById('layananCount');
+                if (lc) lc.textContent = '0';
+                
+                showToast("Tersimpan Offline! Akan dikirim saat online.", 'warning');
+                renderOfflineBanner();
+                
+                setTimeout(() => {
+                    const btn = salesForm.querySelector('button[type=submit]');
+                    if(btn && btn.dataset.orig){
+                        btn.disabled = false;
+                        btn.innerHTML = btn.dataset.orig;
+                    }
+                }, 100);
+            }
+        });
+    }
+});
 </script>
