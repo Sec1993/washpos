@@ -109,6 +109,11 @@ app.use((req, res, next) => {
 });
 
 // Routes - Auth
+// Health check for Railway (no auth required)
+app.get('/healthz', (req, res) => {
+    res.status(200).send('OK');
+});
+
 app.get('/login', (req, res) => {
     res.render('login', { error: null });
 });
