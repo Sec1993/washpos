@@ -100,37 +100,40 @@ const upload = multer({
     }
 });
 
-// Supabase Cloud Storage Client (Penyimpanan Foto Cloud Otomatis)
-const { createClient } = require('@supabase/supabase-js');
+// Supabase Cloud Storage Client (Penyimpanan Foto Cloud Otomatis via REST API)
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://qhclkhpymihmlbmecpdv.supabase.co';
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFoY2xraHB5bWlobWxibWVjcGR2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MTg3MDI1NSwiZXhwIjoyMTA3NDQ2MjU1fQ.57ug7wMvZuMORmZ2eVvk_2q5SFF8UPZNpQTQD0wqIFU';
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 const SUPABASE_BUCKET = 'washpos-photos';
 
 async function uploadToSupabase(filePath, remoteFileName, mimeType) {
     try {
         if (!fs.existsSync(filePath)) return null;
         const fileBuffer = fs.readFileSync(filePath);
-        const { error } = await supabase.storage
-            .from(SUPABASE_BUCKET)
-            .upload(remoteFileName, fileBuffer, {
-                contentType: mimeType || 'image/jpeg',
-                upsert: true
-            });
-        if (error) {
-            console.error('Supabase upload error:', error);
+        const endpoint = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${remoteFileName}`;
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+                'apikey': SUPABASE_SERVICE_KEY,
+                'Content-Type': mimeType || 'image/jpeg',
+                'x-upsert': 'true'
+            },
+            body: fileBuffer
+        });
+
+        if (!res.ok) {
+            const errText = await res.text();
+            console.error('Supabase upload error:', errText);
             return null;
         }
-        const { data: publicUrlData } = supabase.storage
-            .from(SUPABASE_BUCKET)
-            .getPublicUrl(remoteFileName);
-        
+
+        const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${remoteFileName}`;
         // Hapus file lokal setelah berhasil upload agar storage server Railway tetap bersih
         try { fs.unlinkSync(filePath); } catch (e) {}
-        console.log('Uploaded to Supabase:', publicUrlData.publicUrl);
-        return publicUrlData.publicUrl;
+        console.log('Foto berhasil terupload ke Supabase Storage:', publicUrl);
+        return publicUrl;
     } catch (err) {
-        console.error('Failed to upload to Supabase Storage:', err);
+        console.error('Gagal mengupload ke Supabase Storage:', err);
         return null;
     }
 }
