@@ -657,7 +657,7 @@ app.post('/master/services/delete', requireOwner, (req, res) => {
 });
 
 app.post('/master/workers/add', requireOwner, (req, res) => {
-    const { name } = req.body;
+    const { name, join_date } = req.body;
     if (!isValidName(name,2)) {
         db.all("SELECT * FROM services ORDER BY id ASC", (e, services) => {
             db.all("SELECT * FROM workers ORDER BY id ASC", (e, workers) => {
@@ -667,7 +667,8 @@ app.post('/master/workers/add', requireOwner, (req, res) => {
             });
         }); return;
     }
-    db.run("INSERT INTO workers (name) VALUES (?)", [name.trim()], (err) => {
+    const finalJoinDate = join_date && join_date.trim() ? join_date.trim() : getWitaTime().toISOString().slice(0,10);
+    db.run("INSERT INTO workers (name, join_date) VALUES (?, ?)", [name.trim(), finalJoinDate], (err) => {
         if (err) {
             db.all("SELECT * FROM services ORDER BY id ASC", (e, services) => {
                 db.all("SELECT * FROM workers ORDER BY id ASC", (e, workers) => {

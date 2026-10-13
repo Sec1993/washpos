@@ -34,8 +34,14 @@ db.serialize(() => {
     // 3. Workers table
     db.run(`CREATE TABLE IF NOT EXISTS workers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT UNIQUE
+        name TEXT UNIQUE,
+        join_date TEXT
     )`);
+    db.run(`ALTER TABLE workers ADD COLUMN join_date TEXT`, (err) => {
+        if (err && !err.message.includes('duplicate column')) {
+            // ignore
+        }
+    });
 
     // 4. Sales table
     db.run(`CREATE TABLE IF NOT EXISTS sales (
