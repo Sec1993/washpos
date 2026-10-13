@@ -100,6 +100,41 @@ const upload = multer({
     }
 });
 
+// Supabase Cloud Storage Client (Penyimpanan Foto Cloud Otomatis)
+const { createClient } = require('@supabase/supabase-js');
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://qhclkhpymihmlbmecpdv.supabase.co';
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFoY2xraHB5bWlobWxibWVjcGR2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MTg3MDI1NSwiZXhwIjoyMTA3NDQ2MjU1fQ.57ug7wMvZuMORmZ2eVvk_2q5SFF8UPZNpQTQD0wqIFU';
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+const SUPABASE_BUCKET = 'washpos-photos';
+
+async function uploadToSupabase(filePath, remoteFileName, mimeType) {
+    try {
+        if (!fs.existsSync(filePath)) return null;
+        const fileBuffer = fs.readFileSync(filePath);
+        const { error } = await supabase.storage
+            .from(SUPABASE_BUCKET)
+            .upload(remoteFileName, fileBuffer, {
+                contentType: mimeType || 'image/jpeg',
+                upsert: true
+            });
+        if (error) {
+            console.error('Supabase upload error:', error);
+            return null;
+        }
+        const { data: publicUrlData } = supabase.storage
+            .from(SUPABASE_BUCKET)
+            .getPublicUrl(remoteFileName);
+        
+        // Hapus file lokal setelah berhasil upload agar storage server Railway tetap bersih
+        try { fs.unlinkSync(filePath); } catch (e) {}
+        console.log('Uploaded to Supabase:', publicUrlData.publicUrl);
+        return publicUrlData.publicUrl;
+    } catch (err) {
+        console.error('Failed to upload to Supabase Storage:', err);
+        return null;
+    }
+}
+
 // Healthcheck untuk Railway
 app.get('/health', (req, res) => res.status(200).send('OK'));
 
@@ -196,7 +231,7 @@ app.get('/absen', requireLogin, (req, res) => {
     });
 });
 
-app.post('/absen', requireLogin, absenUpload.single('photo'), (req, res) => {
+app.post('/absen', requireLogin, absenUpload.single('photo'), async (req, res) => {
     const { type, latitude, longitude, address } = req.body;
     const t = (type==='keluar' ? 'keluar' : 'masuk');
     if (!req.file) return res.status(400).send('Validasi gagal: Foto wajib. <a href="/absen">Kembali</a>');
@@ -212,15 +247,22 @@ app.post('/absen', requireLogin, absenUpload.single('photo'), (req, res) => {
     const datetime = wita.toISOString();
     const uid = req.session.user.id;
     const username = req.session.user.username;
-    db.get("SELECT * FROM attendance WHERE user_id=? AND date=? AND type=?", [uid, date, t], (e,row)=>{
+    db.get("SELECT * FROM attendance WHERE user_id=? AND date=? AND type=?", [uid, date, t], async (e,row)=>{
         if (row) {
-            fs.unlinkSync(req.file.path);
+            try { fs.unlinkSync(req.file.path); } catch(e){}
             return res.status(400).send(`Sudah absen ${t} hari ini jam ${row.time}. <a href="/absen">Kembali</a>`);
         }
-        const photo = '/uploads/absen/' + path.basename(req.file.path);
+        let photo = '/uploads/absen/' + path.basename(req.file.path);
+        const remoteName = 'absen/' + path.basename(req.file.path);
+        const cloudUrl = await uploadToSupabase(req.file.path, remoteName, req.file.mimetype);
+        if (cloudUrl) photo = cloudUrl;
+
         db.run("INSERT INTO attendance (user_id, username, date, time, datetime, type, photo, latitude, longitude, address) VALUES (?,?,?,?,?,?,?,?,?,?)",
             [uid, username, date, time, datetime, t, photo, finalLat, finalLng, finalAddr], (err)=>{
-                if (err) { fs.unlinkSync(req.file.path); return res.status(500).send('Gagal simpan absen: '+err.message); }
+                if (err) { 
+                    try { fs.unlinkSync(req.file.path); } catch(e){}
+                    return res.status(500).send('Gagal simpan absen: '+err.message); 
+                }
                 res.redirect('/absen');
             });
     });
@@ -438,10 +480,16 @@ app.post('/expenses', requireLogin, upload.single('photo'), (req, res) => {
                 }
                 doInsert();
             }
-            function doInsert(){
+            async function doInsert(){
+                let finalPhoto = photo;
+                if(req.file){
+                    const remoteName = 'nota/' + req.file.filename;
+                    const cloudUrl = await uploadToSupabase(req.file.path, remoteName, req.file.mimetype);
+                    if(cloudUrl) finalPhoto = cloudUrl;
+                }
                 db.serialize(()=>{
                     db.run(`INSERT INTO expenses (category, amount, description, photo, admin_name) VALUES (?, ?, ?, ?, ?)`,
-                        [category, expenseAmount, description, photo, admin_name], function(err){
+                        [category, expenseAmount, description, finalPhoto, admin_name], function(err){
                         if(err){
                             if(req.file) fs.unlinkSync(req.file.path);
                             return res.status(500).send('Gagal simpan pengeluaran: '+err.message+' <a href="/expenses">Kembali</a>');
