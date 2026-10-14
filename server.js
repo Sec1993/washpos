@@ -568,50 +568,44 @@ app.post('/inventory/update', requireLogin, (req, res) => {
     });
 });
 
-// Routes - Master Data (Owner Only) - Kelola Karyawan & Menu Layanan + Kategori Pengeluaran (Phase2)
-app.get('/master', requireOwner, (req, res) => {
+// Routes - Master Data (Owner Only) - Kelola Karyawan, Layanan, Kategori, & Akun Login Pengguna
+function renderMaster(res, error = null, success = null) {
     db.all("SELECT * FROM services ORDER BY id ASC", (err, services) => {
         db.all("SELECT * FROM workers ORDER BY id ASC", (err, workers) => {
             db.all("SELECT * FROM expense_categories ORDER BY name ASC", (err, expense_categories) => {
-                res.render('master', { services, workers, expense_categories, error: null, success: null });
+                db.all("SELECT id, username, role FROM users ORDER BY id ASC", (err, users) => {
+                    res.render('master', {
+                        services: services || [],
+                        workers: workers || [],
+                        expense_categories: expense_categories || [],
+                        users: users || [],
+                        error,
+                        success
+                    });
+                });
             });
         });
     });
+}
+
+app.get('/master', requireOwner, (req, res) => {
+    renderMaster(res);
 });
 
 app.post('/master/services/add', requireOwner, (req, res) => {
     const { name, price } = req.body;
     const p = parseRupiah(price);
     if (!isValidName(name,2)) {
-        db.all("SELECT * FROM services ORDER BY id ASC", (e, services) => {
-            db.all("SELECT * FROM workers ORDER BY id ASC", (e, workers) => {
-                db.all("SELECT * FROM expense_categories ORDER BY name ASC", (e, expense_categories) => {
-                    res.render('master', { services, workers, expense_categories, error: 'Validasi gagal: Nama layanan min 2 karakter, max 50.', success: null });
-                });
-            });
-        }); return;
+        return renderMaster(res, 'Validasi gagal: Nama layanan min 2 karakter, max 50.');
     }
     if (isNaN(p) || p < 1000) {
-        db.all("SELECT * FROM services ORDER BY id ASC", (e, services) => {
-            db.all("SELECT * FROM workers ORDER BY id ASC", (e, workers) => {
-                db.all("SELECT * FROM expense_categories ORDER BY name ASC", (e, expense_categories) => {
-                    res.render('master', { services, workers, expense_categories, error: 'Validasi gagal: Harga harus angka ≥ 1.000 (contoh: 15.000 atau 15000).', success: null });
-                });
-            });
-        }); return;
+        return renderMaster(res, 'Validasi gagal: Harga harus angka ≥ 1.000 (contoh: 15.000 atau 15000).');
     }
     db.run("INSERT INTO services (name, price, category, isActive) VALUES (?, ?, 'Motor Kecil', 1)", [name.trim(), p], (err) => {
         if (err) {
-            db.all("SELECT * FROM services ORDER BY id ASC", (e, services) => {
-                db.all("SELECT * FROM workers ORDER BY id ASC", (e, workers) => {
-                    db.all("SELECT * FROM expense_categories ORDER BY name ASC", (e, expense_categories) => {
-                        res.render('master', { services, workers, expense_categories, error: 'Validasi gagal: Nama layanan sudah ada (unik).', success: null });
-                    });
-                });
-            });
-        } else {
-            res.redirect('/master');
+            return renderMaster(res, 'Validasi gagal: Nama layanan sudah ada (unik).');
         }
+        res.redirect('/master');
     });
 });
 
@@ -619,33 +613,14 @@ app.post('/master/services/update', requireOwner, (req, res) => {
     const { id, name, price } = req.body;
     const p = parseRupiah(price);
     if (!id || !isValidName(name,2)) {
-        db.all("SELECT * FROM services ORDER BY id ASC", (e, services) => {
-            db.all("SELECT * FROM workers ORDER BY id ASC", (e, workers) => {
-                db.all("SELECT * FROM expense_categories ORDER BY name ASC", (e, expense_categories) => {
-                    res.render('master', { services, workers, expense_categories, error: 'Validasi gagal: Nama layanan min 2 karakter.', success: null });
-                });
-            });
-        }); return;
+        return renderMaster(res, 'Validasi gagal: Nama layanan min 2 karakter.');
     }
     if (isNaN(p) || p < 1000) {
-        db.all("SELECT * FROM services ORDER BY id ASC", (e, services) => {
-            db.all("SELECT * FROM workers ORDER BY id ASC", (e, workers) => {
-                db.all("SELECT * FROM expense_categories ORDER BY name ASC", (e, expense_categories) => {
-                    res.render('master', { services, workers, expense_categories, error: 'Validasi gagal: Harga harus ≥ 1.000 (boleh 15.000).', success: null });
-                });
-            });
-        }); return;
+        return renderMaster(res, 'Validasi gagal: Harga harus ≥ 1.000 (boleh 15.000).');
     }
-    // cek duplikat nama (kecuali id sendiri)
     db.get("SELECT id FROM services WHERE name=? AND id != ?", [name.trim(), id], (e,row)=>{
         if (row) {
-            db.all("SELECT * FROM services ORDER BY id ASC", (e, services) => {
-                db.all("SELECT * FROM workers ORDER BY id ASC", (e, workers) => {
-                    db.all("SELECT * FROM expense_categories ORDER BY name ASC", (e, expense_categories) => {
-                        res.render('master', { services, workers, expense_categories, error: 'Validasi gagal: Nama layanan sudah dipakai layanan lain.', success: null });
-                    });
-                });
-            }); return;
+            return renderMaster(res, 'Validasi gagal: Nama layanan sudah dipakai layanan lain.');
         }
         db.run("UPDATE services SET name = ?, price = ? WHERE id = ?", [name.trim(), p, id], () => res.redirect('/master'));
     });
@@ -659,27 +634,14 @@ app.post('/master/services/delete', requireOwner, (req, res) => {
 app.post('/master/workers/add', requireOwner, (req, res) => {
     const { name, join_date } = req.body;
     if (!isValidName(name,2)) {
-        db.all("SELECT * FROM services ORDER BY id ASC", (e, services) => {
-            db.all("SELECT * FROM workers ORDER BY id ASC", (e, workers) => {
-                db.all("SELECT * FROM expense_categories ORDER BY name ASC", (e, expense_categories) => {
-                    res.render('master', { services, workers, expense_categories, error: 'Validasi gagal: Nama karyawan min 2 karakter.', success: null });
-                });
-            });
-        }); return;
+        return renderMaster(res, 'Validasi gagal: Nama karyawan min 2 karakter.');
     }
     const finalJoinDate = join_date && join_date.trim() ? join_date.trim() : getWitaTime().toISOString().slice(0,10);
     db.run("INSERT INTO workers (name, join_date) VALUES (?, ?)", [name.trim(), finalJoinDate], (err) => {
         if (err) {
-            db.all("SELECT * FROM services ORDER BY id ASC", (e, services) => {
-                db.all("SELECT * FROM workers ORDER BY id ASC", (e, workers) => {
-                    db.all("SELECT * FROM expense_categories ORDER BY name ASC", (e, expense_categories) => {
-                        res.render('master', { services, workers, expense_categories, error: 'Validasi gagal: Nama karyawan sudah ada (unik).', success: null });
-                    });
-                });
-            });
-        } else {
-            res.redirect('/master');
+            return renderMaster(res, 'Validasi gagal: Nama karyawan sudah ada (unik).');
         }
+        res.redirect('/master');
     });
 });
 
@@ -691,32 +653,74 @@ app.post('/master/workers/delete', requireOwner, (req, res) => {
 app.post('/master/expense-categories/add', requireOwner, (req, res) => {
     const { name } = req.body;
     if (!isValidName(name,2)) {
-        db.all("SELECT * FROM services ORDER BY id ASC", (e, services) => {
-            db.all("SELECT * FROM workers ORDER BY id ASC", (e, workers) => {
-                db.all("SELECT * FROM expense_categories ORDER BY name ASC", (e, expense_categories) => {
-                    res.render('master', { services, workers, expense_categories, error: 'Validasi gagal: Nama kategori min 2 karakter.', success: null });
-                });
-            });
-        }); return;
+        return renderMaster(res, 'Validasi gagal: Nama kategori min 2 karakter.');
     }
     db.run("INSERT INTO expense_categories (name) VALUES (?)", [name.trim()], (err) => {
         if (err) {
-            db.all("SELECT * FROM services ORDER BY id ASC", (e, services) => {
-                db.all("SELECT * FROM workers ORDER BY id ASC", (e, workers) => {
-                    db.all("SELECT * FROM expense_categories ORDER BY name ASC", (e, expense_categories) => {
-                        res.render('master', { services, workers, expense_categories, error: 'Validasi gagal: Kategori sudah ada (unik).', success: null });
-                    });
-                });
-            });
-        } else {
-            res.redirect('/master');
+            return renderMaster(res, 'Validasi gagal: Kategori sudah ada (unik).');
         }
+        res.redirect('/master');
     });
 });
 
 app.post('/master/expense-categories/delete', requireOwner, (req, res) => {
     const { id } = req.body;
     db.run("DELETE FROM expense_categories WHERE id = ?", [id], () => res.redirect('/master'));
+});
+
+// --- Master User (Kelola Akun Login Kasir & Owner) ---
+app.post('/master/users/add', requireOwner, (req, res) => {
+    const { username, password, role } = req.body;
+    if (!username || username.trim().length < 3) {
+        return renderMaster(res, 'Validasi gagal: Username minimal 3 karakter.');
+    }
+    const cleanUsername = username.trim().toLowerCase();
+    if (!/^[a-zA-Z0-9_]{3,30}$/.test(cleanUsername)) {
+        return renderMaster(res, 'Validasi gagal: Username hanya boleh huruf, angka, dan underscore (_), tanpa spasi.');
+    }
+    if (!password || password.length < 4) {
+        return renderMaster(res, 'Validasi gagal: Password minimal 4 karakter.');
+    }
+    const cleanRole = (role === 'owner') ? 'owner' : 'karyawan';
+    const hash = bcrypt.hashSync(password, 10);
+    db.run("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", [cleanUsername, hash, cleanRole], (err) => {
+        if (err) {
+            return renderMaster(res, `Validasi gagal: Username "${cleanUsername}" sudah digunakan.`);
+        }
+        res.redirect('/master');
+    });
+});
+
+app.post('/master/users/delete', requireOwner, (req, res) => {
+    const targetId = parseInt(req.body.id);
+    if (isNaN(targetId)) return res.redirect('/master');
+    if (targetId === req.session.user.id) {
+        return renderMaster(res, 'Validasi gagal: Tidak dapat menghapus akun yang sedang Anda gunakan.');
+    }
+    db.get("SELECT * FROM users WHERE id = ?", [targetId], (err, targetUser) => {
+        if (!targetUser) return res.redirect('/master');
+        if (targetUser.username === 'owner') {
+            return renderMaster(res, 'Validasi gagal: Akun utama "owner" tidak dapat dihapus.');
+        }
+        db.run("DELETE FROM users WHERE id = ?", [targetId], (err) => {
+            if (err) return renderMaster(res, 'Gagal menghapus akun: ' + err.message);
+            res.redirect('/master');
+        });
+    });
+});
+
+app.post('/master/users/reset-password', requireOwner, (req, res) => {
+    const { id, new_password } = req.body;
+    const targetId = parseInt(id);
+    if (isNaN(targetId)) return res.redirect('/master');
+    if (!new_password || new_password.length < 4) {
+        return renderMaster(res, 'Validasi gagal: Password baru minimal 4 karakter.');
+    }
+    const hash = bcrypt.hashSync(new_password, 10);
+    db.run("UPDATE users SET password = ? WHERE id = ?", [hash, targetId], (err) => {
+        if (err) return renderMaster(res, 'Gagal mengganti password: ' + err.message);
+        res.redirect('/master');
+    });
 });
 
 // --- Akun Kas/Bank/QRIS (Owner kelola) ---

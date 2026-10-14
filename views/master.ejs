@@ -135,12 +135,118 @@
                 <div class="d-flex justify-content-between"><span>Total Layanan</span><strong><%= services.length %></strong></div>
                 <div class="d-flex justify-content-between"><span>Total Karyawan</span><strong><%= workers.length %></strong></div>
                 <div class="d-flex justify-content-between"><span>Total Kategori Biaya</span><strong><%= expense_categories.length %></strong></div>
+                <div class="d-flex justify-content-between"><span>Total Akun Login</span><strong><%= users.length %></strong></div>
                 <hr class="my-2">
                 <small class="text-muted">PRD 4.2 & 4.3: Menu Layanan Lainnya dapat ditambah dinamis, kategori pengeluaran dinamis.</small>
             </div>
         </div>
     </div>
 </div>
+
+<!-- KELOLA AKUN PENGGUNA (LOGIN KASIR & OWNER) -->
+<div class="card shadow-sm mb-4 border-dark">
+    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+        <span class="fw-bold">🔐 Kelola Akun Login Kasir & Pengguna</span>
+        <span class="badge bg-light text-dark"><%= users.length %> akun</span>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <!-- Form Tambah Akun -->
+            <div class="col-md-5 border-end pe-md-4 mb-3 mb-md-0">
+                <form action="/master/users/add" method="POST">
+                    <label class="form-label fw-bold">Tambah Akun Pengguna Baru</label>
+                    <div class="mb-2">
+                        <label class="form-label small text-muted mb-1">Username (ID Login)</label>
+                        <input type="text" name="username" class="form-control" placeholder="contoh: sarah" required minlength="3" maxlength="30" pattern="[a-zA-Z0-9_]+" title="Hanya huruf, angka, dan underscore">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small text-muted mb-1">Password</label>
+                        <input type="password" name="password" class="form-control" placeholder="Kata sandi..." required minlength="4">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted mb-1">Hak Akses (Role)</label>
+                        <select name="role" class="form-select">
+                            <option value="karyawan" selected>Karyawan (Khusus Kasir, Absen & Nota)</option>
+                            <option value="owner">Owner (Akses Penuh Semua Menu)</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-dark w-100" type="submit">+ Buat Akun Baru</button>
+                    <small class="text-muted d-block mt-2">Karyawan dapat login di HP dengan akun ini untuk absen foto dan mencatat transaksi.</small>
+                </form>
+            </div>
+
+            <!-- Tabel Daftar Akun -->
+            <div class="col-md-7 ps-md-4">
+                <h6 class="fw-bold mb-3">Daftar Akun Pengguna Terdaftar</h6>
+                <div class="table-responsive" style="max-height: 280px; overflow-y:auto;">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th>#</th>
+                                <th>Username</th>
+                                <th>Role</th>
+                                <th class="text-end">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% users.forEach((u, idx) => { %>
+                            <tr>
+                                <td><%= idx + 1 %></td>
+                                <td class="fw-bold"><%= u.username %></td>
+                                <td>
+                                    <span class="badge <%= u.role === 'owner' ? 'bg-primary' : 'bg-success' %>">
+                                        <%= u.role === 'owner' ? 'Owner' : 'Karyawan' %>
+                                    </span>
+                                </td>
+                                <td class="text-end">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openResetModal('<%= u.id %>', '<%= u.username %>')">
+                                        🔑 Sandi
+                                    </button>
+                                    <% if (u.id !== user.id && u.username !== 'owner') { %>
+                                    <form action="/master/users/delete" method="POST" class="d-inline" onsubmit="return confirm('Hapus akun login <%= u.username %>? Karyawan ini tidak akan bisa login lagi.')">
+                                        <input type="hidden" name="id" value="<%= u.id %>">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
+                                    </form>
+                                    <% } %>
+                                </td>
+                            </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Reset Password -->
+<div class="modal fade" id="modalResetPassword" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <form action="/master/users/reset-password" method="POST" class="modal-content">
+            <div class="modal-header bg-dark text-white py-2">
+                <h6 class="modal-title">Ganti Sandi: <span id="resetTargetUsername" class="fw-bold"></span></h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" name="id" id="resetTargetId">
+                <label class="form-label small fw-bold">Kata Sandi Baru</label>
+                <input type="password" name="new_password" class="form-control form-control-sm" required minlength="4" placeholder="Min 4 karakter">
+            </div>
+            <div class="modal-footer py-1">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
+                <button type="submit" class="btn btn-primary btn-sm">Simpan</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openResetModal(id, username) {
+    document.getElementById('resetTargetId').value = id;
+    document.getElementById('resetTargetUsername').textContent = username;
+    new bootstrap.Modal(document.getElementById('modalResetPassword')).show();
+}
+</script>
 
 <!-- MENU LAYANAN FULL WIDTH (tanpa kategori) -->
 <div class="card shadow-sm mb-4">
