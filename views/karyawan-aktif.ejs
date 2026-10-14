@@ -6,7 +6,7 @@
 <div class="card shadow-sm">
     <div class="card-header bg-primary text-white d-flex justify-content-between">
         <span>Daftar Sesi Login (30 menit terakhir aktif)</span>
-        <small><%= new Date().toLocaleString('id-ID') %></small>
+        <small><%= new Date().toLocaleString('id-ID', { timeZone: 'Asia/Makassar' }) %></small>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
@@ -28,9 +28,10 @@
                     <% } %>
                     <% list.forEach((u, idx)=>{ 
                         const login=new Date(u.loginTime);
+                        const lastSeen=new Date(u.lastSeen);
                         const now=new Date();
                         const durMs=now - login;
-                        const durMenit=Math.floor(durMs/60000);
+                        const durMenit=Math.max(0, Math.floor(durMs/60000));
                         const jam=Math.floor(durMenit/60);
                         const menit=durMenit%60;
                     %>
@@ -38,9 +39,11 @@
                         <td><%= idx+1 %></td>
                         <td class="fw-bold"><%= u.username %> <small class="text-muted">#<%= u.id %></small></td>
                         <td><span class="badge <%= u.role==='owner'?'bg-danger':'bg-success' %>"><%= u.role %></span></td>
-                        <td><span class="badge bg-light text-dark"><%= login.toLocaleString('id-ID') %></span><br><small class="text-muted"><%= login.toLocaleDateString('id-ID') %> <%= login.toLocaleTimeString('id-ID') %></small></td>
+                        <td>
+                            <span class="badge bg-light text-dark"><%= login.toLocaleString('id-ID', { timeZone: 'Asia/Makassar' }) %></span>
+                        </td>
                         <td><span class="badge bg-primary"><%= jam>0? jam+' jam ':'' %><%= menit %> menit</span></td>
-                        <td><small><%= new Date(u.lastSeen).toLocaleString('id-ID') %></small></td>
+                        <td><small><%= lastSeen.toLocaleString('id-ID', { timeZone: 'Asia/Makassar' }) %></small></td>
                         <td><small class="text-muted"><%= u.ip %></small></td>
                     </tr>
                     <% }) %>

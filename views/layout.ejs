@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
@@ -37,7 +37,7 @@
                 <div class="d-flex align-items-center text-white gap-2">
                     <span>Halo, <strong><%= user.username %></strong> (<%= user.role %>)</span>
                     <% if (typeof loginTime !== 'undefined' && loginTime) { %>
-                        <small class="badge bg-light text-dark">Login: <%= new Date(loginTime).toLocaleString('id-ID', {hour:'2-digit', minute:'2-digit'}) %> • <%= new Date(loginTime).toLocaleDateString('id-ID') %></small>
+                        <small class="badge bg-light text-dark">Login: <%= new Date(loginTime).toLocaleString('id-ID', {hour:'2-digit', minute:'2-digit', timeZone:'Asia/Makassar'}) %> • <%= new Date(loginTime).toLocaleDateString('id-ID', {timeZone:'Asia/Makassar'}) %></small>
                     <% } %>
                     <% if (user.role==='owner') { %><a href="/karyawan-aktif" class="btn btn-sm btn-warning">Karyawan Aktif</a><% } %>
                     <a href="/logout" class="btn btn-sm btn-danger">Logout</a>
@@ -149,3 +149,4 @@
     </script>
 </body>
 </html>
+

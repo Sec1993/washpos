@@ -1,3 +1,4 @@
+process.env.TZ = 'Asia/Makassar';
 const express = require('express');
 const session = require('express-session');
 // Waktu WITA (+8)
