@@ -1,0 +1,244 @@
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h2 class="mb-0">Rekap Komisi Pencuci & Bagi Hasil</h2>
+        <small class="text-muted">Perhitungan upah & komisi pencuci otomatis berdasarkan jumlah motor dan layanan yang dikerjakan.</small>
+    </div>
+    <div>
+        <button type="button" class="btn btn-outline-dark" onclick="window.print()">
+            🖨️ Cetak Laporan
+        </button>
+    </div>
+</div>
+
+<!-- Filter Toolbar -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="GET" action="/komisi" id="filterKomisiForm" class="row g-2 align-items-end">
+            <div class="col-md-3 col-sm-6">
+                <label class="form-label small fw-bold mb-1">Dari Tanggal</label>
+                <input type="date" name="from" id="filterFrom" value="<%= from %>" class="form-control form-control-sm">
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <label class="form-label small fw-bold mb-1">Sampai Tanggal</label>
+                <input type="date" name="to" id="filterTo" value="<%= to %>" class="form-control form-control-sm">
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <label class="form-label small fw-bold mb-1">Pencuci / Karyawan</label>
+                <select name="worker" class="form-select form-select-sm">
+                    <option value="all" <%= selectedWorker==='all'?'selected':'' %>>-- Semua Pencuci --</option>
+                    <% workers.forEach(w => { %>
+                        <option value="<%= w.name %>" <%= selectedWorker===w.name?'selected':'' %>><%= w.name %></option>
+                    <% }) %>
+                </select>
+            </div>
+            <div class="col-md-3 col-sm-6 d-flex gap-1">
+                <button type="submit" class="btn btn-primary btn-sm flex-fill">🔍 Tampilkan</button>
+                <a href="/komisi" class="btn btn-outline-secondary btn-sm">Reset</a>
+            </div>
+        </form>
+
+        <!-- Quick Shortcut Buttons -->
+        <div class="d-flex gap-1 mt-2 flex-wrap align-items-center">
+            <small class="text-muted me-1">Pilihan Cepat:</small>
+            <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2" style="font-size:12px;" onclick="setPeriode('today')">Hari Ini</button>
+            <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2" style="font-size:12px;" onclick="setPeriode('yesterday')">Kemarin</button>
+            <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2" style="font-size:12px;" onclick="setPeriode('last7')">7 Hari Terakhir</button>
+            <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2" style="font-size:12px;" onclick="setPeriode('month')">Bulan Ini</button>
+        </div>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3 col-6">
+        <div class="card text-bg-primary shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-uppercase small fw-bold opacity-75">Total Motor Dicuci</div>
+                <h3 class="mb-0 mt-1 fw-bold"><%= grandTotalMotor %> <span class="fs-6 fw-normal">unit</span></h3>
+                <small class="opacity-75">Periode <%= from %> s/d <%= to %></small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card text-bg-dark shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-uppercase small fw-bold opacity-75">Total Omset Cuci</div>
+                <h3 class="mb-0 mt-1 fw-bold">Rp <%= grandTotalOmzet.toLocaleString('id-ID') %></h3>
+                <small class="opacity-75">Semua transaksi periode ini</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card text-bg-success shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-uppercase small fw-bold opacity-75">Total Komisi Pencuci</div>
+                <h3 class="mb-0 mt-1 fw-bold">Rp <%= grandTotalKomisi.toLocaleString('id-ID') %></h3>
+                <small class="opacity-75">Hak upah bagi hasil pencuci</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card text-bg-info text-white shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-uppercase small fw-bold opacity-75">Porsi Bersih Outlet</div>
+                <h3 class="mb-0 mt-1 fw-bold">Rp <%= (grandTotalOmzet - grandTotalKomisi).toLocaleString('id-ID') %></h3>
+                <small class="opacity-75">Omset dikurangi komisi pekerja</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabel Rekap Komisi per Pencuci -->
+<div class="card shadow-sm mb-4 border-success">
+    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+        <span class="fw-bold">📊 Rekap Hak Komisi per Pencuci</span>
+        <span class="badge bg-light text-dark"><%= workerSummary.length %> pencuci aktif</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-striped mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 50px;">No</th>
+                        <th>Nama Pencuci</th>
+                        <th class="text-center">Motor Dicuci</th>
+                        <th class="text-end">Omset Dihasilkan</th>
+                        <th class="text-end">Total Komisi (Hak Pekerja)</th>
+                        <th class="text-end">Rata-rata / Motor</th>
+                        <th class="text-center" style="width: 140px;">Cetak Slip</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% if (workerSummary.length === 0) { %>
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-4">
+                                Tidak ada data pengerjaan pencuci pada periode yang dipilih.
+                            </td>
+                        </tr>
+                    <% } %>
+                    <% workerSummary.forEach((w, idx) => { %>
+                        <% const avg = w.total_motor > 0 ? Math.round(w.total_komisi / w.total_motor) : 0; %>
+                        <tr>
+                            <td class="text-muted"><%= idx + 1 %></td>
+                            <td>
+                                <strong><%= w.worker_name %></strong>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-primary fs-6"><%= w.total_motor %> unit</span>
+                            </td>
+                            <td class="text-end">
+                                Rp <%= w.total_omzet.toLocaleString('id-ID') %>
+                            </td>
+                            <td class="text-end">
+                                <span class="fw-bold text-success fs-6">Rp <%= w.total_komisi.toLocaleString('id-ID') %></span>
+                            </td>
+                            <td class="text-end text-muted small">
+                                Rp <%= avg.toLocaleString('id-ID') %>
+                            </td>
+                            <td class="text-center">
+                                <a href="/komisi/slip/<%= encodeURIComponent(w.worker_name) %>?from=<%= from %>&to=<%= to %>" target="_blank" class="btn btn-sm btn-outline-success py-1 px-2" title="Cetak slip komisi untuk pencuci ini">
+                                    🧾 Cetak Slip
+                                </a>
+                            </td>
+                        </tr>
+                    <% }) %>
+                </tbody>
+                <% if (workerSummary.length > 0) { %>
+                <tfoot class="table-light fw-bold">
+                    <tr>
+                        <td colspan="2" class="text-center">TOTAL KESELURUHAN</td>
+                        <td class="text-center text-primary fs-6"><%= grandTotalMotor %> unit</td>
+                        <td class="text-end">Rp <%= grandTotalOmzet.toLocaleString('id-ID') %></td>
+                        <td class="text-end text-success fs-6">Rp <%= grandTotalKomisi.toLocaleString('id-ID') %></td>
+                        <td class="text-end text-muted small">Rp <%= (grandTotalMotor>0?Math.round(grandTotalKomisi/grandTotalMotor):0).toLocaleString('id-ID') %></td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+                <% } %>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Tabel Rincian Transaksi Pengerjaan -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+        <span>📋 Rincian Transaksi & Komisi Motor</span>
+        <small><%= trxDetails.length %> transaksi</small>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-striped table-hover mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Waktu</th>
+                        <th>Pencuci</th>
+                        <th>Plat & Pelanggan</th>
+                        <th>Layanan</th>
+                        <th class="text-end">Harga Jual</th>
+                        <th class="text-end">Komisi</th>
+                        <th>Kasir</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% if (trxDetails.length === 0) { %>
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-3">Tidak ada transaksi ditemukan.</td>
+                        </tr>
+                    <% } %>
+                    <% trxDetails.forEach(t => { %>
+                    <tr>
+                        <td><small><%= new Date(t.date).toLocaleString('id-ID') %></small></td>
+                        <td>
+                            <span class="badge bg-light text-dark border"><%= t.worker_name %></span>
+                        </td>
+                        <td>
+                            <strong><%= t.license_plate %></strong><br>
+                            <small class="text-muted"><%= t.customer_name %></small>
+                        </td>
+                        <td>
+                            <% (t.service_name || '').split(',').forEach(lay => { %>
+                                <span class="badge bg-success mb-1"><%= lay.trim() %></span>
+                            <% }) %>
+                        </td>
+                        <td class="text-end">Rp <%= t.price.toLocaleString('id-ID') %></td>
+                        <td class="text-end fw-bold text-success">Rp <%= (t.commission || 0).toLocaleString('id-ID') %></td>
+                        <td><small class="text-muted"><%= t.admin_name %></small></td>
+                    </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+function setPeriode(type) {
+    const fromInput = document.getElementById('filterFrom');
+    const toInput = document.getElementById('filterTo');
+    const form = document.getElementById('filterKomisiForm');
+    const today = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const fmt = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    if (type === 'today') {
+        fromInput.value = fmt(today);
+        toInput.value = fmt(today);
+    } else if (type === 'yesterday') {
+        const yest = new Date(today);
+        yest.setDate(yest.getDate() - 1);
+        fromInput.value = fmt(yest);
+        toInput.value = fmt(yest);
+    } else if (type === 'last7') {
+        const d7 = new Date(today);
+        d7.setDate(d7.getDate() - 6);
+        fromInput.value = fmt(d7);
+        toInput.value = fmt(today);
+    } else if (type === 'month') {
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+        fromInput.value = fmt(firstDay);
+        toInput.value = fmt(today);
+    }
+    form.submit();
+}
+</script>

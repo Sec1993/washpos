@@ -50,7 +50,8 @@ db.serialize(() => {
         name TEXT UNIQUE,
         price REAL,
         category TEXT DEFAULT 'Motor Kecil',
-        isActive INTEGER DEFAULT 1
+        isActive INTEGER DEFAULT 1,
+        commission REAL DEFAULT 0
     )`);
 
     // 3. Workers table
@@ -77,7 +78,8 @@ db.serialize(() => {
         date DATETIME DEFAULT CURRENT_TIMESTAMP,
         phone TEXT,
         akun_kas TEXT,
-        photo TEXT
+        photo TEXT,
+        commission REAL DEFAULT 0
     )`, () => {
         db.run("ALTER TABLE sales ADD COLUMN phone TEXT", (e) => {
             if (!e) console.log("Added phone column to sales");
@@ -87,6 +89,17 @@ db.serialize(() => {
         });
         db.run("ALTER TABLE sales ADD COLUMN photo TEXT", (e) => {
             if (!e) console.log("Added photo column to sales");
+        });
+        db.run("ALTER TABLE sales ADD COLUMN commission REAL DEFAULT 0", (e) => {
+            if (!e) console.log("Added commission column to sales");
+            db.run(`UPDATE sales SET commission = CASE 
+                WHEN service_name LIKE '%Coating Motor%' THEN 25000
+                WHEN service_name LIKE '%Cuci Helm Premium%' THEN 10000
+                WHEN service_name LIKE '%Cuci Motor Besar%' THEN 9000
+                WHEN service_name LIKE '%Cuci Motor Sedang%' THEN 7000
+                WHEN service_name LIKE '%Cuci Motor Kecil%' THEN 5000
+                ELSE ROUND(price * 0.3)
+            END WHERE commission IS NULL OR commission = 0`);
         });
     });
 
@@ -189,6 +202,16 @@ db.serialize(() => {
         if (err && !err.message.includes('duplicate column')) {
             // ignore
         }
+    });
+    db.run(`ALTER TABLE services ADD COLUMN commission REAL DEFAULT 0`, (err) => {
+        // Backfill default commissions for services if 0 or null
+        db.run("UPDATE services SET commission=5000 WHERE name='Cuci Motor Kecil' AND (commission IS NULL OR commission=0)");
+        db.run("UPDATE services SET commission=7000 WHERE name='Cuci Motor Sedang' AND (commission IS NULL OR commission=0)");
+        db.run("UPDATE services SET commission=9000 WHERE name='Cuci Motor Besar' AND (commission IS NULL OR commission=0)");
+        db.run("UPDATE services SET commission=3000 WHERE name='Poles Helm' AND (commission IS NULL OR commission=0)");
+        db.run("UPDATE services SET commission=10000 WHERE name='Cuci Helm Premium' AND (commission IS NULL OR commission=0)");
+        db.run("UPDATE services SET commission=25000 WHERE name='Coating Motor' AND (commission IS NULL OR commission=0)");
+        db.run("UPDATE services SET commission=ROUND(price * 0.3) WHERE (commission IS NULL OR commission=0)");
     });
 
     // Seed default owner account if no users exist

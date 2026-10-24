@@ -298,19 +298,22 @@ function openRoleModal(id, username, currentRole) {
     </div>
     <div class="card-body">
         <form action="/master/services/add" method="POST" class="mb-4" onsubmit="return validateRupiahForm(this)">
-            <label class="form-label fw-bold">Tambah Menu Baru <small class="text-muted fw-normal">(nama unik)</small></label>
+            <label class="form-label fw-bold">Tambah Menu Baru <small class="text-muted fw-normal">(nama unik & komisi pencuci)</small></label>
             <div class="row g-2">
-                <div class="col-md-7">
+                <div class="col-md-5">
                     <input type="text" name="name" class="form-control" placeholder="Nama layanan... (unik, mis: Cuci Helm, Poles)" required minlength="2" maxlength="50">
                 </div>
                 <div class="col-md-3">
-                    <input type="text" name="price" class="form-control rupiah" placeholder="Harga (15.000)" required>
+                    <input type="text" name="price" class="form-control rupiah" placeholder="Harga Jual (15.000)" required>
+                </div>
+                <div class="col-md-2">
+                    <input type="text" name="commission" class="form-control rupiah" placeholder="Komisi Pencuci (5.000)" value="5.000" required>
                 </div>
                 <div class="col-md-2">
                     <button class="btn btn-primary w-100" type="submit">+ Tambah</button>
                 </div>
             </div>
-            <small class="text-muted">Validasi: nama unik 2-50 karakter, harga ≥1.000 (boleh ketik 15.000 atau 15000).</small>
+            <small class="text-muted">Validasi: nama unik 2-50 karakter, harga jual & komisi pencuci format rupiah (contoh 15.000 dan 5.000).</small>
         </form>
 
         <hr>
@@ -318,22 +321,24 @@ function openRoleModal(id, username, currentRole) {
         <h6>Daftar Layanan</h6>
         <div class="table-responsive">
             <table class="table table-sm table-hover">
-                <thead class="table-light"><tr><th>Nama Layanan</th><th>Harga</th><th class="text-end">Aksi</th></tr></thead>
+                <thead class="table-light"><tr><th>Nama Layanan & Edit</th><th>Harga Jual</th><th>Komisi Pencuci</th><th class="text-end">Aksi</th></tr></thead>
                 <tbody>
                     <% if (services.length === 0) { %>
-                        <tr><td colspan="3" class="text-center text-muted">Belum ada layanan.</td></tr>
+                        <tr><td colspan="4" class="text-center text-muted">Belum ada layanan.</td></tr>
                     <% } %>
                     <% services.forEach(s => { %>
                     <tr>
-                        <td style="min-width:340px">
-                            <form action="/master/services/update" method="POST" class="d-flex gap-1 align-items-center" onsubmit="return validateRupiahForm(this) && confirm('Yakin update layanan <%= s.name %> menjadi harga baru?')">
+                        <td style="min-width:380px">
+                            <form action="/master/services/update" method="POST" class="d-flex gap-1 align-items-center" onsubmit="return validateRupiahForm(this) && confirm('Yakin update layanan <%= s.name %>?')">
                                 <input type="hidden" name="id" value="<%= s.id %>">
-                                <input type="text" name="name" value="<%= s.name %>" class="form-control form-control-sm" required minlength="2" maxlength="50" style="min-width:180px">
-                                <input type="text" name="price" value="<%= s.price %>" class="form-control form-control-sm rupiah" required style="width:130px">
+                                <input type="text" name="name" value="<%= s.name %>" class="form-control form-control-sm" required minlength="2" maxlength="50" style="min-width:160px" title="Nama Layanan">
+                                <input type="text" name="price" value="<%= s.price %>" class="form-control form-control-sm rupiah" required style="width:110px" placeholder="Harga" title="Harga Jual">
+                                <input type="text" name="commission" value="<%= s.commission || 0 %>" class="form-control form-control-sm rupiah" required style="width:110px" placeholder="Komisi" title="Komisi Pencuci">
                                 <button type="submit" class="btn btn-sm btn-outline-primary">Update</button>
                             </form>
                         </td>
                         <td><span class="fw-bold">Rp <%= s.price.toLocaleString('id-ID') %></span></td>
+                        <td><span class="badge bg-success">Rp <%= (s.commission || 0).toLocaleString('id-ID') %></span></td>
                         <td class="text-end">
                             <form action="/master/services/delete" method="POST" class="d-inline" onsubmit="return confirm('Hapus layanan <%= s.name %>?')">
                                 <input type="hidden" name="id" value="<%= s.id %>">
@@ -346,7 +351,7 @@ function openRoleModal(id, username, currentRole) {
             </table>
         </div>
         <div class="alert alert-info py-2 mt-3 mb-0">
-            <small><strong>Tips:</strong> Edit nama/harga langsung di baris lalu klik Update. Dropdown Penjualan update otomatis.</small>
+            <small><strong>Tips:</strong> Atur <strong>Harga Jual</strong> dan <strong>Komisi Pencuci</strong> per layanan. Saat transaksi cuci di kasir, sistem otomatis mencatat komisi pencuci untuk rekap gaji/bagi hasil.</small>
         </div>
     </div>
 </div>

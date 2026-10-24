@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Slip Komisi - <%= workerName %></title>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace, sans-serif;
+            font-size: 13px;
+            max-width: 360px;
+            margin: 0 auto;
+            padding: 15px;
+            color: #000;
+        }
+        .text-center { text-align: center; }
+        .text-end { text-align: right; }
+        .fw-bold { font-weight: bold; }
+        hr { border: 0; border-top: 1px dashed #000; margin: 8px 0; }
+        .row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+        table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 12px; }
+        th, td { padding: 4px 0; text-align: left; }
+        th { border-bottom: 1px solid #000; }
+        .signatures {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 25px;
+            text-align: center;
+        }
+        .sig-box { width: 45%; }
+        .sig-line { margin-top: 45px; border-top: 1px solid #000; font-size: 11px; }
+        @media print {
+            .no-print { display: none !important; }
+            body { padding: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="text-center">
+        <h2 style="margin: 0; font-size: 20px;">WashPOS</h2>
+        <p style="margin: 2px 0 0 0; font-size: 13px;">SLIP KOMISI PENCUCI</p>
+    </div>
+    <hr>
+    <div class="row"><span>Nama Pencuci:</span> <span class="fw-bold"><%= workerName %></span></div>
+    <div class="row"><span>Periode:</span> <span><%= from %> s/d <%= to %></span></div>
+    <div class="row"><span>Dicetak:</span> <span><%= new Date(printedAt).toLocaleString('id-ID') %></span></div>
+    <hr>
+
+    <div class="fw-bold" style="margin-bottom: 4px;">Rincian Pengerjaan Motor:</div>
+    <table>
+        <thead>
+            <tr>
+                <th>Plat / Tgl</th>
+                <th>Layanan</th>
+                <th class="text-end">Komisi</th>
+            </tr>
+        </thead>
+        <tbody>
+            <% if (rows.length === 0) { %>
+                <tr><td colspan="3" class="text-center">Tidak ada pengerjaan</td></tr>
+            <% } %>
+            <% rows.forEach(r => { %>
+                <tr>
+                    <td>
+                        <span class="fw-bold"><%= r.license_plate %></span><br>
+                        <small style="font-size:10px;"><%= new Date(r.date).toLocaleDateString('id-ID') %></small>
+                    </td>
+                    <td><small><%= r.service_name %></small></td>
+                    <td class="text-end fw-bold">Rp <%= (r.commission || 0).toLocaleString('id-ID') %></td>
+                </tr>
+            <% }) %>
+        </tbody>
+    </table>
+    <hr>
+
+    <div class="row">
+        <span>Total Motor Dicuci:</span>
+        <span class="fw-bold"><%= totalMotor %> unit</span>
+    </div>
+    <div class="row">
+        <span>Total Omset Dihasilkan:</span>
+        <span>Rp <%= totalOmzet.toLocaleString('id-ID') %></span>
+    </div>
+    <hr>
+    <div class="row fw-bold" style="font-size: 15px;">
+        <span>TOTAL KOMISI:</span>
+        <span>Rp <%= totalKomisi.toLocaleString('id-ID') %></span>
+    </div>
+    <hr>
+
+    <div class="signatures">
+        <div class="sig-box">
+            <small>Penerima (Pencuci)</small>
+            <div class="sig-line">( <%= workerName %> )</div>
+        </div>
+        <div class="sig-box">
+            <small>Mengetahui (Kasir/Owner)</small>
+            <div class="sig-line">( ................... )</div>
+        </div>
+    </div>
+
+    <div class="text-center no-print" style="margin-top: 30px;">
+        <button onclick="window.print()" style="padding: 10px 20px; font-weight: bold; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%; margin-bottom: 8px;">
+            🖨️ Cetak Slip Sekarang
+        </button>
+        <button onclick="window.close()" style="padding: 8px 15px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;">
+            Tutup Jendela
+        </button>
+    </div>
+</body>
+</html>

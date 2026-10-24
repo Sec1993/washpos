@@ -402,13 +402,23 @@ app.post('/sales', requireAdminOrOwner, upload.single('photo'), (req, res) => {
             return res.status(400).send('Validasi gagal: Transaksi QRIS WAJIB melampirkan foto bukti pembayaran! <a href="/sales">Kembali</a>');
         }
 
-        db.all('SELECT name FROM services WHERE isActive=1', async (e, rows)=>{
+        db.all('SELECT name, price, commission FROM services WHERE isActive=1', async (e, rows)=>{
             const validNames = new Set((rows||[]).map(r=>r.name));
             const invalid = serviceNames.filter(n=>!validNames.has(n));
             if (invalid.length>0) {
                 if (req.file) { try { fs.unlinkSync(req.file.path); } catch(e){} }
                 return res.status(400).send('Validasi gagal: Layanan tidak valid: '+invalid.join(', ')+' <a href="/sales">Kembali</a>');
             }
+
+            // Hitung total komisi pencuci
+            let totalKomisi = 0;
+            const serviceMap = new Map((rows||[]).map(r=>[r.name, r]));
+            serviceNames.forEach(name => {
+                const svc = serviceMap.get(name);
+                if (svc && typeof svc.commission === 'number') {
+                    totalKomisi += svc.commission;
+                }
+            });
 
             let photoUrl = null;
             if (req.file) {
@@ -420,9 +430,9 @@ app.post('/sales', requireAdminOrOwner, upload.single('photo'), (req, res) => {
 
             db.serialize(() => {
                 const phoneNum = String(req.body.phone || '').trim();
-                db.run(`INSERT INTO sales (customer_name, license_plate, service_name, price, worker_name, admin_name, phone, akun_kas, photo) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, 
-                        [customer_name, license_plate, service_name, salePrice, worker_name, admin_name, phoneNum, kasAkun, photoUrl], function(err) {
+                db.run(`INSERT INTO sales (customer_name, license_plate, service_name, price, worker_name, admin_name, phone, akun_kas, photo, commission) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, 
+                        [customer_name, license_plate, service_name, salePrice, worker_name, admin_name, phoneNum, kasAkun, photoUrl, totalKomisi], function(err) {
                     if (err) {
                         console.error(err);
                         if (req.file && !photoUrl.startsWith('http')) { try { fs.unlinkSync(req.file.path); } catch(e){} }
@@ -641,15 +651,16 @@ app.get('/master', requireOwner, (req, res) => {
 });
 
 app.post('/master/services/add', requireOwner, (req, res) => {
-    const { name, price } = req.body;
+    const { name, price, commission } = req.body;
     const p = parseRupiah(price);
+    const c = commission ? parseRupiah(commission) : 0;
     if (!isValidName(name,2)) {
         return renderMaster(res, 'Validasi gagal: Nama layanan min 2 karakter, max 50.');
     }
     if (isNaN(p) || p < 1000) {
         return renderMaster(res, 'Validasi gagal: Harga harus angka ≥ 1.000 (contoh: 15.000 atau 15000).');
     }
-    db.run("INSERT INTO services (name, price, category, isActive) VALUES (?, ?, 'Motor Kecil', 1)", [name.trim(), p], (err) => {
+    db.run("INSERT INTO services (name, price, category, isActive, commission) VALUES (?, ?, 'Motor Kecil', 1, ?)", [name.trim(), p, isNaN(c)?0:c], (err) => {
         if (err) {
             return renderMaster(res, 'Validasi gagal: Nama layanan sudah ada (unik).');
         }
@@ -658,8 +669,9 @@ app.post('/master/services/add', requireOwner, (req, res) => {
 });
 
 app.post('/master/services/update', requireOwner, (req, res) => {
-    const { id, name, price } = req.body;
+    const { id, name, price, commission } = req.body;
     const p = parseRupiah(price);
+    const c = commission ? parseRupiah(commission) : 0;
     if (!id || !isValidName(name,2)) {
         return renderMaster(res, 'Validasi gagal: Nama layanan min 2 karakter.');
     }
@@ -670,7 +682,7 @@ app.post('/master/services/update', requireOwner, (req, res) => {
         if (row) {
             return renderMaster(res, 'Validasi gagal: Nama layanan sudah dipakai layanan lain.');
         }
-        db.run("UPDATE services SET name = ?, price = ? WHERE id = ?", [name.trim(), p, id], () => res.redirect('/master'));
+        db.run("UPDATE services SET name = ?, price = ?, commission = ? WHERE id = ?", [name.trim(), p, isNaN(c)?0:c, id], () => res.redirect('/master'));
     });
 });
 
@@ -851,6 +863,107 @@ app.post('/akun/edit', requireOwner, (req, res) => {
                     });
                 });
             });
+        });
+    });
+});
+
+// Routes - Rekap Komisi Pencuci (Owner & Admin)
+app.get('/komisi', requireAdminOrOwner, (req, res) => {
+    let { from, to, worker } = req.query;
+    const nowWita = getWitaTime();
+    const todayStr = nowWita.toISOString().slice(0, 10);
+    if (!from) from = todayStr;
+    if (!to) to = todayStr;
+
+    let where = ["date(date) >= date(?)", "date(date) <= date(?)"];
+    let params = [from, to];
+
+    if (worker && worker.trim() && worker !== 'all') {
+        where.push("worker_name = ?");
+        params.push(worker.trim());
+    }
+
+    const whereClause = "WHERE " + where.join(" AND ");
+
+    db.all("SELECT * FROM workers ORDER BY name ASC", (err, workers) => {
+        const summarySql = `
+            SELECT 
+                worker_name,
+                COUNT(id) as total_motor,
+                COALESCE(SUM(price), 0) as total_omzet,
+                COALESCE(SUM(commission), 0) as total_komisi
+            FROM sales 
+            ${whereClause}
+            GROUP BY worker_name
+            ORDER BY total_komisi DESC, total_motor DESC
+        `;
+        db.all(summarySql, params, (err, workerSummary) => {
+            let grandTotalMotor = 0;
+            let grandTotalOmzet = 0;
+            let grandTotalKomisi = 0;
+            (workerSummary || []).forEach(w => {
+                grandTotalMotor += w.total_motor;
+                grandTotalOmzet += w.total_omzet;
+                grandTotalKomisi += w.total_komisi;
+            });
+
+            const detailSql = `
+                SELECT id, date, customer_name, license_plate, service_name, price, worker_name, admin_name, akun_kas, commission
+                FROM sales
+                ${whereClause}
+                ORDER BY date DESC, id DESC
+            `;
+            db.all(detailSql, params, (err, trxDetails) => {
+                res.render('komisi', {
+                    workers: workers || [],
+                    workerSummary: workerSummary || [],
+                    trxDetails: trxDetails || [],
+                    from,
+                    to,
+                    selectedWorker: worker || 'all',
+                    grandTotalMotor,
+                    grandTotalOmzet,
+                    grandTotalKomisi,
+                    todayStr
+                });
+            });
+        });
+    });
+});
+
+// Route - Print Slip Komisi Pencuci
+app.get('/komisi/slip/:workerName', requireAdminOrOwner, (req, res) => {
+    const workerName = req.params.workerName;
+    let { from, to } = req.query;
+    const nowWita = getWitaTime();
+    const todayStr = nowWita.toISOString().slice(0, 10);
+    if (!from) from = todayStr;
+    if (!to) to = todayStr;
+
+    const sql = `
+        SELECT id, date, customer_name, license_plate, service_name, price, commission
+        FROM sales
+        WHERE worker_name = ? AND date(date) >= date(?) AND date(date) <= date(?)
+        ORDER BY date ASC, id ASC
+    `;
+    db.all(sql, [workerName, from, to], (err, rows) => {
+        let totalKomisi = 0;
+        let totalOmzet = 0;
+        (rows || []).forEach(r => {
+            totalKomisi += (r.commission || 0);
+            totalOmzet += (r.price || 0);
+        });
+
+        res.render('komisi-slip', {
+            layout: false,
+            workerName,
+            from,
+            to,
+            rows: rows || [],
+            totalMotor: (rows || []).length,
+            totalKomisi,
+            totalOmzet,
+            printedAt: getWitaTime()
         });
     });
 });
