@@ -3,7 +3,7 @@
   "appName": "WashPOS",
   "webDir": "public",
   "server": {
-    "url": "https://washpos-production.up.railway.app",
+    "url": "https://washpos.onrender.com",
     "cleartext": false
   },
   "android": {
