@@ -74,10 +74,19 @@ db.serialize(() => {
         price REAL,
         worker_name TEXT,
         admin_name TEXT,
-        date DATETIME DEFAULT CURRENT_TIMESTAMP
+        date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        phone TEXT,
+        akun_kas TEXT,
+        photo TEXT
     )`, () => {
         db.run("ALTER TABLE sales ADD COLUMN phone TEXT", (e) => {
             if (!e) console.log("Added phone column to sales");
+        });
+        db.run("ALTER TABLE sales ADD COLUMN akun_kas TEXT", (e) => {
+            if (!e) console.log("Added akun_kas column to sales");
+        });
+        db.run("ALTER TABLE sales ADD COLUMN photo TEXT", (e) => {
+            if (!e) console.log("Added photo column to sales");
         });
     });
 

@@ -37,6 +37,7 @@
     </div>
     <hr>
     <div class="row bold"><span>Total Bayar:</span> <span>Rp <%= sale.price.toLocaleString('id-ID') %></span></div>
+    <div class="row"><span>Metode:</span> <span><%= sale.akun_kas || 'Kas Kecil (Tunai)' %></span></div>
     <hr>
     <div class="row"><span>Kasir:</span> <span><%= sale.admin_name %></span></div>
     <div class="text-center" style="margin-top:20px;">

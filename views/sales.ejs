@@ -9,7 +9,7 @@
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-success text-white">Input Transaksi Baru</div>
             <div class="card-body">
-                <form action="/sales" method="POST" onsubmit="return validatePenjualan(this)">
+                <form action="/sales" method="POST" enctype="multipart/form-data" onsubmit="return validatePenjualan(this)">
                     <div class="mb-3">
                         <label class="form-label">Nama Pelanggan</label>
                         <input type="text" name="customer_name" class="form-control" required minlength="2" maxlength="50" placeholder="Nama Pemilik Kendaraan">
@@ -58,12 +58,39 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Bayar Ke <small class="text-muted">(Kas Kecil / QRIS)</small></label>
-                        <select name="akun_kas" class="form-select" required>
+                        <select name="akun_kas" id="akunKasSelect" class="form-select" required onchange="toggleQrisProof()">
                             <% accounts.forEach(a=>{ %>
-                                <option value="<%= a.name %>" <%= a.name==='Kas Kecil'?'selected':'' %>><%= a.name %> — <%= a.type %></option>
+                                <option value="<%= a.name %>" data-type="<%= a.type %>" <%= a.name==='Kas Kecil'?'selected':'' %>><%= a.name %> — <%= a.type %></option>
                             <% }) %>
                         </select>
-                        <small class="text-muted">Karyawan & Owner pilih <strong>Kas Kecil</strong> (tunai) atau <strong>QRIS</strong>. Kelola QRIS di <a href="/akun">Akun</a>.</small>
+                        <small class="text-muted">Karyawan & Owner pilih <strong>Kas Kecil</strong> (tunai) atau <strong>QRIS</strong>. Transaksi QRIS wajib foto bukti.</small>
+                    </div>
+
+                    <!-- Container Foto Bukti QRIS (Tampil HANYA jika QRIS dipilih) -->
+                    <div id="qrisProofWrap" class="mb-3 p-3 border border-warning rounded bg-light" style="display:none;">
+                        <label class="form-label fw-bold text-dark d-flex justify-content-between align-items-center mb-1">
+                            <span>📸 Foto Bukti QRIS <span class="text-danger">*Wajib</span></span>
+                            <small class="text-muted">(Maks 4MB)</small>
+                        </label>
+                        <small class="text-muted d-block mb-2">Wajib lampirkan foto struk / tangkapan layar pembayaran QRIS pelanggan.</small>
+
+                        <div class="d-flex gap-2 mb-2">
+                            <label class="btn btn-outline-primary btn-sm flex-fill mb-0">
+                                <span>📁 Dari Galeri</span>
+                                <input type="file" name="photo" id="photoQris" class="d-none" accept="image/*" onchange="previewQris(this)">
+                            </label>
+                            <button type="button" class="btn btn-outline-success btn-sm flex-fill" onclick="openKameraQris()">
+                                <span>📷 Ambil Kamera</span>
+                            </button>
+                        </div>
+                        <input type="file" id="fallbackKameraQris" class="d-none" accept="image/*" capture="environment" onchange="previewQris(this)">
+
+                        <div id="previewQrisDisplay" class="mt-2 text-center" style="display:none;">
+                            <img id="previewQrisImg" src="" alt="Bukti QRIS" style="max-width:100%; max-height:180px; border:1px solid #28a745; border-radius:6px; object-fit:contain;">
+                            <div class="d-flex justify-content-center gap-2 mt-2">
+                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="hapusFotoQris()">Hapus / Ganti</button>
+                            </div>
+                        </div>
                     </div>
                     <button type="submit" class="btn btn-success w-100">Simpan & Cetak Struk</button>
                 </form>
@@ -126,7 +153,21 @@
                                         <span class="badge bg-success mb-1"><%= lay.trim() %></span><% if(idx < (s.service_name.split(',').length-1)) { %><br><% } %>
                                     <% }) %>
                                 </td>
-                                <td>Rp <%= s.price.toLocaleString('id-ID') %></td>
+                                <td>
+                                    <strong>Rp <%= s.price.toLocaleString('id-ID') %></strong><br>
+                                    <% if (s.akun_kas && s.akun_kas.toLowerCase().includes('qris')) { %>
+                                        <span class="badge bg-info text-dark">QRIS</span>
+                                    <% } else { %>
+                                        <span class="badge bg-secondary"><%= s.akun_kas || 'Kas Kecil' %></span>
+                                    <% } %>
+                                    <% if (s.photo) { %>
+                                        <div class="mt-1">
+                                            <a href="<%= s.photo %>" target="_blank" class="btn btn-xs btn-outline-primary py-0 px-1" style="font-size:11px;" title="Lihat Foto Bukti QRIS">
+                                                📷 Bukti QRIS
+                                            </a>
+                                        </div>
+                                    <% } %>
+                                </td>
                                 <td>
                                     <a href="/receipt/<%= s.id %>" class="btn btn-sm btn-outline-info" target="_blank">Struk</a>
                                 </td>
@@ -168,7 +209,169 @@
         </div>
     </div>
 </div>
+
+<!-- Modal Kamera QRIS -->
+<div class="modal fade" id="modalKameraQris" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h6 class="modal-title">Ambil Foto Bukti QRIS</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center p-2">
+                <video id="videoKameraQris" autoplay playsinline muted style="width:100%; max-height:320px; background:#000; border-radius:8px;"></video>
+                <canvas id="canvasCaptureQris" style="display:none"></canvas>
+                <small id="kameraStatusQris" class="text-muted d-block mt-2">Izinkan kamera...</small>
+            </div>
+            <div class="modal-footer d-flex justify-content-between">
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="switchKameraQris()">🔄 Putar Kamera</button>
+                <div>
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" class="btn btn-success btn-sm" onclick="captureFotoQris()">📸 Ambil</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+function toggleQrisProof(){
+    const sel = document.getElementById('akunKasSelect');
+    const wrap = document.getElementById('qrisProofWrap');
+    if(!sel || !wrap) return;
+    const opt = sel.options[sel.selectedIndex];
+    const isQris = (opt && opt.getAttribute('data-type') === 'QRIS') || (sel.value && sel.value.toLowerCase().includes('qris'));
+    if(isQris){
+        wrap.style.display = 'block';
+    } else {
+        wrap.style.display = 'none';
+        hapusFotoQris();
+    }
+}
+
+function previewQris(input){
+    const wrap = document.getElementById('previewQrisDisplay');
+    const img = document.getElementById('previewQrisImg');
+    if(input.files && input.files[0]){
+        const f = input.files[0];
+        if(f.size > 4*1024*1024){
+            alert('Ukuran foto maksimal 4MB');
+            input.value = '';
+            wrap.style.display = 'none';
+            return;
+        }
+        if(!f.type.startsWith('image/')){
+            alert('Hanya file gambar yang diperbolehkan');
+            input.value = '';
+            wrap.style.display = 'none';
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = e => {
+            img.src = e.target.result;
+            wrap.style.display = 'block';
+        };
+        reader.readAsDataURL(f);
+    } else {
+        wrap.style.display = 'none';
+    }
+}
+
+function hapusFotoQris(){
+    const inp = document.getElementById('photoQris');
+    if(inp) inp.value = '';
+    const fb = document.getElementById('fallbackKameraQris');
+    if(fb) fb.value = '';
+    const wrap = document.getElementById('previewQrisDisplay');
+    if(wrap) wrap.style.display = 'none';
+    const img = document.getElementById('previewQrisImg');
+    if(img) img.src = '';
+}
+
+let streamKameraQris = null;
+let currentFacingModeQris = 'environment';
+
+function startKameraQris(mode){
+    const video = document.getElementById('videoKameraQris');
+    const status = document.getElementById('kameraStatusQris');
+    if(streamKameraQris){
+        streamKameraQris.getTracks().forEach(t => t.stop());
+        streamKameraQris = null;
+    }
+    status.textContent = 'Meminta kamera (' + (mode === 'user' ? 'Depan' : 'Belakang') + ')...';
+    const tryCam = (m) => navigator.mediaDevices.getUserMedia({
+        video: { facingMode: m, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false
+    });
+
+    tryCam(mode)
+        .catch(() => tryCam(mode === 'user' ? 'environment' : 'user'))
+        .then(s => {
+            streamKameraQris = s;
+            video.srcObject = s;
+            video.muted = true;
+            video.setAttribute('playsinline', '');
+            video.setAttribute('autoplay', '');
+            status.textContent = 'Kamera aktif (' + (mode === 'user' ? 'Depan' : 'Belakang') + ').';
+            const play = () => video.play().catch(e => {
+                video.addEventListener('click', () => video.play(), { once: true });
+            });
+            video.onloadedmetadata = play;
+            video.oncanplay = play;
+            setTimeout(play, 600);
+        })
+        .catch(err => {
+            status.textContent = 'Gagal buka kamera: ' + err.message;
+        });
+}
+
+function switchKameraQris(){
+    currentFacingModeQris = (currentFacingModeQris === 'user') ? 'environment' : 'user';
+    startKameraQris(currentFacingModeQris);
+}
+
+function openKameraQris(){
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+        const fb = document.getElementById('fallbackKameraQris');
+        if(fb) fb.click();
+        else alert('Kamera tidak didukung pada browser ini.');
+        return;
+    }
+    const modalEl = document.getElementById('modalKameraQris');
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+    currentFacingModeQris = 'environment';
+    startKameraQris(currentFacingModeQris);
+}
+
+function captureFotoQris(){
+    const video = document.getElementById('videoKameraQris');
+    const canvas = document.getElementById('canvasCaptureQris');
+    const previewWrap = document.getElementById('previewQrisDisplay');
+    const previewImg = document.getElementById('previewQrisImg');
+    const fileInput = document.getElementById('photoQris');
+    if(!video.videoWidth || video.videoWidth < 10) return alert('Kamera belum siap, tunggu video tampil lalu coba lagi');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    canvas.toBlob(blob => {
+        if(!blob) return alert('Gagal memproses gambar');
+        if(blob.size > 4*1024*1024) return alert('Foto melebihi 4MB');
+        const file = new File([blob], 'qris_kamera_' + Date.now() + '.jpg', { type: 'image/jpeg' });
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        fileInput.files = dt.files;
+        previewImg.src = URL.createObjectURL(blob);
+        previewWrap.style.display = 'block';
+        bootstrap.Modal.getInstance(document.getElementById('modalKameraQris')).hide();
+        if(streamKameraQris){
+            streamKameraQris.getTracks().forEach(t => t.stop());
+            streamKameraQris = null;
+        }
+        video.srcObject = null;
+    }, 'image/jpeg', 0.85);
+}
+
 function updatePriceMulti(){
     const checks=document.querySelectorAll('.layanan-check:checked');
     let sum=0;
@@ -177,6 +380,7 @@ function updatePriceMulti(){
     const priceEl=document.getElementById('price');
     if(sum>0) priceEl.value=formatRupiah(sum);
 }
+
 function validatePenjualan(form){
     const checked=document.querySelectorAll('.layanan-check:checked');
     const errEl=document.getElementById('layananError');
@@ -185,7 +389,21 @@ function validatePenjualan(form){
         alert('Validasi gagal: Pilih minimal 1 layanan.');
         return false;
     } else if(errEl) errEl.style.display='none';
-    // also handle toast for server 400 via URL param
+
+    // Validasi Wajib Foto Bukti untuk QRIS
+    const sel = form.akun_kas;
+    if (sel) {
+        const opt = sel.options[sel.selectedIndex];
+        const isQris = (opt && opt.getAttribute('data-type') === 'QRIS') || (sel.value && sel.value.toLowerCase().includes('qris'));
+        if (isQris) {
+            const photoInput = document.getElementById('photoQris');
+            if (!photoInput || !photoInput.files || photoInput.files.length === 0) {
+                alert('Validasi gagal: Transaksi QRIS WAJIB melampirkan foto bukti pembayaran (dari Galeri atau Kamera)!');
+                return false;
+            }
+        }
+    }
+
     return validateRupiahForm(form);
 }
 
@@ -251,6 +469,19 @@ async function syncOfflineSales(manual = false) {
 
 window.addEventListener('online', () => syncOfflineSales(false));
 document.addEventListener('DOMContentLoaded', () => {
+    toggleQrisProof();
+    const modalEl = document.getElementById('modalKameraQris');
+    if (modalEl) {
+        modalEl.addEventListener('hidden.bs.modal', function () {
+            if (streamKameraQris) {
+                streamKameraQris.getTracks().forEach(t => t.stop());
+                streamKameraQris = null;
+            }
+            const video = document.getElementById('videoKameraQris');
+            if (video) video.srcObject = null;
+        });
+    }
+
     renderOfflineBanner();
     if (navigator.onLine) syncOfflineSales(false);
     

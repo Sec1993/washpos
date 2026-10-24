@@ -34,7 +34,7 @@
                         <small class="text-muted d-block mb-3">Keluar otomatis dari <strong>Kas Kecil (Outlet)</strong></small>
                     <% } %>
                     <div class="mb-3">
-                        <label class="form-label">Foto Nota <small class="text-muted">(opsional, max 3MB)</small></label>
+                        <label class="form-label">Foto Nota <small class="text-muted">(opsional, max 4MB)</small></label>
                         <div class="d-flex gap-2 mb-2">
                             <label class="btn btn-outline-primary btn-sm flex-fill mb-0">
                                 <span>📁 Galeri</span>
@@ -44,6 +44,7 @@
                                 <span>📷 Kamera</span>
                             </button>
                         </div>
+                        <input type="file" id="fallbackKameraExpenses" class="d-none" accept="image/*" capture="environment" onchange="previewNota(this)">
                         <div id="previewNotaWrap" class="mt-2" style="display:none">
                             <img id="previewNotaImg" src="" alt="Preview" style="max-width:100%; max-height:180px; border:1px solid #ddd; border-radius:6px;">
                             <div class="d-flex gap-2 mt-2">
@@ -153,7 +154,28 @@
     </div>
 </div>
 
-<div class="modal fade" id="modalKamera" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header bg-success text-white"><h6 class="modal-title">Ambil Foto Nota</h6><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div><div class="modal-body text-center p-2"><video id="videoKamera" autoplay playsinline style="width:100%; max-height:320px; background:#000; border-radius:8px;"></video><canvas id="canvasCapture" style="display:none"></canvas><small id="kameraStatus" class="text-muted d-block mt-2">Izinkan kamera...</small></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Batal</button><button type="button" class="btn btn-success btn-sm" onclick="captureFoto()">📸 Ambil</button></div></div></div></div>
+<div class="modal fade" id="modalKamera" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h6 class="modal-title">Ambil Foto Nota</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center p-2">
+                <video id="videoKamera" autoplay playsinline muted style="width:100%; max-height:320px; background:#000; border-radius:8px;"></video>
+                <canvas id="canvasCapture" style="display:none"></canvas>
+                <small id="kameraStatus" class="text-muted d-block mt-2">Izinkan kamera...</small>
+            </div>
+            <div class="modal-footer d-flex justify-content-between">
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="switchKameraExpenses()">🔄 Putar Kamera</button>
+                <div>
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" class="btn btn-success btn-sm" onclick="captureFoto()">📸 Ambil</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script>
 function previewNota(input){
@@ -161,30 +183,109 @@ function previewNota(input){
     const img=document.getElementById('previewNotaImg');
     if(input.files && input.files[0]){
         const f=input.files[0];
-        if(f.size > 3*1024*1024){ alert('Foto max 3MB'); input.value=''; wrap.style.display='none'; return; }
-        if(!f.type.startsWith('image/')){ alert('Hanya gambar'); input.value=''; wrap.style.display='none'; return; }
+        if(f.size > 4*1024*1024){ alert('Foto max 4MB'); input.value=''; wrap.style.display='none'; return; }
+        if(!f.type.startsWith('image/')){ alert('Hanya file gambar yang diperbolehkan'); input.value=''; wrap.style.display='none'; return; }
         const reader=new FileReader(); reader.onload=e=>{ img.src=e.target.result; wrap.style.display='block'; }; reader.readAsDataURL(f);
     } else wrap.style.display='none';
 }
 function hapusFoto(){ document.getElementById('photoGaleri').value=''; document.getElementById('previewNotaWrap').style.display='none'; document.getElementById('previewNotaImg').src=''; }
 function toggleStok(){ document.getElementById('stokFields').style.display=document.getElementById('checkStok').checked?'block':'none'; }
-let streamKamera=null;
-function openKamera(){
-    const modalEl=document.getElementById('modalKamera'); const video=document.getElementById('videoKamera'); const status=document.getElementById('kameraStatus');
-    const modal=new bootstrap.Modal(modalEl); modal.show(); status.textContent='Meminta izin...';
-    navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment'}, audio:false }).then(s=>{ streamKamera=s; video.srcObject=s; status.textContent='Kamera aktif.'; video.onloadedmetadata=()=>video.play(); }).catch(err=>{ status.textContent='Gagal: '+err.message; });
-    modalEl.addEventListener('hidden.bs.modal', function handler(){ if(streamKamera){ streamKamera.getTracks().forEach(t=>t.stop()); streamKamera=null; } video.srcObject=null; modalEl.removeEventListener('hidden.bs.modal', handler); });
+
+let streamKamera = null;
+let currentFacingModeExpenses = 'environment';
+
+function startKameraExpenses(mode) {
+    const video = document.getElementById('videoKamera');
+    const status = document.getElementById('kameraStatus');
+    if (streamKamera) {
+        streamKamera.getTracks().forEach(t => t.stop());
+        streamKamera = null;
+    }
+    status.textContent = 'Meminta kamera (' + (mode === 'user' ? 'Depan' : 'Belakang') + ')...';
+    const tryCam = (m) => navigator.mediaDevices.getUserMedia({
+        video: { facingMode: m, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false
+    });
+
+    tryCam(mode)
+        .catch(() => tryCam(mode === 'user' ? 'environment' : 'user'))
+        .then(s => {
+            streamKamera = s;
+            video.srcObject = s;
+            video.muted = true;
+            video.setAttribute('playsinline', '');
+            video.setAttribute('autoplay', '');
+            status.textContent = 'Kamera aktif (' + (mode === 'user' ? 'Depan' : 'Belakang') + ').';
+            const play = () => video.play().catch(e => {
+                video.addEventListener('click', () => video.play(), { once: true });
+            });
+            video.onloadedmetadata = play;
+            video.oncanplay = play;
+            setTimeout(play, 600);
+        })
+        .catch(err => {
+            status.textContent = 'Gagal buka kamera: ' + err.message;
+        });
 }
-function captureFoto(){
-    const video=document.getElementById('videoKamera'); const canvas=document.getElementById('canvasCapture'); const previewWrap=document.getElementById('previewNotaWrap'); const previewImg=document.getElementById('previewNotaImg'); const fileInput=document.getElementById('photoGaleri');
-    if(!video.videoWidth) return alert('Kamera belum siap');
-    canvas.width=video.videoWidth; canvas.height=video.videoHeight; canvas.getContext('2d').drawImage(video,0,0);
-    canvas.toBlob(blob=>{
-        if(blob.size>3*1024*1024) return alert('>3MB');
-        const file=new File([blob],'kamera_'+Date.now()+'.jpg',{type:'image/jpeg'}); const dt=new DataTransfer(); dt.items.add(file); fileInput.files=dt.files;
-        previewImg.src=URL.createObjectURL(blob); previewWrap.style.display='block';
+
+function switchKameraExpenses() {
+    currentFacingModeExpenses = (currentFacingModeExpenses === 'user') ? 'environment' : 'user';
+    startKameraExpenses(currentFacingModeExpenses);
+}
+
+function openKamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        const fb = document.getElementById('fallbackKameraExpenses');
+        if (fb) fb.click();
+        else alert('Kamera tidak didukung pada browser ini.');
+        return;
+    }
+    const modalEl = document.getElementById('modalKamera');
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+    currentFacingModeExpenses = 'environment';
+    startKameraExpenses(currentFacingModeExpenses);
+}
+
+function captureFoto() {
+    const video = document.getElementById('videoKamera');
+    const canvas = document.getElementById('canvasCapture');
+    const previewWrap = document.getElementById('previewNotaWrap');
+    const previewImg = document.getElementById('previewNotaImg');
+    const fileInput = document.getElementById('photoGaleri');
+    if (!video.videoWidth || video.videoWidth < 10) return alert('Kamera belum siap, tunggu video tampil lalu coba lagi');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    canvas.toBlob(blob => {
+        if (!blob) return alert('Gagal memproses gambar');
+        if (blob.size > 4 * 1024 * 1024) return alert('Foto melebihi 4MB');
+        const file = new File([blob], 'nota_kamera_' + Date.now() + '.jpg', { type: 'image/jpeg' });
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        fileInput.files = dt.files;
+        previewImg.src = URL.createObjectURL(blob);
+        previewWrap.style.display = 'block';
         bootstrap.Modal.getInstance(document.getElementById('modalKamera')).hide();
-        if(streamKamera){ streamKamera.getTracks().forEach(t=>t.stop()); streamKamera=null; } document.getElementById('videoKamera').srcObject=null;
-    },'image/jpeg',0.85);
+        if (streamKamera) {
+            streamKamera.getTracks().forEach(t => t.stop());
+            streamKamera = null;
+        }
+        video.srcObject = null;
+    }, 'image/jpeg', 0.85);
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+    const modalEl = document.getElementById('modalKamera');
+    if (modalEl) {
+        modalEl.addEventListener('hidden.bs.modal', function () {
+            if (streamKamera) {
+                streamKamera.getTracks().forEach(t => t.stop());
+                streamKamera = null;
+            }
+            const video = document.getElementById('videoKamera');
+            if (video) video.srcObject = null;
+        });
+    }
+});
 </script>
