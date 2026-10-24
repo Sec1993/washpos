@@ -67,6 +67,17 @@ function requireOwner(req, res, next) {
     }
 }
 
+function requireAdminOrOwner(req, res, next) {
+    if (!req.session.user) return res.redirect('/login');
+    if (activeLogins[req.sessionID]) activeLogins[req.sessionID].lastSeen = new Date().toISOString();
+    if (req.session.user.role === 'owner' || req.session.user.role === 'admin') {
+        next();
+    } else {
+        // Khusus role karyawan: dialihkan hanya ke menu absen
+        res.redirect('/absen');
+    }
+}
+
 // Helper: parse Rupiah (terima "15.000", "15,000", "Rp 15.000", "15000")
 function parseRupiah(val) {
     if (!val) return NaN;
@@ -168,7 +179,13 @@ app.post('/login', (req, res) => {
             req.session.user = { id: row.id, username: row.username, role: row.role };
             req.session.loginTime = new Date().toISOString();
             activeLogins[req.sessionID] = { id: row.id, username: row.username, role: row.role, loginTime: req.session.loginTime, lastSeen: new Date().toISOString(), ip: req.ip, userAgent: req.headers['user-agent']||'' };
-            res.redirect('/');
+            if (row.role === 'owner') {
+                res.redirect('/');
+            } else if (row.role === 'admin') {
+                res.redirect('/sales');
+            } else {
+                res.redirect('/absen');
+            }
         } else {
             res.render('login', { error: 'Username atau password salah!' });
         }
@@ -221,7 +238,7 @@ const absenUpload = multer({
 app.get('/absen', requireLogin, (req, res) => {
     const today = getWitaTime().toISOString().slice(0,10);
     const uid = req.session.user.id;
-    const isOwner = req.session.user.role==='owner';
+    const isOwner = req.session.user.role === 'owner' || req.session.user.role === 'admin';
     // ambil absen hari ini untuk user ini
     db.all("SELECT * FROM attendance WHERE user_id=? AND date=? ORDER BY time ASC", [uid, today], (e, todayRows)=>{
         // untuk owner, tampilkan semua absen hari ini
@@ -306,13 +323,15 @@ app.get('/', requireLogin, (req, res) => {
                 });
             });
         });
-    } else {
+    } else if (req.session.user.role === 'admin') {
         res.redirect('/sales');
+    } else {
+        res.redirect('/absen');
     }
 });
 
 // Routes - Sales (Phase 3 formal: filter tanggal, search, pagination + kas kecil + akun dinamis)
-app.get('/sales', requireLogin, (req, res) => {
+app.get('/sales', requireAdminOrOwner, (req, res) => {
     const { from, to, search, page, limit } = req.query;
     const pageNum = Math.max(1, parseInt(page) || 1);
     const limitNum = Math.min(50, Math.max(5, parseInt(limit) || 10));
@@ -350,7 +369,7 @@ app.get('/sales', requireLogin, (req, res) => {
     });
 });
 
-app.post('/sales', requireLogin, (req, res) => {
+app.post('/sales', requireAdminOrOwner, (req, res) => {
     const { customer_name, license_plate, price, worker_name, akun_kas } = req.body;
     // dukung multi layanan: service_names bisa array, atau service_name single (backward compat)
     let serviceNames = req.body.service_names || req.body.service_name;
@@ -396,7 +415,7 @@ app.post('/sales', requireLogin, (req, res) => {
 });
 
 // Route - Receipt
-app.get('/receipt/:id', requireLogin, (req, res) => {
+app.get('/receipt/:id', requireAdminOrOwner, (req, res) => {
     const saleId = req.params.id;
     db.get("SELECT * FROM sales WHERE id = ?", [saleId], (err, sale) => {
         if (err || !sale) return res.send('Transaksi tidak ditemukan.');
@@ -405,7 +424,7 @@ app.get('/receipt/:id', requireLogin, (req, res) => {
 });
 
 // Routes - Expenses (Phase 4 formal: filter tanggal, search, pagination + foto + stok integrasi 5.4)
-app.get('/expenses', requireLogin, (req, res) => {
+app.get('/expenses', requireAdminOrOwner, (req, res) => {
     const { from, to, search, page, limit } = req.query;
     const pageNum = Math.max(1, parseInt(page) || 1);
     const limitNum = Math.min(50, Math.max(5, parseInt(limit) || 10));
@@ -436,7 +455,7 @@ app.get('/expenses', requireLogin, (req, res) => {
     });
 });
 
-app.post('/expenses', requireLogin, upload.single('photo'), (req, res) => {
+app.post('/expenses', requireAdminOrOwner, upload.single('photo'), (req, res) => {
     const { category, amount, description, stock_item_id, stock_qty, akun_kas } = req.body;
     const expenseAmount = parseRupiah(amount);
     let kasAkun = akun_kas && String(akun_kas).trim() ? String(akun_kas).trim() : 'Kas Kecil';
@@ -521,7 +540,7 @@ app.post('/expenses', requireLogin, upload.single('photo'), (req, res) => {
 });
 
 // Routes - Inventory (dengan history)
-app.get('/inventory', requireLogin, (req, res) => {
+app.get('/inventory', requireAdminOrOwner, (req, res) => {
     db.all("SELECT * FROM inventory ORDER BY name ASC", (err, inventory) => {
         db.all("SELECT * FROM stock_history ORDER BY date DESC, id DESC LIMIT 20", (err, history) => {
             res.render('inventory', { inventory, history });
@@ -529,7 +548,7 @@ app.get('/inventory', requireLogin, (req, res) => {
     });
 });
 
-app.post('/inventory/add', requireLogin, (req, res) => {
+app.post('/inventory/add', requireAdminOrOwner, (req, res) => {
     const { name, unit, min_stock } = req.body;
     if (!isValidName(name,2)) return res.status(400).send('Validasi gagal: Nama barang min 2 karakter. <a href="/inventory">Kembali</a>');
     if (!unit) return res.status(400).send('Validasi gagal: Satuan wajib. <a href="/inventory">Kembali</a>');
@@ -541,7 +560,7 @@ app.post('/inventory/add', requireLogin, (req, res) => {
     });
 });
 
-app.post('/inventory/delete', requireLogin, (req, res) => {
+app.post('/inventory/delete', requireAdminOrOwner, (req, res) => {
     const { id } = req.body;
     if (!id) return res.status(400).send('Validasi gagal: ID barang wajib. <a href="/inventory">Kembali</a>');
     db.run("DELETE FROM inventory WHERE id = ?", [id], function(err){
@@ -551,7 +570,7 @@ app.post('/inventory/delete', requireLogin, (req, res) => {
     });
 });
 
-app.post('/inventory/update', requireLogin, (req, res) => {
+app.post('/inventory/update', requireAdminOrOwner, (req, res) => {
     const { id, type, quantity } = req.body; // type: 'in' or 'out'
     const qty = parseFloat(String(quantity).replace(',', '.'));
     if (!id || isNaN(qty) || qty < 1) return res.status(400).send('Validasi gagal: Jumlah minimal 1 unit. <a href="/inventory">Kembali</a>');
@@ -683,7 +702,7 @@ app.post('/master/users/add', requireOwner, (req, res) => {
     if (!password || password.length < 4) {
         return renderMaster(res, 'Validasi gagal: Password minimal 4 karakter.');
     }
-    const cleanRole = (role === 'owner') ? 'owner' : 'karyawan';
+    const cleanRole = ['owner', 'admin', 'karyawan'].includes(role) ? role : 'karyawan';
     const hash = bcrypt.hashSync(password, 10);
     db.run("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", [cleanUsername, hash, cleanRole], (err) => {
         if (err) {
@@ -722,6 +741,25 @@ app.post('/master/users/reset-password', requireOwner, (req, res) => {
     db.run("UPDATE users SET password = ? WHERE id = ?", [hash, targetId], (err) => {
         if (err) return renderMaster(res, 'Gagal mengganti password: ' + err.message);
         res.redirect('/master');
+    });
+});
+
+app.post('/master/users/update-role', requireOwner, (req, res) => {
+    const { id, role } = req.body;
+    const targetId = parseInt(id);
+    if (isNaN(targetId)) return res.redirect('/master');
+    if (!['owner', 'admin', 'karyawan'].includes(role)) {
+        return renderMaster(res, 'Validasi gagal: Role tidak valid.');
+    }
+    db.get("SELECT * FROM users WHERE id = ?", [targetId], (err, targetUser) => {
+        if (!targetUser) return res.redirect('/master');
+        if (targetUser.username === 'owner' && role !== 'owner') {
+            return renderMaster(res, 'Validasi gagal: Role akun utama "owner" tidak dapat diubah.');
+        }
+        db.run("UPDATE users SET role = ? WHERE id = ?", [role, targetId], (err) => {
+            if (err) return renderMaster(res, 'Gagal mengubah role: ' + err.message);
+            res.redirect('/master');
+        });
     });
 });
 
@@ -909,7 +947,7 @@ app.post('/kas/transfer', requireOwner, (req, res) => {
     });
 });
 
-app.get('/kas/kecil', requireLogin, (req, res) => {
+app.get('/kas/kecil', requireAdminOrOwner, (req, res) => {
     const { from, to, page, limit } = req.query;
     const pageNum = Math.max(1, parseInt(page) || 1);
     const limitNum = Math.min(100, Math.max(10, parseInt(limit) || 20));
@@ -942,7 +980,7 @@ app.get('/kas/kecil', requireLogin, (req, res) => {
     });
 });
 
-app.get('/api/service-price', requireLogin, (req, res) => {
+app.get('/api/service-price', requireAdminOrOwner, (req, res) => {
     const name = req.query.name;
     db.get("SELECT price FROM services WHERE name = ?", [name], (err, row) => {
         res.json({ price: row ? row.price : 0 });

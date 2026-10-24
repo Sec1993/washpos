@@ -166,12 +166,13 @@
                     <div class="mb-3">
                         <label class="form-label small text-muted mb-1">Hak Akses (Role)</label>
                         <select name="role" class="form-select">
-                            <option value="karyawan" selected>Karyawan (Khusus Kasir, Absen & Nota)</option>
-                            <option value="owner">Owner (Akses Penuh Semua Menu)</option>
+                            <option value="owner">Owner (Akses Penuh Semua Menu & Laporan)</option>
+                            <option value="admin" selected>Admin (Akses Terbatas: Kasir, Pengeluaran & Stok)</option>
+                            <option value="karyawan">Karyawan (Khusus Absensi Saja)</option>
                         </select>
                     </div>
                     <button class="btn btn-dark w-100" type="submit">+ Buat Akun Baru</button>
-                    <small class="text-muted d-block mt-2">Karyawan dapat login di HP dengan akun ini untuk absen foto dan mencatat transaksi.</small>
+                    <small class="text-muted d-block mt-2">Owner = Akses penuh. Admin = Kasir & stok. Karyawan = Khusus absen.</small>
                 </form>
             </div>
 
@@ -194,16 +195,25 @@
                                 <td><%= idx + 1 %></td>
                                 <td class="fw-bold"><%= u.username %></td>
                                 <td>
-                                    <span class="badge <%= u.role === 'owner' ? 'bg-primary' : 'bg-success' %>">
-                                        <%= u.role === 'owner' ? 'Owner' : 'Karyawan' %>
-                                    </span>
+                                    <% if (u.role === 'owner') { %>
+                                        <span class="badge bg-primary">Owner</span>
+                                    <% } else if (u.role === 'admin') { %>
+                                        <span class="badge bg-warning text-dark">Admin</span>
+                                    <% } else { %>
+                                        <span class="badge bg-secondary">Karyawan</span>
+                                    <% } %>
                                 </td>
                                 <td class="text-end">
+                                    <% if (u.username !== 'owner') { %>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="openRoleModal('<%= u.id %>', '<%= u.username %>', '<%= u.role %>')">
+                                        ✏️ Role
+                                    </button>
+                                    <% } %>
                                     <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openResetModal('<%= u.id %>', '<%= u.username %>')">
                                         🔑 Sandi
                                     </button>
                                     <% if (u.id !== user.id && u.username !== 'owner') { %>
-                                    <form action="/master/users/delete" method="POST" class="d-inline" onsubmit="return confirm('Hapus akun login <%= u.username %>? Karyawan ini tidak akan bisa login lagi.')">
+                                    <form action="/master/users/delete" method="POST" class="d-inline" onsubmit="return confirm('Hapus akun login <%= u.username %>? Pengguna ini tidak akan bisa login lagi.')">
                                         <input type="hidden" name="id" value="<%= u.id %>">
                                         <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
                                     </form>
@@ -216,6 +226,31 @@
                 </div>
             </div>
         </div>
+    </div>
+</div>
+
+<!-- Modal Ubah Role -->
+<div class="modal fade" id="modalUpdateRole" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <form action="/master/users/update-role" method="POST" class="modal-content">
+            <div class="modal-header bg-primary text-white py-2">
+                <h6 class="modal-title">Ubah Role: <span id="roleTargetUsername" class="fw-bold"></span></h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" name="id" id="roleTargetId">
+                <label class="form-label small fw-bold">Pilih Role Baru</label>
+                <select name="role" id="roleSelect" class="form-select form-select-sm">
+                    <option value="owner">Owner (Akses Penuh)</option>
+                    <option value="admin">Admin (Kasir, Pengeluaran & Stok)</option>
+                    <option value="karyawan">Karyawan (Khusus Absensi Saja)</option>
+                </select>
+            </div>
+            <div class="modal-footer py-1">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
+                <button type="submit" class="btn btn-primary btn-sm">Simpan Role</button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -245,6 +280,13 @@ function openResetModal(id, username) {
     document.getElementById('resetTargetId').value = id;
     document.getElementById('resetTargetUsername').textContent = username;
     new bootstrap.Modal(document.getElementById('modalResetPassword')).show();
+}
+
+function openRoleModal(id, username, currentRole) {
+    document.getElementById('roleTargetId').value = id;
+    document.getElementById('roleTargetUsername').textContent = username;
+    document.getElementById('roleSelect').value = currentRole;
+    new bootstrap.Modal(document.getElementById('modalUpdateRole')).show();
 }
 </script>
 

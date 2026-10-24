@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
@@ -24,9 +24,11 @@
                     <% if (user.role === 'owner') { %>
                         <li class="nav-item"><a class="nav-link" href="/">Dashboard</a></li>
                     <% } %>
-                    <li class="nav-item"><a class="nav-link" href="/sales">Penjualan</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/expenses">Pengeluaran</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/inventory">Stok</a></li>
+                    <% if (user.role === 'owner' || user.role === 'admin') { %>
+                        <li class="nav-item"><a class="nav-link" href="/sales">Penjualan</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/expenses">Pengeluaran</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/inventory">Stok</a></li>
+                    <% } %>
                     <li class="nav-item"><a class="nav-link" href="/absen">Absen</a></li>
                     <% if (user.role === 'owner') { %>
                         <li class="nav-item"><a class="nav-link" href="/master">Master</a></li>

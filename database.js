@@ -187,13 +187,26 @@ db.serialize(() => {
         if (row && row.count === 0) {
             const salt = bcrypt.genSaltSync(10);
             const ownerHash = bcrypt.hashSync('owner123', salt);
+            const adminHash = bcrypt.hashSync('admin123', salt);
             const karyawanHash = bcrypt.hashSync('karyawan123', salt);
             
             const stmt = db.prepare("INSERT INTO users (username, password, role) VALUES (?, ?, ?)");
             stmt.run('owner', ownerHash, 'owner');
+            stmt.run('admin', adminHash, 'admin');
             stmt.run('karyawan', karyawanHash, 'karyawan');
             stmt.finalize();
-            console.log('Default accounts created. Owner: owner / owner123. Karyawan: karyawan / karyawan123');
+            console.log('Default accounts created: owner, admin, karyawan');
+        } else {
+            // Pastikan akun role admin ada jika belum ada
+            db.get("SELECT COUNT(*) as count FROM users WHERE role = 'admin'", (e, r) => {
+                if (r && r.count === 0) {
+                    const salt = bcrypt.genSaltSync(10);
+                    const adminHash = bcrypt.hashSync('admin123', salt);
+                    db.run("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", ['admin', adminHash, 'admin'], (err) => {
+                        if (!err) console.log('Default admin account created: admin / admin123');
+                    });
+                }
+            });
         }
     });
 
