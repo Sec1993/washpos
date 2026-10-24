@@ -298,7 +298,7 @@ function openRoleModal(id, username, currentRole) {
     </div>
     <div class="card-body">
         <form action="/master/services/add" method="POST" class="mb-4" onsubmit="return validateRupiahForm(this)">
-            <label class="form-label fw-bold">Tambah Menu Baru <small class="text-muted fw-normal">(nama unik & komisi pencuci)</small></label>
+            <label class="form-label fw-bold">Tambah Menu Baru <small class="text-muted fw-normal">(nama unik & komisi pencuci, komisi boleh 0)</small></label>
             <div class="row g-2">
                 <div class="col-md-5">
                     <input type="text" name="name" class="form-control" placeholder="Nama layanan... (unik, mis: Cuci Helm, Poles)" required minlength="2" maxlength="50">
@@ -307,13 +307,13 @@ function openRoleModal(id, username, currentRole) {
                     <input type="text" name="price" class="form-control rupiah" placeholder="Harga Jual (15.000)" required>
                 </div>
                 <div class="col-md-2">
-                    <input type="text" name="commission" class="form-control rupiah" placeholder="Komisi Pencuci (5.000)" value="5.000" required>
+                    <input type="text" name="commission" class="form-control rupiah" data-allow-zero="true" placeholder="Komisi Pencuci (0 jika tanpa komisi)" value="0">
                 </div>
                 <div class="col-md-2">
                     <button class="btn btn-primary w-100" type="submit">+ Tambah</button>
                 </div>
             </div>
-            <small class="text-muted">Validasi: nama unik 2-50 karakter, harga jual & komisi pencuci format rupiah (contoh 15.000 dan 5.000).</small>
+            <small class="text-muted">Validasi: nama unik 2-50 karakter, harga jual min 1.000, komisi pencuci boleh 0 jika layanan tanpa komisi.</small>
         </form>
 
         <hr>
@@ -333,12 +333,12 @@ function openRoleModal(id, username, currentRole) {
                                 <input type="hidden" name="id" value="<%= s.id %>">
                                 <input type="text" name="name" value="<%= s.name %>" class="form-control form-control-sm" required minlength="2" maxlength="50" style="min-width:160px" title="Nama Layanan">
                                 <input type="text" name="price" value="<%= s.price %>" class="form-control form-control-sm rupiah" required style="width:110px" placeholder="Harga" title="Harga Jual">
-                                <input type="text" name="commission" value="<%= s.commission || 0 %>" class="form-control form-control-sm rupiah" required style="width:110px" placeholder="Komisi" title="Komisi Pencuci">
+                                <input type="text" name="commission" value="<%= (typeof s.commission !== 'undefined' && s.commission !== null) ? s.commission : 0 %>" class="form-control form-control-sm rupiah" data-allow-zero="true" style="width:110px" placeholder="Komisi" title="Komisi Pencuci (boleh 0)">
                                 <button type="submit" class="btn btn-sm btn-outline-primary">Update</button>
                             </form>
                         </td>
                         <td><span class="fw-bold">Rp <%= s.price.toLocaleString('id-ID') %></span></td>
-                        <td><span class="badge bg-success">Rp <%= (s.commission || 0).toLocaleString('id-ID') %></span></td>
+                        <td><span class="badge <%= (s.commission && s.commission > 0) ? 'bg-success' : 'bg-secondary' %>">Rp <%= (s.commission || 0).toLocaleString('id-ID') %></span></td>
                         <td class="text-end">
                             <form action="/master/services/delete" method="POST" class="d-inline" onsubmit="return confirm('Hapus layanan <%= s.name %>?')">
                                 <input type="hidden" name="id" value="<%= s.id %>">
@@ -351,7 +351,7 @@ function openRoleModal(id, username, currentRole) {
             </table>
         </div>
         <div class="alert alert-info py-2 mt-3 mb-0">
-            <small><strong>Tips:</strong> Atur <strong>Harga Jual</strong> dan <strong>Komisi Pencuci</strong> per layanan. Saat transaksi cuci di kasir, sistem otomatis mencatat komisi pencuci untuk rekap gaji/bagi hasil.</small>
+            <small><strong>Tips:</strong> Atur <strong>Harga Jual</strong> dan <strong>Komisi Pencuci</strong> per layanan. Komisi <strong>boleh diisi 0</strong> untuk layanan yang tidak memerlukan bagi hasil/komisi pencuci.</small>
         </div>
     </div>
 </div>

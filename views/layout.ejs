@@ -88,14 +88,17 @@
         });
     </script>
     <script>
-        // Rupiah helper: format 15000 -> "15.000"
+        // Rupiah helper: format 15000 -> "15.000" (mendukung 0)
         function formatRupiah(angka) {
+            if(angka === 0 || angka === '0') return '0';
             if(!angka) return '';
             const digits = String(angka).replace(/[^0-9]/g,'');
             if(!digits) return '';
             return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
         }
         function parseRupiah(str) {
+            if(str === 0 || str === '0') return 0;
+            if(!str) return NaN;
             const d = String(str).replace(/[^0-9]/g,'');
             return d ? parseInt(d,10) : NaN;
         }
@@ -132,6 +135,10 @@
             const rupiahInputs = form.querySelectorAll('.rupiah');
             for(const inp of rupiahInputs){
                 const v = parseRupiah(inp.value);
+                const allowZero = inp.name === 'commission' || inp.getAttribute('data-allow-zero') === 'true';
+                if(allowZero && (v === 0 || inp.value.trim() === '0')){
+                    continue;
+                }
                 if(isNaN(v) || v < 1000){
                     alert('Validasi gagal: Harga/Nominal harus angka ≥ 1.000 (contoh: 15.000). Nilai sekarang: ' + inp.value);
                     inp.focus();

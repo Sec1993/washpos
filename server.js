@@ -78,8 +78,9 @@ function requireAdminOrOwner(req, res, next) {
     }
 }
 
-// Helper: parse Rupiah (terima "15.000", "15,000", "Rp 15.000", "15000")
+// Helper: parse Rupiah (terima "15.000", "15,000", "Rp 15.000", "15000", atau 0)
 function parseRupiah(val) {
+    if (val === 0 || val === '0') return 0;
     if (!val) return NaN;
     const digits = String(val).replace(/[^0-9]/g, '');
     return digits ? parseInt(digits, 10) : NaN;
@@ -653,14 +654,15 @@ app.get('/master', requireOwner, (req, res) => {
 app.post('/master/services/add', requireOwner, (req, res) => {
     const { name, price, commission } = req.body;
     const p = parseRupiah(price);
-    const c = commission ? parseRupiah(commission) : 0;
+    const c = (commission !== undefined && commission !== null && String(commission).trim() !== '') ? parseRupiah(commission) : 0;
     if (!isValidName(name,2)) {
         return renderMaster(res, 'Validasi gagal: Nama layanan min 2 karakter, max 50.');
     }
     if (isNaN(p) || p < 1000) {
         return renderMaster(res, 'Validasi gagal: Harga harus angka ≥ 1.000 (contoh: 15.000 atau 15000).');
     }
-    db.run("INSERT INTO services (name, price, category, isActive, commission) VALUES (?, ?, 'Motor Kecil', 1, ?)", [name.trim(), p, isNaN(c)?0:c], (err) => {
+    const finalComm = isNaN(c) || c < 0 ? 0 : c;
+    db.run("INSERT INTO services (name, price, category, isActive, commission) VALUES (?, ?, 'Motor Kecil', 1, ?)", [name.trim(), p, finalComm], (err) => {
         if (err) {
             return renderMaster(res, 'Validasi gagal: Nama layanan sudah ada (unik).');
         }
@@ -671,18 +673,19 @@ app.post('/master/services/add', requireOwner, (req, res) => {
 app.post('/master/services/update', requireOwner, (req, res) => {
     const { id, name, price, commission } = req.body;
     const p = parseRupiah(price);
-    const c = commission ? parseRupiah(commission) : 0;
+    const c = (commission !== undefined && commission !== null && String(commission).trim() !== '') ? parseRupiah(commission) : 0;
     if (!id || !isValidName(name,2)) {
         return renderMaster(res, 'Validasi gagal: Nama layanan min 2 karakter.');
     }
     if (isNaN(p) || p < 1000) {
         return renderMaster(res, 'Validasi gagal: Harga harus ≥ 1.000 (boleh 15.000).');
     }
+    const finalComm = isNaN(c) || c < 0 ? 0 : c;
     db.get("SELECT id FROM services WHERE name=? AND id != ?", [name.trim(), id], (e,row)=>{
         if (row) {
             return renderMaster(res, 'Validasi gagal: Nama layanan sudah dipakai layanan lain.');
         }
-        db.run("UPDATE services SET name = ?, price = ?, commission = ? WHERE id = ?", [name.trim(), p, isNaN(c)?0:c, id], () => res.redirect('/master'));
+        db.run("UPDATE services SET name = ?, price = ?, commission = ? WHERE id = ?", [name.trim(), p, finalComm, id], () => res.redirect('/master'));
     });
 });
 
