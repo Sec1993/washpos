@@ -8,6 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const db = require('./database');
+const cloudSync = require('./cloudSync');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -965,16 +966,28 @@ app.use((req, res, next) => {
     next();
 });
 
-// Start server - 0.0.0.0 untuk Railway/Docker
-// Start server - 0.0.0.0 untuk Railway/Docker
-// Ignore process.env.PORT because Railway proxy gets confused with Dockerfile EXPOSE
-const HARDCODED_PORT = 3000;
-app.listen(HARDCODED_PORT, '0.0.0.0', () => {
-    console.log(`Server is running at port ${HARDCODED_PORT}`);
+// Graceful shutdown untuk Render / Docker
+const gracefulShutdown = async (signal) => {
+    console.log(`[Server] Signal ${signal} diterima. Menyimpan database ke cloud...`);
+    try {
+        await cloudSync.uploadDb();
+        console.log('[Server] Database berhasil tersimpan di Supabase.');
+    } catch (e) {
+        console.error('[Server] Gagal sinkronisasi saat shutdown:', e.message);
+    }
+    process.exit(0);
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Start server - 0.0.0.0 untuk Render / Railway / Docker
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server is running at port ${PORT}`);
     
     // Self-test
     setTimeout(() => {
-        require('http').get(`http://localhost:${HARDCODED_PORT}/healthz`, (resp) => {
+        require('http').get(`http://localhost:${PORT}/healthz`, (resp) => {
             let data = '';
             resp.on('data', (chunk) => { data += chunk; });
             resp.on('end', () => {

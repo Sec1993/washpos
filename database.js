@@ -1,6 +1,7 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const bcrypt = require('bcryptjs');
+const cloudSync = require('./cloudSync');
 
 const dbDir = path.join(__dirname, 'data');
 if (!require('fs').existsSync(dbDir)) require('fs').mkdirSync(dbDir, { recursive: true });
@@ -12,6 +13,27 @@ const db = new sqlite3.Database(dbPath, (err) => {
         console.log('Connected to SQLite database.');
     }
 });
+
+// Intercept db.run untuk otomatis upload pos.db ke Supabase jika ada modifikasi data (write)
+const originalDbRun = db.run.bind(db);
+db.run = function(sql, ...args) {
+    const isWrite = typeof sql === 'string' && /^\s*(INSERT|UPDATE|DELETE|REPLACE|ALTER|DROP)\b/i.test(sql);
+    let newArgs = [...args];
+    if (newArgs.length > 0 && typeof newArgs[newArgs.length - 1] === 'function') {
+        const originalCb = newArgs[newArgs.length - 1];
+        newArgs[newArgs.length - 1] = function(err, ...cbArgs) {
+            if (!err && isWrite) {
+                cloudSync.scheduleUpload();
+            }
+            return originalCb.apply(this, [err, ...cbArgs]);
+        };
+    } else if (isWrite) {
+        const res = originalDbRun(sql, ...args);
+        cloudSync.scheduleUpload();
+        return res;
+    }
+    return originalDbRun(sql, ...newArgs);
+};
 
 db.serialize(() => {
     // 1. Users table
