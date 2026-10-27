@@ -2,6 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./database');
 
+const DISCORD_USER_AGENT = 'WashPOS-CloudBot/1.0 (https://washpos.onrender.com)';
+
 function getWebhookUrl() {
     return new Promise((resolve) => {
         db.get("SELECT value FROM settings WHERE key='discord_webhook_url'", (err, row) => {
@@ -12,6 +14,62 @@ function getWebhookUrl() {
             }
         });
     });
+}
+
+/**
+ * Mengirim request ke Discord dengan mekanisme fallback otomatis:
+ * Jika request langsung ke discord.com terkena 429 (global rate limit IP Render) atau Cloudflare block,
+ * request akan otomatis diulang melalui proxy terpercaya (webhook.lewisakura.moe).
+ */
+async function postWithProxyFallback(url, optionsBuilder) {
+    const urls = [url];
+    if (url.includes('discord.com')) {
+        urls.push(url.replace('discord.com', 'webhook.lewisakura.moe'));
+    }
+
+    let lastError = null;
+
+    for (let i = 0; i < urls.length; i++) {
+        const targetUrl = urls[i];
+        const isFallback = i > 0;
+        try {
+            const reqOptions = optionsBuilder();
+            reqOptions.headers = reqOptions.headers || {};
+            reqOptions.headers['User-Agent'] = DISCORD_USER_AGENT;
+
+            const res = await fetch(targetUrl, reqOptions);
+            const resText = await res.text();
+
+            if (res.ok) {
+                return {
+                    success: true,
+                    viaFallback: isFallback,
+                    message: isFallback 
+                        ? 'Pesan berhasil terkirim ke Discord melalui jalur anti-blokir Cloud!' 
+                        : 'Pesan berhasil terkirim ke Discord!'
+                };
+            }
+
+            lastError = `Status ${res.status}: ${resText}`;
+
+            // Jika status 429 (rate limit IP) atau 403 Cloudflare block, coba jalur proxy jika tersedia
+            const isRateLimitOrBlocked = res.status === 429 || (res.status === 403 && resText.toLowerCase().includes('cloudflare'));
+            if (isRateLimitOrBlocked && i < urls.length - 1) {
+                console.warn(`[Discord Webhook] ${targetUrl} terblokir rate limit (${res.status}). Mengalihkan ke proxy anti-blokir...`);
+                continue;
+            }
+
+            return { success: false, message: `Discord menolak pesan (${lastError})` };
+        } catch (err) {
+            lastError = err.message;
+            if (i < urls.length - 1) {
+                console.warn(`[Discord Webhook] Gagal menghubungi ${targetUrl} (${err.message}). Mengalihkan ke proxy...`);
+                continue;
+            }
+        }
+    }
+
+    return { success: false, message: 'Gagal menghubungi Discord: ' + (lastError || 'Unknown error') };
 }
 
 async function sendDiscordTest(senderName = 'Owner') {
@@ -36,21 +94,11 @@ async function sendDiscordTest(senderName = 'Owner') {
         }]
     };
 
-    try {
-        const res = await fetch(webhookUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-
-        if (!res.ok) {
-            const errText = await res.text();
-            return { success: false, message: `Discord menolak pesan (Status ${res.status}): ${errText}` };
-        }
-        return { success: true, message: 'Pesan uji coba berhasil terkirim ke Discord!' };
-    } catch (err) {
-        return { success: false, message: 'Gagal menghubungi Discord: ' + err.message };
-    }
+    return await postWithProxyFallback(webhookUrl, () => ({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    }));
 }
 
 async function sendDiscordReport({ date, includeDb = false, senderName = 'Kasir' }) {
@@ -163,38 +211,28 @@ async function sendDiscordReport({ date, includeDb = false, senderName = 'Kasir'
         }]
     };
 
-    try {
-        const dbPath = path.join(__dirname, 'data', 'pos.db');
-        let res;
+    const dbPath = path.join(__dirname, 'data', 'pos.db');
+    const shouldAttachDb = includeDb && fs.existsSync(dbPath);
 
-        if (includeDb && fs.existsSync(dbPath)) {
+    return await postWithProxyFallback(webhookUrl, () => {
+        if (shouldAttachDb) {
             const formData = new FormData();
             formData.append('payload_json', JSON.stringify(payload));
             const fileBuffer = fs.readFileSync(dbPath);
             const blob = new Blob([fileBuffer], { type: 'application/x-sqlite3' });
             formData.append('files[0]', blob, `pos_backup_${targetDate}.db`);
-
-            res = await fetch(webhookUrl, {
+            return {
                 method: 'POST',
                 body: formData
-            });
+            };
         } else {
-            res = await fetch(webhookUrl, {
+            return {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
-            });
+            };
         }
-
-        if (!res.ok) {
-            const errText = await res.text();
-            return { success: false, message: `Discord merespon error (${res.status}): ${errText}` };
-        }
-
-        return { success: true, message: `Laporan tanggal ${targetDate} berhasil dikirim ke Discord!` };
-    } catch (err) {
-        return { success: false, message: 'Gagal mengirim laporan ke Discord: ' + err.message };
-    }
+    });
 }
 
 module.exports = {
