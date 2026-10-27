@@ -53,6 +53,86 @@
     <div class="container mt-4">
         <%- body %>
     </div>
+
+    <% if (typeof user !== 'undefined' && user && (user.role === 'owner' || user.role === 'admin')) { %>
+    <!-- Modal Tutup Kasir & Kirim Laporan ke Discord -->
+    <div class="modal fade" id="modalDiscordReport" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">📢 Tutup Kasir & Kirim ke Discord</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted mb-3">
+                        Kirim ringkasan transaksi, omset tunai & QRIS, pengeluaran, serta komisi pencuci hari ini ke channel Discord Anda.
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Tanggal Laporan</label>
+                        <input type="date" id="discordReportDate" class="form-control form-control-sm" value="<%= new Date().toISOString().slice(0, 10) %>">
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="discordIncludeDb" checked>
+                        <label class="form-check-label small" for="discordIncludeDb">
+                            <strong>Lampirkan Backup Database (<code>pos.db</code>)</strong><br>
+                            <span class="text-muted">Mengirim file database SQLite terbaru sebagai arsip ke channel Discord.</span>
+                        </label>
+                    </div>
+                    <div id="discordStatusMsg" class="alert d-none py-2 small mb-0"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="btnSubmitDiscord" onclick="sendDiscordReportFromModal()">
+                        🚀 Kirim Sekarang
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+    async function sendDiscordReportFromModal() {
+        const btn = document.getElementById('btnSubmitDiscord');
+        const msgEl = document.getElementById('discordStatusMsg');
+        const date = document.getElementById('discordReportDate').value;
+        const includeDb = document.getElementById('discordIncludeDb').checked;
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Mengirim...';
+        msgEl.className = 'alert alert-info py-2 small';
+        msgEl.textContent = 'Menghitung data transaksi & menghubungkan ke Discord...';
+        msgEl.classList.remove('d-none');
+
+        try {
+            const res = await fetch('/api/discord/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date, includeDb })
+            });
+            const data = await res.json();
+            if (data.success) {
+                msgEl.className = 'alert alert-success py-2 small';
+                msgEl.textContent = '✅ ' + data.message;
+                if (typeof showToast === 'function') showToast(data.message, 'success');
+                setTimeout(() => {
+                    const modalEl = document.getElementById('modalDiscordReport');
+                    const modal = bootstrap.Modal.getInstance(modalEl);
+                    if (modal) modal.hide();
+                    msgEl.classList.add('d-none');
+                }, 2000);
+            } else {
+                msgEl.className = 'alert alert-danger py-2 small';
+                msgEl.textContent = '❌ ' + (data.message || 'Gagal mengirim laporan.');
+            }
+        } catch (err) {
+            msgEl.className = 'alert alert-danger py-2 small';
+            msgEl.textContent = '❌ Terjadi kesalahan jaringan: ' + err.message;
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '🚀 Kirim Sekarang';
+        }
+    }
+    </script>
+    <% } %>
     <!-- Toast container 7.1 -->
     <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1080">
         <div id="appToast" class="toast align-items-center text-bg-success border-0" role="alert"><div class="d-flex"><div class="toast-body" id="toastMsg">Berhasil</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>

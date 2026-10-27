@@ -356,6 +356,71 @@ function openRoleModal(id, username, currentRole) {
     </div>
 </div>
 
+<!-- PENGATURAN DISCORD WEBHOOK NOTIFIKASI -->
+<div class="card shadow-sm mb-4 border-primary">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+        <span class="fw-bold">📢 Notifikasi & Backup Otomatis ke Discord</span>
+        <span class="badge <%= discordWebhookUrl ? 'bg-success' : 'bg-warning text-dark' %>">
+            <%= discordWebhookUrl ? '✅ Terhubung' : '⚠️ Belum Diatur' %>
+        </span>
+    </div>
+    <div class="card-body">
+        <form action="/master/settings/discord" method="POST" class="mb-3">
+            <label class="form-label fw-bold">Discord Webhook URL</label>
+            <div class="input-group">
+                <input type="url" name="webhook_url" id="discordWebhookInput" class="form-control" placeholder="https://discord.com/api/webhooks/..." value="<%= discordWebhookUrl %>" required>
+                <button type="submit" class="btn btn-primary">💾 Simpan URL</button>
+                <button type="button" class="btn btn-outline-success" id="btnTestDiscord" onclick="testDiscordWebhook()">🧪 Test Kirim</button>
+            </div>
+            <small class="text-muted d-block mt-1">Masukkan Webhook URL dari Channel Discord pribadi Anda untuk menerima rekap harian kasir & backup database.</small>
+        </form>
+
+        <div id="discordTestFeedback" class="alert d-none py-2 small mb-3"></div>
+
+        <div class="card bg-light border-0">
+            <div class="card-body p-3 small">
+                <h6 class="fw-bold mb-2">Cara Mendapatkan Webhook URL dari Discord:</h6>
+                <ol class="mb-0 ps-3">
+                    <li>Buka aplikasi Discord → buat / pilih <strong>Server Pribadi</strong> Anda.</li>
+                    <li>Klik kanan / tekan ikon gear pada channel tujuan (misal <code>#laporan-kasir</code>) → pilih <strong>Edit Channel</strong>.</li>
+                    <li>Pilih tab <strong>Integrations</strong> → klik <strong>Webhooks</strong> → <strong>New Webhook</strong>.</li>
+                    <li>Klik <strong>Copy Webhook URL</strong> lalu paste pada kolom di atas, lalu klik <strong>Simpan URL</strong>.</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+async function testDiscordWebhook() {
+    const btn = document.getElementById('btnTestDiscord');
+    const fb = document.getElementById('discordTestFeedback');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Menguji...';
+    fb.className = 'alert alert-info py-2 small';
+    fb.textContent = 'Menghubungi Discord...';
+    fb.classList.remove('d-none');
+
+    try {
+        const res = await fetch('/api/discord/test', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            fb.className = 'alert alert-success py-2 small';
+            fb.textContent = '✅ ' + data.message;
+        } else {
+            fb.className = 'alert alert-danger py-2 small';
+            fb.textContent = '❌ ' + data.message;
+        }
+    } catch (e) {
+        fb.className = 'alert alert-danger py-2 small';
+        fb.textContent = '❌ Error koneksi: ' + e.message;
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '🧪 Test Kirim';
+    }
+}
+</script>
+
 <div class="alert alert-warning">
     <small><strong>Catatan Phase 2:</strong> Semua Master hanya Owner. Karyawan tidak bisa akses - mereka hanya memakai dropdown di Penjualan/Pengeluaran yang sudah dinamis.</small>
 </div>

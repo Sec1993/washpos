@@ -9,6 +9,7 @@ const fs = require('fs');
 const multer = require('multer');
 const db = require('./database');
 const cloudSync = require('./cloudSync');
+const discord = require('./discord');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -633,13 +634,17 @@ function renderMaster(res, error = null, success = null) {
         db.all("SELECT * FROM workers ORDER BY id ASC", (err, workers) => {
             db.all("SELECT * FROM expense_categories ORDER BY name ASC", (err, expense_categories) => {
                 db.all("SELECT id, username, role FROM users ORDER BY id ASC", (err, users) => {
-                    res.render('master', {
-                        services: services || [],
-                        workers: workers || [],
-                        expense_categories: expense_categories || [],
-                        users: users || [],
-                        error,
-                        success
+                    db.get("SELECT value FROM settings WHERE key='discord_webhook_url'", (err, setRow) => {
+                        const discordWebhookUrl = setRow && setRow.value ? setRow.value : (process.env.DISCORD_WEBHOOK_URL || '');
+                        res.render('master', {
+                            services: services || [],
+                            workers: workers || [],
+                            expense_categories: expense_categories || [],
+                            users: users || [],
+                            discordWebhookUrl,
+                            error,
+                            success
+                        });
                     });
                 });
             });
@@ -803,6 +808,40 @@ app.post('/master/users/update-role', requireOwner, (req, res) => {
             res.redirect('/master');
         });
     });
+});
+
+// --- Pengaturan & Notifikasi Discord Webhook ---
+app.post('/master/settings/discord', requireOwner, (req, res) => {
+    const webhookUrl = (req.body.webhook_url || '').trim();
+    db.run("INSERT INTO settings (key, value) VALUES ('discord_webhook_url', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [webhookUrl], (err) => {
+        if (err) return renderMaster(res, 'Gagal menyimpan URL Webhook Discord: ' + err.message);
+        renderMaster(res, null, 'URL Webhook Discord berhasil disimpan!');
+    });
+});
+
+app.post('/api/discord/test', requireOwner, async (req, res) => {
+    try {
+        const sender = req.session.user ? req.session.user.username : 'Owner';
+        const result = await discord.sendDiscordTest(sender);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+app.post('/api/discord/send', requireAdminOrOwner, async (req, res) => {
+    try {
+        const { date, includeDb } = req.body;
+        const sender = req.session.user ? `${req.session.user.username} (${req.session.user.role})` : 'Kasir';
+        const result = await discord.sendDiscordReport({
+            date,
+            includeDb: includeDb === true || includeDb === 'true',
+            senderName: sender
+        });
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
 });
 
 // --- Akun Kas/Bank/QRIS (Owner kelola) ---

@@ -1,6 +1,11 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h2 class="mb-0">Modul Penjualan</h2>
-    <a href="/kas/kecil" class="badge bg-success fs-6 text-decoration-none" title="Klik lihat history Kas Kecil">Kas Kecil (Outlet): Rp <%= kasKecil.toLocaleString('id-ID') %> • Klik history</a>
+    <div class="d-flex gap-2 align-items-center">
+        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalDiscordReport">
+            📢 Tutup Kasir / Discord
+        </button>
+        <a href="/kas/kecil" class="badge bg-success fs-6 text-decoration-none" title="Klik lihat history Kas Kecil">Kas Kecil (Outlet): Rp <%= kasKecil.toLocaleString('id-ID') %> • Klik history</a>
+    </div>
 </div>
 <small class="text-muted d-block mb-3">Kas outlet real-time — setiap penjualan/pengeluaran mengubah Kas/QRIS terpilih. Karyawan: Kas Kecil & QRIS.</small>
 

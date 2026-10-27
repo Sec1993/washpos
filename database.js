@@ -180,6 +180,12 @@ db.serialize(() => {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
 
+    // 11. Settings table (Key-Value general store)
+    db.run(`CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT
+    )`);
+
     // Migration: foto nota pengeluaran
     db.run(`ALTER TABLE expenses ADD COLUMN photo TEXT`, (err) => {
         if (err && !err.message.includes('duplicate column')) {
