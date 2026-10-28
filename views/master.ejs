@@ -477,6 +477,37 @@ async function testDiscordWebhook() {
 }
 </script>
 
+<!-- CADANGAN & UNDUH DATABASE (pos.db) -->
+<div class="card shadow-sm mb-4 border-dark">
+    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+        <span class="fw-bold">💾 Cadangan Database SQLite (pos.db)</span>
+        <span class="badge bg-success">Auto-Synced Supabase Cloud</span>
+    </div>
+    <div class="card-body">
+        <p class="small text-muted mb-3">
+            Semua data riwayat transaksi penjualan kasir, pengeluaran, akun kas, master layanan, pekerja, dan komisi tersimpan permanen di dalam berkas database SQLite <code>pos.db</code>. Sistem WashPOS secara otomatis mencadangkan file ini ke Cloud Storage Supabase setiap kali ada transaksi dan saat penutupan server.
+        </p>
+
+        <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+            <a href="/master/backup/download" class="btn btn-dark btn-sm">
+                📥 Unduh File pos.db (Backup Terbaru)
+            </a>
+            <span class="badge bg-light text-dark border">
+                Ukuran file di server: <strong><%= typeof dbSizeStr !== 'undefined' ? dbSizeStr : 'Siap' %></strong>
+            </span>
+        </div>
+
+        <div class="alert alert-light border small mb-0">
+            <h6 class="fw-bold mb-1">Cara Melihat / Membuka Isi File pos.db:</h6>
+            <ol class="mb-0 ps-3">
+                <li>Klik tombol <strong>"Unduh File pos.db"</strong> di atas untuk menyimpan file cadangan ke komputer atau smartphone Anda.</li>
+                <li>Buka browser dan buka situs gratis: <a href="https://sqliteviewer.app/" target="_blank" class="fw-bold">sqliteviewer.app</a> atau gunakan software komputer <strong>DB Browser for SQLite</strong>.</li>
+                <li>Tarik (drag & drop) file <code>pos.db</code> yang baru Anda unduh ke situs tersebut. Semua data tabel transaksi (<code>sales</code>, <code>expenses</code>, <code>services</code>, <code>workers</code>) dapat Anda lihat dan telusuri layaknya tabel Excel.</li>
+            </ol>
+        </div>
+    </div>
+</div>
+
 <div class="alert alert-warning">
     <small><strong>Catatan Phase 2:</strong> Semua Master hanya Owner. Karyawan tidak bisa akses - mereka hanya memakai dropdown di Penjualan/Pengeluaran yang sudah dinamis.</small>
 </div>

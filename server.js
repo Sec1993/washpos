@@ -644,6 +644,13 @@ function renderMaster(res, error = null, success = null) {
                         const discordTimezone = settingsMap.discord_timezone || 'Asia/Makassar';
                         const discordLastReportDate = settingsMap.discord_last_auto_report_date || '';
 
+                        let dbSizeStr = '94 KB';
+                        const dbPath = path.resolve(__dirname, 'data', 'pos.db');
+                        if (fs.existsSync(dbPath)) {
+                            const stat = fs.statSync(dbPath);
+                            dbSizeStr = (stat.size / 1024).toFixed(1) + ' KB';
+                        }
+
                         res.render('master', {
                             services: services || [],
                             workers: workers || [],
@@ -654,6 +661,7 @@ function renderMaster(res, error = null, success = null) {
                             discordAutoSendTime,
                             discordTimezone,
                             discordLastReportDate,
+                            dbSizeStr,
                             error,
                             success
                         });
@@ -666,6 +674,15 @@ function renderMaster(res, error = null, success = null) {
 
 app.get('/master', requireOwner, (req, res) => {
     renderMaster(res);
+});
+
+app.get('/master/backup/download', requireOwner, (req, res) => {
+    const dbPath = path.resolve(__dirname, 'data', 'pos.db');
+    if (!fs.existsSync(dbPath)) {
+        return res.status(404).send('File pos.db belum ditemukan di server. <a href="/master">Kembali</a>');
+    }
+    const todayStr = new Date().toISOString().slice(0, 10);
+    res.download(dbPath, `pos_backup_${todayStr}.db`);
 });
 
 app.post('/master/services/add', requireOwner, (req, res) => {
