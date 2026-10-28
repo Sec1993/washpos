@@ -9,7 +9,7 @@ const fs = require('fs');
 const multer = require('multer');
 const db = require('./database');
 const cloudSync = require('./cloudSync');
-const discord = require('./discord');
+const telegram = require('./telegram');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -638,11 +638,12 @@ function renderMaster(res, error = null, success = null) {
                         const settingsMap = {};
                         (setRows || []).forEach(r => settingsMap[r.key] = r.value);
 
-                        const discordWebhookUrl = settingsMap.discord_webhook_url || (process.env.DISCORD_WEBHOOK_URL || '');
-                        const discordAutoSend = settingsMap.discord_auto_send !== '0';
-                        const discordAutoSendTime = settingsMap.discord_auto_send_time || '20:00';
-                        const discordTimezone = settingsMap.discord_timezone || 'Asia/Makassar';
-                        const discordLastReportDate = settingsMap.discord_last_auto_report_date || '';
+                        const telegramBotToken = settingsMap.telegram_bot_token || (process.env.TELEGRAM_BOT_TOKEN || '');
+                        const telegramChatId = settingsMap.telegram_chat_id || (process.env.TELEGRAM_CHAT_ID || '');
+                        const telegramAutoSend = settingsMap.telegram_auto_send !== '0';
+                        const telegramAutoSendTime = settingsMap.telegram_auto_send_time || '20:00';
+                        const telegramTimezone = settingsMap.telegram_timezone || 'Asia/Makassar';
+                        const telegramLastReportDate = settingsMap.telegram_last_auto_report_date || '';
 
                         let dbSizeStr = '94 KB';
                         const dbPath = path.resolve(__dirname, 'data', 'pos.db');
@@ -656,11 +657,12 @@ function renderMaster(res, error = null, success = null) {
                             workers: workers || [],
                             expense_categories: expense_categories || [],
                             users: users || [],
-                            discordWebhookUrl,
-                            discordAutoSend,
-                            discordAutoSendTime,
-                            discordTimezone,
-                            discordLastReportDate,
+                            telegramBotToken,
+                            telegramChatId,
+                            telegramAutoSend,
+                            telegramAutoSendTime,
+                            telegramTimezone,
+                            telegramLastReportDate,
                             dbSizeStr,
                             error,
                             success
@@ -839,54 +841,56 @@ app.post('/master/users/update-role', requireOwner, (req, res) => {
     });
 });
 
-// --- Pengaturan & Notifikasi Discord Webhook ---
-app.post('/master/settings/discord', requireOwner, (req, res) => {
-    const webhookUrl = (req.body.webhook_url || '').trim();
+// --- Pengaturan & Notifikasi Telegram Bot ---
+app.post('/master/settings/telegram', requireOwner, (req, res) => {
+    const botToken = (req.body.bot_token || '').trim();
+    const chatId = (req.body.chat_id || '').trim();
     const autoSend = (req.body.auto_send === 'on' || req.body.auto_send === '1') ? '1' : '0';
     const autoSendTime = (req.body.auto_send_time || '20:00').trim();
     const timezone = (req.body.timezone || 'Asia/Makassar').trim();
 
     db.serialize(() => {
-        db.run("INSERT INTO settings (key, value) VALUES ('discord_webhook_url', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [webhookUrl]);
-        db.run("INSERT INTO settings (key, value) VALUES ('discord_auto_send', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [autoSend]);
-        db.run("INSERT INTO settings (key, value) VALUES ('discord_auto_send_time', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [autoSendTime]);
-        db.run("INSERT INTO settings (key, value) VALUES ('discord_timezone', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [timezone], (err) => {
-            if (err) return renderMaster(res, 'Gagal menyimpan pengaturan Discord: ' + err.message);
-            renderMaster(res, null, 'Pengaturan Notifikasi & Jadwal Otomatis Discord berhasil disimpan!');
+        db.run("INSERT INTO settings (key, value) VALUES ('telegram_bot_token', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [botToken]);
+        db.run("INSERT INTO settings (key, value) VALUES ('telegram_chat_id', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [chatId]);
+        db.run("INSERT INTO settings (key, value) VALUES ('telegram_auto_send', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [autoSend]);
+        db.run("INSERT INTO settings (key, value) VALUES ('telegram_auto_send_time', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [autoSendTime]);
+        db.run("INSERT INTO settings (key, value) VALUES ('telegram_timezone', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [timezone], (err) => {
+            if (err) return renderMaster(res, 'Gagal menyimpan pengaturan Telegram: ' + err.message);
+            renderMaster(res, null, 'Pengaturan Notifikasi & Jadwal Otomatis Telegram berhasil disimpan!');
         });
     });
 });
 
 // Endpoint Cron Eksternal (bisa dipanggil dari cron-job.org / uptime monitor tepat jam 20:00)
-app.get('/api/cron/discord-daily', async (req, res) => {
+app.get('/api/cron/telegram-daily', async (req, res) => {
     try {
         const token = req.query.token;
         const validToken = process.env.CRON_SECRET || 'washpos_auto_report';
         if (token !== validToken) {
             return res.status(403).json({ success: false, message: 'Token cron tidak valid.' });
         }
-        const result = await discord.checkAndRunScheduledReport();
+        const result = await telegram.checkAndRunScheduledReport();
         res.json(result);
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }
 });
 
-app.post('/api/discord/test', requireOwner, async (req, res) => {
+app.post('/api/telegram/test', requireOwner, async (req, res) => {
     try {
         const sender = req.session.user ? req.session.user.username : 'Owner';
-        const result = await discord.sendDiscordTest(sender);
+        const result = await telegram.sendTelegramTest(sender);
         res.json(result);
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }
 });
 
-app.post('/api/discord/send', requireAdminOrOwner, async (req, res) => {
+app.post('/api/telegram/send', requireAdminOrOwner, async (req, res) => {
     try {
         const { date, includeDb } = req.body;
         const sender = req.session.user ? `${req.session.user.username} (${req.session.user.role})` : 'Kasir';
-        const result = await discord.sendDiscordReport({
+        const result = await telegram.sendTelegramReport({
             date,
             includeDb: includeDb === true || includeDb === 'true',
             senderName: sender
@@ -1271,17 +1275,17 @@ app.listen(PORT, '0.0.0.0', () => {
         });
     }, 3000);
 
-    // Scheduler Laporan Otomatis Discord Harian (Cek tiap 30 detik)
+    // Scheduler Laporan Otomatis Telegram Harian (Cek tiap 30 detik)
     setInterval(() => {
-        discord.checkAndRunScheduledReport().catch(e => {
-            console.error('[Discord Auto-Report Interval Error]', e.message);
+        telegram.checkAndRunScheduledReport().catch(e => {
+            console.error('[Telegram Auto-Report Interval Error]', e.message);
         });
     }, 30 * 1000);
 
     // Jalankan cek catch-up setelah server baru menyala (misal server baru bangun setelah jam tutup)
     setTimeout(() => {
-        discord.checkAndRunScheduledReport().catch(e => {
-            console.error('[Discord Initial Catch-Up Error]', e.message);
+        telegram.checkAndRunScheduledReport().catch(e => {
+            console.error('[Telegram Initial Catch-Up Error]', e.message);
         });
     }, 10 * 1000);
 });
