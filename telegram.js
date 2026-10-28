@@ -157,9 +157,10 @@ async function sendTelegramTest(senderName = 'Owner') {
                 : 'Pesan teks berhasil terkirim ke Telegram Anda!'
         };
     } catch (err) {
+        const detail = err.cause ? ` (${err.cause.message || err.cause.code || err.cause})` : '';
         return { 
             success: false, 
-            message: 'Gagal menghubungi Telegram: ' + err.message 
+            message: 'Gagal menghubungi Telegram: ' + err.message + detail 
         };
     }
 }
@@ -312,7 +313,8 @@ async function sendTelegramReport({ date, includeDb = true, senderName = 'Kasir'
 
         return { success: true, message: successMsg };
     } catch (err) {
-        return { success: false, message: 'Gagal mengirim ke Telegram: ' + err.message };
+        const detail = err.cause ? ` (${err.cause.message || err.cause.code || err.cause})` : '';
+        return { success: false, message: 'Gagal mengirim ke Telegram: ' + err.message + detail };
     }
 }
 
