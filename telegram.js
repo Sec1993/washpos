@@ -28,6 +28,84 @@ function getTelegramSettings() {
 }
 
 /**
+ * Helper untuk mengirim file dokumen fisik pos.db ke Telegram.
+ * 1. Ambil buffer fisik dari database lokal (data/pos.db).
+ * 2. Fallback: jika lokal tidak ada, unduh buffer dari Supabase Cloud Storage.
+ * 3. Kirim ke Telegram API sendDocument sebagai binary document (application/octet-stream).
+ */
+async function sendTelegramDocumentHelper(botToken, chatId, caption = '') {
+    const cleanToken = String(botToken || '').trim();
+    const cleanChatId = String(chatId || '').trim();
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const dbPath = path.resolve(__dirname, 'data', 'pos.db');
+    let fileBuffer = null;
+
+    // 1. Coba baca file buffer database lokal
+    if (fs.existsSync(dbPath)) {
+        try {
+            const buf = fs.readFileSync(dbPath);
+            if (buf && buf.length > 0) {
+                fileBuffer = buf;
+                console.log('[Telegram] Menggunakan berkas pos.db lokal (' + buf.length + ' bytes).');
+            }
+        } catch (err) {
+            console.warn('[Telegram] Gagal membaca pos.db lokal:', err.message);
+        }
+    }
+
+    // 2. Fallback: Unduh buffer pos.db dari Supabase Cloud jika lokal belum ada / error
+    if (!fileBuffer) {
+        try {
+            console.log('[Telegram] Mengambil berkas pos.db dari Supabase Cloud Storage...');
+            const cloudDbUrl = 'https://qhclkhpymihmlbmecpdv.supabase.co/storage/v1/object/public/washpos-photos/database/pos.db';
+            const sRes = await fetch(cloudDbUrl);
+            if (sRes.ok) {
+                const arrBuf = await sRes.arrayBuffer();
+                fileBuffer = Buffer.from(arrBuf);
+                console.log('[Telegram] Berhasil mengunduh pos.db dari cloud (' + fileBuffer.length + ' bytes).');
+            } else {
+                console.warn('[Telegram] Supabase download status:', sRes.status);
+            }
+        } catch (err) {
+            console.warn('[Telegram] Gagal mengunduh pos.db dari cloud:', err.message);
+        }
+    }
+
+    if (!fileBuffer || fileBuffer.length === 0) {
+        return { success: false, error: 'Berkas database pos.db tidak ditemukan di lokal maupun cloud.' };
+    }
+
+    // 3. Kirim dokumen via Telegram sendDocument multipart
+    try {
+        const blob = new Blob([fileBuffer], { type: 'application/octet-stream' });
+        const formData = new FormData();
+        formData.append('chat_id', cleanChatId);
+        if (caption) {
+            formData.append('caption', caption);
+            if (caption.includes('<')) {
+                formData.append('parse_mode', 'HTML');
+            }
+        }
+        formData.append('document', blob, `pos_backup_${todayStr}.db`);
+
+        const res = await fetch(`https://api.telegram.org/bot${cleanToken}/sendDocument`, {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) {
+            console.log('[Telegram] Dokumen pos.db berhasil terkirim ke chat:', cleanChatId);
+            return { success: true };
+        }
+        console.error('[Telegram] sendDocument error response:', data);
+        return { success: false, error: data.description || 'Gagal mengirim dokumen pos.db' };
+    } catch (err) {
+        console.error('[Telegram] sendDocument fetch error:', err.message);
+        return { success: false, error: err.message };
+    }
+}
+
+/**
  * Uji coba kirim pesan dari WashPOS ke Telegram.
  */
 async function sendTelegramTest(senderName = 'Owner') {
@@ -39,6 +117,9 @@ async function sendTelegramTest(senderName = 'Owner') {
         };
     }
 
+    const cleanToken = String(botToken).trim();
+    const cleanChatId = String(chatId).trim();
+
     const text = `🧪 <b>Uji Coba Koneksi Telegram Bot</b>\n\n` +
         `Koneksi antara server <b>WashPOS</b> dan Telegram Anda <b>berhasil terhubung</b> dengan baik!\n\n` +
         `• <b>Status</b>: ✅ Aktif & Siap Menerima Laporan & Backup File\n` +
@@ -47,12 +128,12 @@ async function sendTelegramTest(senderName = 'Owner') {
         `<i>WashPOS Cloud System</i>`;
 
     try {
-        const endpoint = `https://api.telegram.org/bot${botToken}/sendMessage`;
+        const endpoint = `https://api.telegram.org/bot${cleanToken}/sendMessage`;
         const res = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                chat_id: chatId,
+                chat_id: cleanChatId,
                 text: text,
                 parse_mode: 'HTML'
             })
@@ -66,9 +147,14 @@ async function sendTelegramTest(senderName = 'Owner') {
             };
         }
 
+        // Kirim berkas pos.db sekaligus saat tes!
+        const docResult = await sendTelegramDocumentHelper(cleanToken, cleanChatId, '🧪 Uji Coba Lampiran File Database pos.db');
+
         return { 
             success: true, 
-            message: 'Pesan uji coba berhasil terkirim ke Telegram Anda!' 
+            message: docResult.success 
+                ? 'Pesan uji coba & berkas pos.db berhasil terkirim ke Telegram Anda!' 
+                : 'Pesan teks berhasil terkirim ke Telegram Anda!'
         };
     } catch (err) {
         return { 
@@ -205,37 +291,24 @@ async function sendTelegramReport({ date, includeDb = true, senderName = 'Kasir'
         }
 
         // 2. Jika opsi includeDb aktif: kirim file fisik pos.db langsung sebagai dokumen!
-        const dbPath = path.join(__dirname, 'data', 'pos.db');
         let fileSent = false;
-        if (includeDb && fs.existsSync(dbPath)) {
-            try {
-                const formData = new FormData();
-                formData.append('chat_id', chatId);
-                formData.append('caption', `💾 <b>Backup Database SQLite (pos.db) — ${targetDate}</b>\n<i>Berkas arsip cadangan data seluruh transaksi & master.</i>`);
-                formData.append('parse_mode', 'HTML');
-
-                const fileBuffer = fs.readFileSync(dbPath);
-                const blob = new Blob([fileBuffer], { type: 'application/x-sqlite3' });
-                formData.append('document', blob, `pos_backup_${targetDate}.db`);
-
-                const docRes = await fetch(`https://api.telegram.org/bot${botToken}/sendDocument`, {
-                    method: 'POST',
-                    body: formData
-                });
-                const docData = await docRes.json();
-                if (docRes.ok && docData.ok) {
-                    fileSent = true;
-                } else {
-                    console.warn('[Telegram] Gagal mengirim dokumen pos.db:', docData.description);
-                }
-            } catch (fileErr) {
-                console.error('[Telegram] Error kirim dokumen file pos.db:', fileErr.message);
+        let fileError = null;
+        if (includeDb) {
+            const docResult = await sendTelegramDocumentHelper(
+                botToken, 
+                chatId, 
+                `💾 <b>Backup Database SQLite (pos.db) — ${targetDate}</b>\n<i>Berkas arsip cadangan data seluruh transaksi & master.</i>`
+            );
+            if (docResult.success) {
+                fileSent = true;
+            } else {
+                fileError = docResult.error;
             }
         }
 
         const successMsg = fileSent
             ? `Laporan tanggal ${targetDate} & berkas fisik pos.db berhasil dikirim ke Telegram!`
-            : `Laporan tanggal ${targetDate} berhasil dikirim ke Telegram!`;
+            : (fileError ? `Laporan tanggal ${targetDate} terkirim (file: ${fileError})` : `Laporan tanggal ${targetDate} berhasil dikirim ke Telegram!`);
 
         return { success: true, message: successMsg };
     } catch (err) {
