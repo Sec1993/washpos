@@ -198,6 +198,14 @@ async function sendDiscordReport({ date, includeDb = false, senderName = 'Kasir'
         fields.push({ name: '👥 Pengerjaan Pencuci', value: workerStr, inline: false });
     }
 
+    if (includeDb) {
+        fields.push({
+            name: '💾 Backup Database SQLite (pos.db)',
+            value: '[📥 Klik Unduh Backup pos.db (Cloud Supabase)](https://qhclkhpymihmlbmecpdv.supabase.co/storage/v1/object/public/washpos-photos/database/pos.db)\n*(Tersinkronisasi otomatis & dapat diunduh kapan saja)*',
+            inline: false
+        });
+    }
+
     const payload = {
         username: 'WashPOS Bot',
         avatar_url: 'https://cdn-icons-png.flaticon.com/512/3003/3003984.png',
@@ -230,19 +238,10 @@ async function sendDiscordReport({ date, includeDb = false, senderName = 'Kasir'
             };
         } else {
             // Jalur proxy Cloud hanya menerima format JSON murni
-            const finalPayload = JSON.parse(JSON.stringify(payload));
-            if (shouldAttachDb && isProxy) {
-                finalPayload.embeds[0].fields.push({
-                    name: '💾 Backup Database SQLite',
-                    value: 'File database `pos.db` tersimpan aman di server dan dapat diunduh kapan saja di menu **Master > Backup Database** (Jalur proxy cloud khusus mengirim teks & angka rekap kasir).',
-                    inline: false
-                });
-            }
-
             return {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(finalPayload)
+                body: JSON.stringify(payload)
             };
         }
     });
