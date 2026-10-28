@@ -366,15 +366,50 @@ function openRoleModal(id, username, currentRole) {
     </div>
     <div class="card-body">
         <form action="/master/settings/discord" method="POST" class="mb-3">
-            <label class="form-label fw-bold">Discord Webhook URL</label>
-            <div class="input-group">
-                <input type="url" name="webhook_url" id="discordWebhookInput" class="form-control" placeholder="https://discord.com/api/webhooks/..." value="<%= discordWebhookUrl %>" required>
-                <button type="submit" class="btn btn-primary">💾 Simpan URL</button>
-                <button type="button" class="btn btn-outline-success" id="btnTestDiscord" onclick="testDiscordWebhook()">🧪 Test Kirim</button>
+            <div class="mb-3">
+                <label class="form-label fw-bold">Discord Webhook URL</label>
+                <div class="input-group">
+                    <input type="url" name="webhook_url" id="discordWebhookInput" class="form-control" placeholder="https://discord.com/api/webhooks/..." value="<%= discordWebhookUrl %>" required>
+                    <button type="submit" class="btn btn-primary">💾 Simpan Pengaturan</button>
+                    <button type="button" class="btn btn-outline-success" id="btnTestDiscord" onclick="testDiscordWebhook()">🧪 Test Kirim</button>
+                </div>
+                <div class="d-flex flex-wrap justify-content-between align-items-center mt-1 gap-2">
+                    <small class="text-muted">Webhook URL dari Channel Discord pribadi Anda untuk menerima rekap harian kasir & backup database.</small>
+                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold" onclick="toggleAntiBlockUrl()">⚡ Gunakan / Alihkan Jalur Anti-Blokir Cloud</button>
+                </div>
             </div>
-            <div class="d-flex flex-wrap justify-content-between align-items-center mt-1 gap-2">
-                <small class="text-muted">Masukkan Webhook URL dari Channel Discord pribadi Anda untuk menerima rekap harian kasir & backup database.</small>
-                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold" onclick="toggleAntiBlockUrl()">⚡ Gunakan / Alihkan Jalur Anti-Blokir Cloud</button>
+
+            <!-- JADWAL OTOMATIS PENUTUPAN KASIR -->
+            <div class="border rounded p-3 bg-light mb-3">
+                <div class="d-flex flex-wrap justify-content-between align-items-center mb-2 gap-2">
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" name="auto_send" id="autoSendSwitch" value="1" <%= (typeof discordAutoSend === 'undefined' || discordAutoSend) ? 'checked' : '' %>>
+                        <label class="form-check-label fw-bold" for="autoSendSwitch">Kirim Laporan Harian Otomatis (Tanpa Perlu Tutup Kasir Manual)</label>
+                    </div>
+                    <span class="badge <%= (typeof discordLastReportDate !== 'undefined' && discordLastReportDate === new Date().toISOString().slice(0, 10)) ? 'bg-success' : 'bg-secondary' %>">
+                        <%= (typeof discordLastReportDate !== 'undefined' && discordLastReportDate === new Date().toISOString().slice(0, 10)) ? '✅ Laporan Hari Ini Sudah Terkirim' : '⏳ Menunggu Jadwal Jam Tutup' %>
+                    </span>
+                </div>
+                <div class="row g-2 align-items-center">
+                    <div class="col-md-4">
+                        <label class="form-label small mb-1 fw-bold">Jam Pengiriman Otomatis</label>
+                        <input type="time" name="auto_send_time" class="form-control form-control-sm" value="<%= typeof discordAutoSendTime !== 'undefined' && discordAutoSendTime ? discordAutoSendTime : '20:00' %>" required>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label small mb-1 fw-bold">Zona Waktu Outlet</label>
+                        <select name="timezone" class="form-select form-select-sm">
+                            <option value="Asia/Makassar" <%= (typeof discordTimezone !== 'undefined' && discordTimezone === 'Asia/Makassar') ? 'selected' : '' %>>WITA (Makassar, Bali, dll)</option>
+                            <option value="Asia/Jakarta" <%= (typeof discordTimezone !== 'undefined' && discordTimezone === 'Asia/Jakarta') ? 'selected' : '' %>>WIB (Jakarta, Jawa, Sumatera)</option>
+                            <option value="Asia/Jayapura" <%= (typeof discordTimezone !== 'undefined' && discordTimezone === 'Asia/Jayapura') ? 'selected' : '' %>>WIT (Papua, Maluku)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button type="submit" class="btn btn-sm btn-dark w-100">Simpan Jadwal</button>
+                    </div>
+                </div>
+                <small class="text-muted d-block mt-2">
+                    💡 Setiap hari saat waktu mencapai jam yang ditentukan, server otomatis merangkum omset kasir, komisi, dan pengeluaran lalu mengirimkannya langsung ke Discord Anda.
+                </small>
             </div>
         </form>
 

@@ -634,14 +634,26 @@ function renderMaster(res, error = null, success = null) {
         db.all("SELECT * FROM workers ORDER BY id ASC", (err, workers) => {
             db.all("SELECT * FROM expense_categories ORDER BY name ASC", (err, expense_categories) => {
                 db.all("SELECT id, username, role FROM users ORDER BY id ASC", (err, users) => {
-                    db.get("SELECT value FROM settings WHERE key='discord_webhook_url'", (err, setRow) => {
-                        const discordWebhookUrl = setRow && setRow.value ? setRow.value : (process.env.DISCORD_WEBHOOK_URL || '');
+                    db.all("SELECT key, value FROM settings", (err, setRows) => {
+                        const settingsMap = {};
+                        (setRows || []).forEach(r => settingsMap[r.key] = r.value);
+
+                        const discordWebhookUrl = settingsMap.discord_webhook_url || (process.env.DISCORD_WEBHOOK_URL || '');
+                        const discordAutoSend = settingsMap.discord_auto_send !== '0';
+                        const discordAutoSendTime = settingsMap.discord_auto_send_time || '20:00';
+                        const discordTimezone = settingsMap.discord_timezone || 'Asia/Makassar';
+                        const discordLastReportDate = settingsMap.discord_last_auto_report_date || '';
+
                         res.render('master', {
                             services: services || [],
                             workers: workers || [],
                             expense_categories: expense_categories || [],
                             users: users || [],
                             discordWebhookUrl,
+                            discordAutoSend,
+                            discordAutoSendTime,
+                            discordTimezone,
+                            discordLastReportDate,
                             error,
                             success
                         });
@@ -813,10 +825,34 @@ app.post('/master/users/update-role', requireOwner, (req, res) => {
 // --- Pengaturan & Notifikasi Discord Webhook ---
 app.post('/master/settings/discord', requireOwner, (req, res) => {
     const webhookUrl = (req.body.webhook_url || '').trim();
-    db.run("INSERT INTO settings (key, value) VALUES ('discord_webhook_url', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [webhookUrl], (err) => {
-        if (err) return renderMaster(res, 'Gagal menyimpan URL Webhook Discord: ' + err.message);
-        renderMaster(res, null, 'URL Webhook Discord berhasil disimpan!');
+    const autoSend = (req.body.auto_send === 'on' || req.body.auto_send === '1') ? '1' : '0';
+    const autoSendTime = (req.body.auto_send_time || '20:00').trim();
+    const timezone = (req.body.timezone || 'Asia/Makassar').trim();
+
+    db.serialize(() => {
+        db.run("INSERT INTO settings (key, value) VALUES ('discord_webhook_url', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [webhookUrl]);
+        db.run("INSERT INTO settings (key, value) VALUES ('discord_auto_send', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [autoSend]);
+        db.run("INSERT INTO settings (key, value) VALUES ('discord_auto_send_time', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [autoSendTime]);
+        db.run("INSERT INTO settings (key, value) VALUES ('discord_timezone', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [timezone], (err) => {
+            if (err) return renderMaster(res, 'Gagal menyimpan pengaturan Discord: ' + err.message);
+            renderMaster(res, null, 'Pengaturan Notifikasi & Jadwal Otomatis Discord berhasil disimpan!');
+        });
     });
+});
+
+// Endpoint Cron Eksternal (bisa dipanggil dari cron-job.org / uptime monitor tepat jam 20:00)
+app.get('/api/cron/discord-daily', async (req, res) => {
+    try {
+        const token = req.query.token;
+        const validToken = process.env.CRON_SECRET || 'washpos_auto_report';
+        if (token !== validToken) {
+            return res.status(403).json({ success: false, message: 'Token cron tidak valid.' });
+        }
+        const result = await discord.checkAndRunScheduledReport();
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
 });
 
 app.post('/api/discord/test', requireOwner, async (req, res) => {
@@ -1217,5 +1253,19 @@ app.listen(PORT, '0.0.0.0', () => {
             console.log("Self-test Error: " + err.message);
         });
     }, 3000);
+
+    // Scheduler Laporan Otomatis Discord Harian (Cek tiap 30 detik)
+    setInterval(() => {
+        discord.checkAndRunScheduledReport().catch(e => {
+            console.error('[Discord Auto-Report Interval Error]', e.message);
+        });
+    }, 30 * 1000);
+
+    // Jalankan cek catch-up setelah server baru menyala (misal server baru bangun setelah jam tutup)
+    setTimeout(() => {
+        discord.checkAndRunScheduledReport().catch(e => {
+            console.error('[Discord Initial Catch-Up Error]', e.message);
+        });
+    }, 10 * 1000);
 });
 

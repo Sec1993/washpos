@@ -38,7 +38,7 @@
                                     <input class="form-check-input layanan-check" type="checkbox" name="service_names" value="<%= s.name %>" data-price="<%= s.price %>" data-commission="<%= s.commission || 0 %>" id="svc_<%= s.id %>" onchange="updatePriceMulti()">
                                     <label class="form-check-label d-flex justify-content-between w-100" for="svc_<%= s.id %>">
                                         <span><%= s.name %></span>
-                                        <small class="text-muted">Rp <%= s.price.toLocaleString('id-ID') %> <% if(s.commission){ %><span class="badge bg-light text-success border ms-1">Komisi: Rp <%= s.commission.toLocaleString('id-ID') %></span><% } %></small>
+                                        <small class="text-muted">Rp <%= s.price.toLocaleString('id-ID') %></small>
                                     </label>
                                 </div>
                             <% }) %>

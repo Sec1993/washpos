@@ -33,7 +33,7 @@ async function postWithProxyFallback(url, optionsBuilder) {
         const targetUrl = urls[i];
         const isFallback = i > 0;
         try {
-            const reqOptions = optionsBuilder();
+            const reqOptions = optionsBuilder(isFallback, targetUrl);
             reqOptions.headers = reqOptions.headers || {};
             reqOptions.headers['User-Agent'] = DISCORD_USER_AGENT;
 
@@ -214,8 +214,11 @@ async function sendDiscordReport({ date, includeDb = false, senderName = 'Kasir'
     const dbPath = path.join(__dirname, 'data', 'pos.db');
     const shouldAttachDb = includeDb && fs.existsSync(dbPath);
 
-    return await postWithProxyFallback(webhookUrl, () => {
-        if (shouldAttachDb) {
+    return await postWithProxyFallback(webhookUrl, (isFallback, targetUrl) => {
+        const isProxy = isFallback || (targetUrl && targetUrl.includes('webhook.lewisakura.moe'));
+
+        // Jalur direct Discord bisa multipart/form-data jika ada file db
+        if (shouldAttachDb && !isProxy) {
             const formData = new FormData();
             formData.append('payload_json', JSON.stringify(payload));
             const fileBuffer = fs.readFileSync(dbPath);
@@ -226,17 +229,94 @@ async function sendDiscordReport({ date, includeDb = false, senderName = 'Kasir'
                 body: formData
             };
         } else {
+            // Jalur proxy Cloud hanya menerima format JSON murni
+            const finalPayload = JSON.parse(JSON.stringify(payload));
+            if (shouldAttachDb && isProxy) {
+                finalPayload.embeds[0].fields.push({
+                    name: '💾 Backup Database SQLite',
+                    value: 'File database `pos.db` tersimpan aman di server dan dapat diunduh kapan saja di menu **Master > Backup Database** (Jalur proxy cloud khusus mengirim teks & angka rekap kasir).',
+                    inline: false
+                });
+            }
+
             return {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(finalPayload)
             };
         }
+    });
+}
+
+/**
+ * Pengecekan dan eksekusi otomatis pengiriman laporan Discord harian (misal setiap jam 20:00).
+ */
+async function checkAndRunScheduledReport() {
+    return new Promise((resolve) => {
+        db.all("SELECT key, value FROM settings WHERE key IN ('discord_webhook_url', 'discord_auto_send', 'discord_auto_send_time', 'discord_timezone', 'discord_last_auto_report_date')", async (err, rows) => {
+            if (err) return resolve({ success: false, skipped: true, reason: err.message });
+
+            const settings = {};
+            (rows || []).forEach(r => settings[r.key] = r.value);
+
+            const webhookUrl = settings.discord_webhook_url || process.env.DISCORD_WEBHOOK_URL;
+            if (!webhookUrl) return resolve({ success: false, skipped: true, reason: 'Webhook URL belum diatur' });
+
+            const isAutoSend = settings.discord_auto_send !== '0';
+            if (!isAutoSend) return resolve({ success: false, skipped: true, reason: 'Pengiriman otomatis dinonaktifkan' });
+
+            const targetTime = settings.discord_auto_send_time || '20:00';
+            const tz = settings.discord_timezone || 'Asia/Makassar';
+
+            const now = new Date();
+            const timeStr = new Intl.DateTimeFormat('id-ID', {
+                timeZone: tz,
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            }).format(now).replace('.', ':');
+
+            const dateStr = new Intl.DateTimeFormat('en-CA', {
+                timeZone: tz,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            }).format(now);
+
+            const lastSentDate = settings.discord_last_auto_report_date || '';
+
+            if (lastSentDate === dateStr) {
+                return resolve({ success: true, skipped: true, reason: `Laporan hari ini (${dateStr}) sudah pernah terkirim` });
+            }
+
+            if (timeStr < targetTime) {
+                return resolve({ success: true, skipped: true, reason: `Belum masuk jam target (sekarang: ${timeStr}, target: ${targetTime})` });
+            }
+
+            const tzLabel = tz.includes('Makassar') ? 'WITA' : (tz.includes('Jayapura') ? 'WIT' : 'WIB');
+            console.log(`[Discord Auto-Report] Waktu ${timeStr} mencapai jadwal ${targetTime} (${tzLabel}). Mengirim laporan otomatis tanggal ${dateStr}...`);
+
+            const result = await sendDiscordReport({
+                date: dateStr,
+                includeDb: true,
+                senderName: `Sistem Otomatis (Penutupan ${targetTime} ${tzLabel})`
+            });
+
+            if (result.success) {
+                db.run("INSERT INTO settings (key, value) VALUES ('discord_last_auto_report_date', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [dateStr]);
+                console.log(`[Discord Auto-Report] Berhasil mengirim laporan harian otomatis tanggal ${dateStr}`);
+            } else {
+                console.error(`[Discord Auto-Report] Gagal mengirim: ${result.message}`);
+            }
+
+            resolve(result);
+        });
     });
 }
 
 module.exports = {
     getWebhookUrl,
     sendDiscordTest,
-    sendDiscordReport
+    sendDiscordReport,
+    checkAndRunScheduledReport
 };
