@@ -184,7 +184,21 @@ db.serialize(() => {
     db.run(`CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
         value TEXT
-    )`);
+    )`, () => {
+        // Seed default shop profile settings
+        const defaultSettings = [
+            ['shop_name', 'Prime Motowash'],
+            ['shop_slogan', 'Professional Motor & Car Wash'],
+            ['shop_address', ''],
+            ['shop_phone', ''],
+            ['receipt_footer', 'Terima kasih atas kunjungan Anda!'],
+            ['receipt_show_logo', '1'],
+            ['shop_logo', '/img/logo.png']
+        ];
+        defaultSettings.forEach(([k, v]) => {
+            db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)`, [k, v]);
+        });
+    });
 
     // Migration: foto nota pengeluaran
     db.run(`ALTER TABLE expenses ADD COLUMN photo TEXT`, (err) => {

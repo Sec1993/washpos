@@ -12,7 +12,7 @@ function escapeHtml(str) {
 
 function getTelegramSettings() {
     return new Promise((resolve) => {
-        db.all("SELECT key, value FROM settings WHERE key IN ('telegram_bot_token', 'telegram_chat_id', 'telegram_auto_send', 'telegram_auto_send_time', 'telegram_timezone', 'telegram_last_auto_report_date')", (err, rows) => {
+        db.all("SELECT key, value FROM settings WHERE key IN ('telegram_bot_token', 'telegram_chat_id', 'telegram_auto_send', 'telegram_auto_send_time', 'telegram_timezone', 'telegram_last_auto_report_date', 'shop_name')", (err, rows) => {
             const map = {};
             (rows || []).forEach(r => map[r.key] = r.value);
             resolve({
@@ -21,7 +21,8 @@ function getTelegramSettings() {
                 autoSend: map.telegram_auto_send !== '0',
                 autoSendTime: map.telegram_auto_send_time || '20:00',
                 timezone: map.telegram_timezone || 'Asia/Makassar',
-                lastReportDate: map.telegram_last_auto_report_date || ''
+                lastReportDate: map.telegram_last_auto_report_date || '',
+                shopName: map.shop_name || 'Prime Motowash'
             });
         });
     });
@@ -169,7 +170,7 @@ async function sendTelegramTest(senderName = 'Owner') {
  * Mengirim laporan rekap kasir harian + melampirkan berkas fisik pos.db langsung ke Telegram.
  */
 async function sendTelegramReport({ date, includeDb = true, senderName = 'Kasir' }) {
-    const { botToken, chatId } = await getTelegramSettings();
+    const { botToken, chatId, shopName } = await getTelegramSettings();
     if (!botToken || !chatId) {
         return { 
             success: false, 
@@ -178,6 +179,7 @@ async function sendTelegramReport({ date, includeDb = true, senderName = 'Kasir'
     }
 
     const targetDate = date || new Date().toISOString().slice(0, 10);
+    const brandName = shopName || 'Prime Motowash';
 
     // Query data transaksi harian
     const reportData = await new Promise((resolve) => {
@@ -260,7 +262,7 @@ async function sendTelegramReport({ date, includeDb = true, senderName = 'Kasir'
     }
 
     let reportMsg = `📊 <b>LAPORAN KASIR HARIAN — ${targetDate}</b>\n` +
-        `<i>Penutupan kasir outlet WashPOS per tanggal ${targetDate}</i>\n\n` +
+        `<i>Penutupan kasir outlet ${escapeHtml(brandName)} per tanggal ${targetDate}</i>\n\n` +
         `🛵 <b>Total Motor Dicuci</b>: <b>${totalMotor} unit</b>\n` +
         `💰 <b>Total Omset</b>: <b>Rp ${totalOmzet.toLocaleString('id-ID')}</b>\n\n` +
         `💳 <b>Rincian Pembayaran</b>:\n${payDetailStr}\n\n` +
@@ -269,7 +271,7 @@ async function sendTelegramReport({ date, includeDb = true, senderName = 'Kasir'
         `🏢 <b>Porsi Bersih Toko</b>: <b>Rp ${netOutlet.toLocaleString('id-ID')}</b>\n` +
         `💵 <b>Saldo Fisik Kasir (Kas Kecil)</b>: <b>Rp ${saldoKasKecil.toLocaleString('id-ID')}</b>\n\n` +
         `👥 <b>Pengerjaan Pencuci</b>:\n${workerStr}\n\n` +
-        `<i>WashPOS Cloud System • Pengirim: ${escapeHtml(senderName)}</i>`;
+        `<i>${escapeHtml(brandName)} Cloud System • Pengirim: ${escapeHtml(senderName)}</i>`;
 
     try {
         // 1. Kirim pesan ringkasan teks

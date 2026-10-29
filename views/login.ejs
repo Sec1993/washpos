@@ -1,23 +1,27 @@
-<div class="row justify-content-center mt-5">
-    <div class="col-md-4">
-        <div class="card shadow">
-            <div class="card-header text-center bg-primary text-white">
-                <h4>Login WashPOS</h4>
+<div class="row justify-content-center mt-4">
+    <div class="col-md-5 col-lg-4">
+        <div class="card shadow-lg border-0 rounded-3 overflow-hidden">
+            <div class="card-header text-center bg-primary text-white py-4">
+                <div class="bg-white rounded-3 p-2 d-inline-block mb-2 shadow-sm" style="min-width: 130px;">
+                    <img src="<%= (typeof shopSettings !== 'undefined' && shopSettings.shop_logo) ? shopSettings.shop_logo : '/img/logo.png' %>" alt="Logo" class="img-fluid" style="max-height: 65px; object-fit: contain;" onerror="this.style.display='none'">
+                </div>
+                <h4 class="mb-0 fw-bold"><%= (typeof shopSettings !== 'undefined' && shopSettings.shop_name) ? shopSettings.shop_name : 'Prime Motowash' %></h4>
+                <small class="text-white-50"><%= (typeof shopSettings !== 'undefined' && shopSettings.shop_slogan) ? shopSettings.shop_slogan : 'POS Kasir & Manajemen Cuci' %></small>
             </div>
-            <div class="card-body">
+            <div class="card-body p-4">
                 <% if (error) { %>
-                    <div class="alert alert-danger"><%= error %></div>
+                    <div class="alert alert-danger py-2 small"><%= error %></div>
                 <% } %>
                 <form action="/login" method="POST">
                     <div class="mb-3">
-                        <label>Username</label>
-                        <input type="text" name="username" class="form-control" required>
+                        <label class="form-label small fw-bold">Username</label>
+                        <input type="text" name="username" class="form-control" placeholder="Masukkan username" required autofocus>
                     </div>
                     <div class="mb-3">
-                        <label>Password</label>
-                        <input type="password" name="password" class="form-control" required>
+                        <label class="form-label small fw-bold">Password</label>
+                        <input type="password" name="password" class="form-control" placeholder="Masukkan password" required>
                     </div>
-                    <button type="submit" class="btn btn-primary w-100">Login</button>
+                    <button type="submit" class="btn btn-primary w-100 fw-bold py-2 shadow-sm">Masuk ke Kasir</button>
                 </form>
             </div>
         </div>

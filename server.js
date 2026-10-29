@@ -158,10 +158,33 @@ async function uploadToSupabase(filePath, remoteFileName, mimeType) {
 // Healthcheck untuk Railway
 app.get('/health', (req, res) => res.status(200).send('OK'));
 
-// Pass user + loginTime to all views
+// Cached Shop Settings (Header, Footer, Logo, Slogan)
+const cachedShopSettings = {
+    shop_name: 'Prime Motowash',
+    shop_slogan: 'Professional Motor & Car Wash',
+    shop_address: '',
+    shop_phone: '',
+    receipt_footer: 'Terima kasih atas kunjungan Anda!',
+    receipt_show_logo: '1',
+    shop_logo: '/img/logo.png'
+};
+
+function refreshShopSettings() {
+    db.all("SELECT key, value FROM settings WHERE key LIKE 'shop_%' OR key LIKE 'receipt_%'", (err, rows) => {
+        if (!err && rows) {
+            rows.forEach(r => {
+                cachedShopSettings[r.key] = r.value;
+            });
+        }
+    });
+}
+refreshShopSettings();
+
+// Pass user + loginTime + shopSettings to all views
 app.use((req, res, next) => {
     res.locals.user = req.session.user;
     res.locals.loginTime = req.session.loginTime || null;
+    res.locals.shopSettings = cachedShopSettings;
     next();
 });
 
@@ -458,8 +481,25 @@ app.get('/receipt/:id', requireAdminOrOwner, (req, res) => {
     const saleId = req.params.id;
     db.get("SELECT * FROM sales WHERE id = ?", [saleId], (err, sale) => {
         if (err || !sale) return res.send('Transaksi tidak ditemukan.');
-        res.render('receipt', { sale });
+        res.render('receipt', { sale, shopSettings: cachedShopSettings, isPreview: false });
     });
+});
+
+// Route - Receipt Preview (Mode Pratinjau Desain Struk untuk Owner)
+app.get('/receipt-preview', requireOwner, (req, res) => {
+    const dummySale = {
+        id: 101,
+        date: new Date().toISOString(),
+        customer_name: 'Budi Santoso',
+        license_plate: 'DD 1234 AB',
+        worker_name: 'Agus',
+        service_name: 'Cuci Motor Besar, Poles Helm',
+        price: 35000,
+        akun_kas: 'Kas Kecil (Tunai)',
+        admin_name: req.session.user ? req.session.user.username : 'owner',
+        phone: '081234567890'
+    };
+    res.render('receipt', { sale: dummySale, shopSettings: cachedShopSettings, isPreview: true });
 });
 
 // Routes - Expenses (Phase 4 formal: filter tanggal, search, pagination + foto + stok integrasi 5.4)
@@ -638,6 +678,14 @@ function renderMaster(res, error = null, success = null) {
                         const settingsMap = {};
                         (setRows || []).forEach(r => settingsMap[r.key] = r.value);
 
+                        const shopName = settingsMap.shop_name || 'Prime Motowash';
+                        const shopSlogan = settingsMap.shop_slogan || 'Professional Motor & Car Wash';
+                        const shopAddress = settingsMap.shop_address || '';
+                        const shopPhone = settingsMap.shop_phone || '';
+                        const receiptFooter = settingsMap.receipt_footer || 'Terima kasih atas kunjungan Anda!';
+                        const receiptShowLogo = settingsMap.receipt_show_logo !== '0';
+                        const shopLogo = settingsMap.shop_logo || '/img/logo.png';
+
                         const telegramBotToken = settingsMap.telegram_bot_token || (process.env.TELEGRAM_BOT_TOKEN || '');
                         const telegramChatId = settingsMap.telegram_chat_id || (process.env.TELEGRAM_CHAT_ID || '');
                         const telegramAutoSend = settingsMap.telegram_auto_send !== '0';
@@ -657,6 +705,13 @@ function renderMaster(res, error = null, success = null) {
                             workers: workers || [],
                             expense_categories: expense_categories || [],
                             users: users || [],
+                            shopName,
+                            shopSlogan,
+                            shopAddress,
+                            shopPhone,
+                            receiptFooter,
+                            receiptShowLogo,
+                            shopLogo,
                             telegramBotToken,
                             telegramChatId,
                             telegramAutoSend,
@@ -837,6 +892,31 @@ app.post('/master/users/update-role', requireOwner, (req, res) => {
         db.run("UPDATE users SET role = ? WHERE id = ?", [role, targetId], (err) => {
             if (err) return renderMaster(res, 'Gagal mengubah role: ' + err.message);
             res.redirect('/master');
+        });
+    });
+});
+
+// --- Pengaturan Profil Usaha & Kustomisasi Header/Footer Struk ---
+app.post('/master/settings/shop', requireOwner, (req, res) => {
+    const shopName = (req.body.shop_name || 'Prime Motowash').trim();
+    const shopSlogan = (req.body.shop_slogan || '').trim();
+    const shopAddress = (req.body.shop_address || '').trim();
+    const shopPhone = (req.body.shop_phone || '').trim();
+    const receiptFooter = (req.body.receipt_footer || 'Terima kasih atas kunjungan Anda!').trim();
+    const receiptShowLogo = (req.body.receipt_show_logo === '1' || req.body.receipt_show_logo === 'on') ? '1' : '0';
+    const shopLogo = (req.body.shop_logo || '/img/logo.png').trim();
+
+    db.serialize(() => {
+        db.run("INSERT INTO settings (key, value) VALUES ('shop_name', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [shopName]);
+        db.run("INSERT INTO settings (key, value) VALUES ('shop_slogan', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [shopSlogan]);
+        db.run("INSERT INTO settings (key, value) VALUES ('shop_address', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [shopAddress]);
+        db.run("INSERT INTO settings (key, value) VALUES ('shop_phone', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [shopPhone]);
+        db.run("INSERT INTO settings (key, value) VALUES ('receipt_footer', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [receiptFooter]);
+        db.run("INSERT INTO settings (key, value) VALUES ('receipt_show_logo', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [receiptShowLogo]);
+        db.run("INSERT INTO settings (key, value) VALUES ('shop_logo', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [shopLogo], (err) => {
+            if (err) return renderMaster(res, 'Gagal menyimpan profil usaha: ' + err.message);
+            refreshShopSettings();
+            renderMaster(res, null, 'Profil Usaha & Pengaturan Header/Footer Struk berhasil disimpan!');
         });
     });
 });
