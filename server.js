@@ -161,7 +161,7 @@ app.get('/health', (req, res) => res.status(200).send('OK'));
 // Cached Shop Settings (Header, Footer, Logo, Slogan)
 const cachedShopSettings = {
     shop_name: 'Prime Motowash',
-    shop_slogan: 'Professional Motor & Car Wash',
+    shop_slogan: '',
     shop_address: '',
     shop_phone: '',
     receipt_footer: 'Terima kasih atas kunjungan Anda!',
@@ -173,7 +173,11 @@ function refreshShopSettings() {
     db.all("SELECT key, value FROM settings WHERE key LIKE 'shop_%' OR key LIKE 'receipt_%'", (err, rows) => {
         if (!err && rows) {
             rows.forEach(r => {
-                cachedShopSettings[r.key] = r.value;
+                let val = r.value;
+                if (r.key === 'shop_slogan' && (val === 'Professional Motor & Car Wash' || (val && val.includes('Professional Motor')))) {
+                    val = '';
+                }
+                cachedShopSettings[r.key] = val;
             });
         }
     });
@@ -679,7 +683,9 @@ function renderMaster(res, error = null, success = null) {
                         (setRows || []).forEach(r => settingsMap[r.key] = r.value);
 
                         const shopName = settingsMap.shop_name || 'Prime Motowash';
-                        const shopSlogan = settingsMap.shop_slogan || 'Professional Motor & Car Wash';
+                        let rawSlogan = settingsMap.shop_slogan || '';
+                        if (rawSlogan.includes('Professional Motor')) rawSlogan = '';
+                        const shopSlogan = rawSlogan;
                         const shopAddress = settingsMap.shop_address || '';
                         const shopPhone = settingsMap.shop_phone || '';
                         const receiptFooter = settingsMap.receipt_footer || 'Terima kasih atas kunjungan Anda!';

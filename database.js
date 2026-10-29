@@ -188,7 +188,7 @@ db.serialize(() => {
         // Seed default shop profile settings
         const defaultSettings = [
             ['shop_name', 'Prime Motowash'],
-            ['shop_slogan', 'Professional Motor & Car Wash'],
+            ['shop_slogan', ''],
             ['shop_address', ''],
             ['shop_phone', ''],
             ['receipt_footer', 'Terima kasih atas kunjungan Anda!'],
@@ -198,6 +198,8 @@ db.serialize(() => {
         defaultSettings.forEach(([k, v]) => {
             db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)`, [k, v]);
         });
+        // Pastikan slogan 'Professional Motor & Car Wash' dibersihkan jika masih tersimpan
+        db.run("UPDATE settings SET value = '' WHERE key = 'shop_slogan' AND (value = 'Professional Motor & Car Wash' OR value LIKE '%Professional Motor%')");
     });
 
     // Migration: foto nota pengeluaran

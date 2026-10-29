@@ -6,7 +6,9 @@
                     <img src="<%= (typeof shopSettings !== 'undefined' && shopSettings.shop_logo) ? shopSettings.shop_logo : '/img/logo.png' %>" alt="Logo" class="img-fluid" style="max-height: 65px; object-fit: contain;" onerror="this.style.display='none'">
                 </div>
                 <h4 class="mb-0 fw-bold"><%= (typeof shopSettings !== 'undefined' && shopSettings.shop_name) ? shopSettings.shop_name : 'Prime Motowash' %></h4>
-                <small class="text-white-50"><%= (typeof shopSettings !== 'undefined' && shopSettings.shop_slogan) ? shopSettings.shop_slogan : 'POS Kasir & Manajemen Cuci' %></small>
+                <% if (typeof shopSettings !== 'undefined' && shopSettings.shop_slogan && shopSettings.shop_slogan.trim() && !shopSettings.shop_slogan.includes('Professional Motor')) { %>
+                    <small class="text-white-50 d-block"><%= shopSettings.shop_slogan %></small>
+                <% } %>
             </div>
             <div class="card-body p-4">
                 <% if (error) { %>

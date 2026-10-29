@@ -409,8 +409,8 @@ function openRoleModal(id, username, currentRole) {
                         </div>
                         <div class="col-md-6">
                             <label class="form-label small fw-bold">Slogan / Subjudul Usaha</label>
-                            <input type="text" name="shop_slogan" class="form-control form-control-sm" value="<%= typeof shopSlogan !== 'undefined' ? shopSlogan : 'Professional Motor & Car Wash' %>" placeholder="Contoh: Professional Motor & Car Wash">
-                            <small class="text-muted">Teks pendukung di bawah nama usaha.</small>
+                            <input type="text" name="shop_slogan" class="form-control form-control-sm" value="<%= (typeof shopSlogan !== 'undefined' && !shopSlogan.includes('Professional Motor')) ? shopSlogan : '' %>" placeholder="Opsional (boleh dikosongkan)">
+                            <small class="text-muted">Teks pendukung di bawah nama usaha (bisa dikosongkan).</small>
                         </div>
                     </div>
 
