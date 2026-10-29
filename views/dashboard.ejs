@@ -1,91 +1,492 @@
 <div class="row mt-2">
     <div class="col-12 text-center mb-3">
-        <h1 class="display-6">Selamat Datang di WashPOS</h1>
-        <p class="lead">Dashboard Owner - Ringkasan operasional, keuangan & stok</p>
+        <h1 class="display-6 fw-bold text-primary">
+            <% if (typeof shopSettings !== 'undefined' && shopSettings.shop_logo) { %>
+                <img src="<%= shopSettings.shop_logo %>" alt="Logo" height="42" class="me-2 rounded bg-white p-1 shadow-sm" onerror="this.style.display='none'">
+            <% } %>
+            <%= (typeof shopSettings !== 'undefined' && shopSettings.shop_name) ? shopSettings.shop_name : 'Prime Motowash' %>
+        </h1>
+        <p class="lead text-muted mb-3">Executive Dashboard — Analitik Penjualan, Operasional & Keuangan Outlet</p>
         <div class="d-flex justify-content-center gap-2 flex-wrap">
-            <a href="/sales" class="btn btn-outline-primary">Kasir Penjualan</a>
-            <a href="/reports" class="btn btn-outline-success">Laporan Keuangan</a>
-            <a href="/inventory" class="btn btn-outline-dark">Kelola Stok</a>
-            <a href="/expenses" class="btn btn-outline-warning">Pengeluaran</a>
-            <button type="button" class="btn btn-outline-info text-dark fw-bold" data-bs-toggle="modal" data-bs-target="#modalTelegramReport">✈️ Laporan Telegram</button>
+            <a href="/sales" class="btn btn-outline-primary btn-sm"><i class="bi bi-cart"></i> Kasir Penjualan</a>
+            <a href="/reports" class="btn btn-outline-success btn-sm"><i class="bi bi-journal-text"></i> Laporan Keuangan</a>
+            <a href="/inventory" class="btn btn-outline-dark btn-sm"><i class="bi bi-box"></i> Kelola Stok</a>
+            <a href="/expenses" class="btn btn-outline-warning btn-sm text-dark"><i class="bi bi-cash-stack"></i> Pengeluaran</a>
+            <button type="button" class="btn btn-outline-info btn-sm text-dark fw-bold" data-bs-toggle="modal" data-bs-target="#modalTelegramReport">✈️ Laporan Telegram</button>
         </div>
-        <hr>
+        <hr class="mt-3">
     </div>
 </div>
 
-<div class="row mb-3">
-    <div class="col-md-3"><div class="card text-bg-success"><div class="card-body"><h6>Kas Kecil (Outlet)</h6><h4 class="mb-0">Rp <%= kasKecil.toLocaleString('id-ID') %></h4><small>Karyawan hanya ini • Outlet</small></div></div></div>
-    <div class="col-md-3"><div class="card text-bg-primary"><div class="card-body"><h6>Kas Besar (Pusat)</h6><h4 class="mb-0">Rp <%= kasBesar.toLocaleString('id-ID') %></h4><small>Owner only • Pusat • Total Rp <%= totalKas.toLocaleString('id-ID') %></small></div></div></div>
-    <div class="col-md-3"><div class="card text-bg-dark"><div class="card-body"><h6>Transaksi Hari Ini</h6><h4 class="mb-0"><%= kpiTodaySales.c %> trx</h4><small>Rp <%= (kpiTodaySales.omzet||0).toLocaleString('id-ID') %> omzet</small></div></div></div>
-    <div class="col-md-3"><div class="card text-bg-warning"><div class="card-body"><h6>Stok Menipis</h6><h3 class="mb-0"><%= lowStock.length %></h3><small>Item ≤ min_stock</small></div></div></div>
+<!-- KPI UTAMA SALDO & HARI INI -->
+<div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+        <div class="card text-bg-success shadow-sm h-100">
+            <div class="card-body">
+                <div class="small opacity-75 fw-bold">Kas Kecil (Outlet)</div>
+                <h4 class="mb-1 fw-bold">Rp <%= kasKecil.toLocaleString('id-ID') %></h4>
+                <small class="opacity-75">Fisik Kasir Outlet</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card text-bg-primary shadow-sm h-100">
+            <div class="card-body">
+                <div class="small opacity-75 fw-bold">Kas Besar (Pusat)</div>
+                <h4 class="mb-1 fw-bold">Rp <%= kasBesar.toLocaleString('id-ID') %></h4>
+                <small class="opacity-75">Total Kas: Rp <%= totalKas.toLocaleString('id-ID') %></small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card text-bg-dark shadow-sm h-100">
+            <div class="card-body">
+                <div class="small opacity-75 fw-bold">Transaksi Hari Ini</div>
+                <h4 class="mb-1 fw-bold"><%= kpiTodaySales.c %> Motor</h4>
+                <small class="opacity-75">Omzet: Rp <%= (kpiTodaySales.omzet || 0).toLocaleString('id-ID') %></small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card text-bg-warning shadow-sm h-100 text-dark">
+            <div class="card-body">
+                <div class="small fw-bold">Stok Menipis</div>
+                <h4 class="mb-1 fw-bold"><%= lowStock.length %> Item</h4>
+                <small>Stok ≤ Min Stock</small>
+            </div>
+        </div>
+    </div>
 </div>
 
-<div class="row mb-3">
-    <div class="col-md-4"><div class="card"><div class="card-body"><h6>Omzet Bulan Ini</h6><h4>Rp <%= (kpiBulanOmzet||0).toLocaleString('id-ID') %></h4><small>Laba bulan Rp <%= labaBulan.toLocaleString('id-ID') %></small></div></div></div>
-    <div class="col-md-4"><div class="card"><div class="card-body"><h6>Laba Hari Ini</h6><h4 class="<%= labaHari>=0?'text-success':'text-danger' %>">Rp <%= labaHari.toLocaleString('id-ID') %></h4><small>Omzet - Biaya hari ini</small></div></div></div>
-    <div class="col-md-4"><div class="card"><div class="card-body"><h6>Total Sales / Expenses</h6><h4><%= totalSales %> / <%= totalExpenses %></h4><small>Biaya hari Rp <%= (kpiTodayExp||0).toLocaleString('id-ID') %></small></div></div></div>
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100 border-0 bg-white">
+            <div class="card-body">
+                <h6 class="text-muted small fw-bold">Omzet Bulan Ini</h6>
+                <h4 class="fw-bold text-success mb-1">Rp <%= (kpiBulanOmzet || 0).toLocaleString('id-ID') %></h4>
+                <small class="text-muted">Laba bersih bulan: Rp <%= labaBulan.toLocaleString('id-ID') %></small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100 border-0 bg-white">
+            <div class="card-body">
+                <h6 class="text-muted small fw-bold">Laba Bersih Hari Ini</h6>
+                <h4 class="fw-bold mb-1 <%= labaHari >= 0 ? 'text-success' : 'text-danger' %>">Rp <%= labaHari.toLocaleString('id-ID') %></h4>
+                <small class="text-muted">Omzet - Biaya hari ini</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100 border-0 bg-white">
+            <div class="card-body">
+                <h6 class="text-muted small fw-bold">Total Transaksi Kumulatif</h6>
+                <h4 class="fw-bold text-dark mb-1"><%= totalSales %> Motor</h4>
+                <small class="text-muted">Pengeluaran: <%= totalExpenses %> nota</small>
+            </div>
+        </div>
+    </div>
 </div>
 
-<% if (lowStock.length>0) { %>
-<div class="alert alert-danger d-flex align-items-center" role="alert">
-    <div class="me-3">⚠️</div>
+<% if (lowStock.length > 0) { %>
+<div class="alert alert-danger d-flex align-items-center mb-4" role="alert">
+    <div class="me-3 fs-3">⚠️</div>
     <div>
-        <strong>Low stock alert (5.7):</strong> <%= lowStock.length %> item ≤ min_stock
-        <ul class="mb-0 mt-2">
-            <% lowStock.forEach(item=>{ %>
-                <li><strong><%= item.name %></strong> — sisa <strong><%= item.stock %> <%= item.unit %></strong> (min <%= item.min_stock %>) — <a href="/inventory" class="alert-link">Kelola</a></li>
+        <strong>Peringatan Stok Menipis:</strong> Terdapat <%= lowStock.length %> barang persediaan yang mencapai batas minimum:
+        <ul class="mb-0 mt-1 small">
+            <% lowStock.forEach(item => { %>
+                <li><strong><%= item.name %></strong> — sisa <strong><%= item.stock %> <%= item.unit %></strong> (min <%= item.min_stock %>) — <a href="/inventory" class="alert-link">Restock sekarang</a></li>
             <% }) %>
         </ul>
     </div>
 </div>
-<% } else { %>
-<div class="alert alert-success"><small>✅ Semua stok aman. Kelola di <a href="/inventory">Inventory</a>.</small></div>
 <% } %>
 
-<div class="card shadow-sm mb-4">
-    <div class="card-header bg-light">Grafik Tren 7 Hari (6.11) — Kas Pisah</div>
-    <div class="card-body" style="height:220px"><canvas id="dashTren"></canvas></div>
+<!-- ========================================== -->
+<!-- SUITE ANALITIK & GRAFIK TREN PENJUALAN -->
+<!-- ========================================== -->
+<div class="card shadow-sm mb-4 border-0">
+    <div class="card-header bg-white py-3 border-bottom d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+            <h5 class="mb-0 fw-bold text-dark">
+                📊 Analitik & Grafik Tren Penjualan
+            </h5>
+            <small class="text-muted">Periode Aktif: <strong><%= rangeLabel %></strong></small>
+        </div>
+        <div class="btn-group btn-group-sm shadow-sm" role="group">
+            <a href="/?range=7" class="btn <%= range === '7' ? 'btn-primary' : 'btn-outline-primary' %>">7 Hari</a>
+            <a href="/?range=30" class="btn <%= range === '30' ? 'btn-primary' : 'btn-outline-primary' %>">30 Hari</a>
+            <a href="/?range=this_month" class="btn <%= range === 'this_month' ? 'btn-primary' : 'btn-outline-primary' %>">Bulan Ini</a>
+            <a href="/?range=all" class="btn <%= range === 'all' ? 'btn-primary' : 'btn-outline-primary' %>">Semua Data</a>
+        </div>
+    </div>
+    <div class="card-body">
+        <!-- 4 Metrik Ringkas Periode Terpilih -->
+        <div class="row g-2 mb-4 text-center">
+            <div class="col-6 col-md-3">
+                <div class="p-3 bg-light rounded border">
+                    <small class="text-muted d-block mb-1">💰 Total Omzet Periode</small>
+                    <h5 class="mb-0 fw-bold text-success">Rp <%= totalOmzetRange.toLocaleString('id-ID') %></h5>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="p-3 bg-light rounded border">
+                    <small class="text-muted d-block mb-1">📈 Laba Operasional</small>
+                    <h5 class="mb-0 fw-bold <%= labaRange >= 0 ? 'text-success' : 'text-danger' %>">Rp <%= labaRange.toLocaleString('id-ID') %></h5>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="p-3 bg-light rounded border">
+                    <small class="text-muted d-block mb-1">🛵 Volume Cuci Motor</small>
+                    <h5 class="mb-0 fw-bold text-primary"><%= totalTrxRange %> Unit</h5>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="p-3 bg-light rounded border">
+                    <small class="text-muted d-block mb-1">🏷️ Rata-Rata per Motor (AOV)</small>
+                    <h5 class="mb-0 fw-bold text-dark">Rp <%= aov.toLocaleString('id-ID') %></h5>
+                </div>
+            </div>
+        </div>
+
+        <!-- Baris 1: Grafik Tren Omzet vs Pengeluaran & Doughnut Layanan Terlaris -->
+        <div class="row g-3 mb-4">
+            <div class="col-lg-8">
+                <div class="border rounded p-3 h-100 bg-white">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="fw-bold mb-0">Tren Omzet, Pengeluaran & Jumlah Motor Harian</h6>
+                        <span class="badge bg-light text-dark border">Harian</span>
+                    </div>
+                    <div style="height: 280px; position: relative;">
+                        <canvas id="chartTrenHarian"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="border rounded p-3 h-100 bg-white">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="fw-bold mb-0">Porsi Layanan Terlaris</h6>
+                        <span class="badge bg-light text-dark border">Menu</span>
+                    </div>
+                    <div style="height: 200px; position: relative;">
+                        <canvas id="chartTopServices"></canvas>
+                    </div>
+                    <div class="mt-2 small" style="max-height: 80px; overflow-y: auto;">
+                        <ul class="list-unstyled mb-0">
+                            <% (topServices || []).slice(0, 5).forEach((s, idx) => { %>
+                                <li class="d-flex justify-content-between py-1 border-bottom">
+                                    <span><strong>#<%= idx + 1 %></strong> <%= s.name %></span>
+                                    <span class="badge bg-secondary"><%= s.count %> motor</span>
+                                </li>
+                            <% }) %>
+                            <% if (!topServices || topServices.length === 0) { %>
+                                <li class="text-muted text-center py-2">Belum ada transaksi di periode ini</li>
+                            <% } %>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Baris 2: Jam Sibuk & Metode Pembayaran / Leaderboard -->
+        <div class="row g-3">
+            <div class="col-lg-6">
+                <div class="border rounded p-3 h-100 bg-white">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="fw-bold mb-0">Jam Paling Ramai / Antrean Padat (WITA)</h6>
+                        <small class="text-muted">Distribusi Jam Masuk</small>
+                    </div>
+                    <div style="height: 250px; position: relative;">
+                        <canvas id="chartPeakHours"></canvas>
+                    </div>
+                    <small class="text-muted d-block mt-2">💡 Membantu owner mengidentifikasi jam sibuk untuk pembagian shift & tenaga kerja pencuci.</small>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="border rounded p-3 h-100 bg-white">
+                    <ul class="nav nav-tabs nav-fill mb-3" id="analyticsTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active py-1 fw-bold small" id="payments-tab" data-bs-toggle="tab" data-bs-target="#tabPayments" type="button" role="tab">💳 Metode Bayar</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link py-1 fw-bold small" id="workers-tab" data-bs-toggle="tab" data-bs-target="#tabWorkers" type="button" role="tab">🏆 Peringkat Pencuci</button>
+                        </li>
+                    </ul>
+                    <div class="tab-content" id="analyticsTabsContent">
+                        <!-- Tab 1: Payments -->
+                        <div class="tab-pane fade show active" id="tabPayments" role="tabpanel">
+                            <div style="height: 180px; position: relative;">
+                                <canvas id="chartPayments"></canvas>
+                            </div>
+                            <div class="d-flex justify-content-around mt-3 text-center small">
+                                <% (payments || []).forEach(p => { %>
+                                    <div>
+                                        <span class="text-muted d-block"><%= p.akun %></span>
+                                        <strong>Rp <%= p.total.toLocaleString('id-ID') %></strong>
+                                        <small class="text-muted d-block">(<%= p.count %> trx)</small>
+                                    </div>
+                                <% }) %>
+                            </div>
+                        </div>
+
+                        <!-- Tab 2: Leaderboard Karyawan -->
+                        <div class="tab-pane fade" id="tabWorkers" role="tabpanel">
+                            <div class="table-responsive" style="max-height: 220px;">
+                                <table class="table table-sm table-hover align-middle mb-0 small">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Pencuci</th>
+                                            <th class="text-center">Motor</th>
+                                            <th class="text-end">Omzet</th>
+                                            <th class="text-end">Komisi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <% (workers || []).forEach((w, i) => { %>
+                                            <tr>
+                                                <td>
+                                                    <% if (i === 0) { %>🥇<% } else if (i === 1) { %>🥈<% } else if (i === 2) { %>🥉<% } else { %><%= i + 1 %><% } %>
+                                                </td>
+                                                <td class="fw-bold"><%= w.worker_name %></td>
+                                                <td class="text-center"><span class="badge bg-primary rounded-pill"><%= w.motor %></span></td>
+                                                <td class="text-end">Rp <%= w.omzet.toLocaleString('id-ID') %></td>
+                                                <td class="text-end text-success fw-bold">Rp <%= w.komisi.toLocaleString('id-ID') %></td>
+                                            </tr>
+                                        <% }) %>
+                                        <% if (!workers || workers.length === 0) { %>
+                                            <tr><td colspan="5" class="text-center text-muted py-3">Belum ada pengerjaan di periode ini</td></tr>
+                                        <% } %>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
-<div class="card shadow-sm">
-    <div class="card-header bg-light"><strong>Ringkasan Kas & Login</strong></div>
+<!-- RINGKASAN KAS & LOGIN -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-light"><strong>Ringkasan Kas & Info Sesi Login</strong></div>
     <div class="card-body small">
         <div class="d-flex justify-content-between"><span>Kas Kecil (Outlet)</span><strong>Rp <%= kasKecil.toLocaleString('id-ID') %></strong></div>
         <div class="d-flex justify-content-between"><span>Kas Besar (Pusat)</span><strong>Rp <%= kasBesar.toLocaleString('id-ID') %></strong></div>
-        <div class="d-flex justify-content-between border-top pt-2 mt-2"><span>Total Kas</span><strong>Rp <%= totalKas.toLocaleString('id-ID') %></strong></div>
+        <div class="d-flex justify-content-between border-top pt-2 mt-2"><span>Total Kas Terkonsolidasi</span><strong>Rp <%= totalKas.toLocaleString('id-ID') %></strong></div>
         <hr class="my-2">
-        <div>Login: <strong><%= user.username %></strong> (<%= user.role %>) — <span class="badge bg-primary">Mulai <%= new Date(loginTime).toLocaleString('id-ID') %></span> • Durasi <strong id="durasiLogin">-</strong> • <a href="/karyawan-aktif" class="btn btn-sm btn-outline-primary py-0">Karyawan Aktif</a></div>
-        <div class="mt-1 text-muted">Penjualan & Pengeluaran pilih Kas. Transfer di <a href="/reports">Laporan</a>.</div>
+        <div>Login: <strong><%= user.username %></strong> (<%= user.role %>) — <span class="badge bg-primary">Mulai <%= new Date(loginTime).toLocaleString('id-ID', { timeZone: 'Asia/Makassar' }) %></span> • Durasi <strong id="durasiLogin">-</strong> • <a href="/karyawan-aktif" class="btn btn-sm btn-outline-primary py-0">Karyawan Aktif</a></div>
+        <div class="mt-1 text-muted">Penjualan & Pengeluaran otomatis memperbarui saldo kas. Transfer antar kas di menu <a href="/reports">Laporan</a>.</div>
     </div>
 </div>
+
 <script>
 (function(){
-    const login=new Date("<%= loginTime %>");
+    const login = new Date("<%= loginTime %>");
     function upd(){
-        const now=new Date(); const diff=now-login;
-        const m=Math.floor(diff/60000); const h=Math.floor(m/60); const men=m%60;
-        const el=document.getElementById('durasiLogin');
-        if(el) el.textContent=(h?h+' jam ':'')+men+' menit';
+        const now = new Date();
+        const diff = now - login;
+        const m = Math.floor(diff / 60000);
+        const h = Math.floor(m / 60);
+        const men = m % 60;
+        const el = document.getElementById('durasiLogin');
+        if (el) el.textContent = (h ? h + ' jam ' : '') + men + ' menit';
     }
-    upd(); setInterval(upd,60000);
+    upd();
+    setInterval(upd, 60000);
 })();
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-const trenDash = <%- JSON.stringify(tren) %>;
-const ctxDash=document.getElementById('dashTren');
-if(ctxDash && trenDash.length){
-    new Chart(ctxDash, {
-        type:'bar',
-        data:{
-            labels: trenDash.map(r=>r.tgl),
-            datasets:[
-                { label:'Omzet', data: trenDash.map(r=>r.omzet||0), backgroundColor:'rgba(25,135,84,0.7)'},
-                { label:'Trx', data: trenDash.map(r=>r.trx||0), backgroundColor:'rgba(13,110,253,0.5)', yAxisID:'y1'}
+// Format Rupiah untuk Chart Tooltip
+const fmtRp = (num) => 'Rp ' + Number(num || 0).toLocaleString('id-ID');
+
+// 1. Grafik Tren Penjualan & Pengeluaran Harian
+const dailyTrendsData = <%- JSON.stringify(dailyTrends || []) %>;
+const ctxTren = document.getElementById('chartTrenHarian');
+if (ctxTren && dailyTrendsData.length > 0) {
+    new Chart(ctxTren, {
+        type: 'bar',
+        data: {
+            labels: dailyTrendsData.map(r => {
+                const parts = r.tgl.split('-');
+                return parts.length === 3 ? `${parts[2]}/${parts[1]}` : r.tgl;
+            }),
+            datasets: [
+                {
+                    label: 'Omzet (Rp)',
+                    data: dailyTrendsData.map(r => r.omzet || 0),
+                    backgroundColor: 'rgba(25, 135, 84, 0.85)',
+                    borderRadius: 4,
+                    order: 2
+                },
+                {
+                    label: 'Pengeluaran (Rp)',
+                    data: dailyTrendsData.map(r => r.exp || 0),
+                    backgroundColor: 'rgba(220, 53, 69, 0.75)',
+                    borderRadius: 4,
+                    order: 3
+                },
+                {
+                    label: 'Motor Dicuci',
+                    data: dailyTrendsData.map(r => r.trx || 0),
+                    type: 'line',
+                    borderColor: 'rgba(13, 110, 253, 1)',
+                    backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.3,
+                    yAxisID: 'y1',
+                    order: 1
+                }
             ]
         },
-        options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'top'}}, scales:{ y:{ beginAtZero:true }, y1:{ beginAtZero:true, position:'right', grid:{ drawOnChartArea:false } } } }
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) {
+                            if (ctx.dataset.yAxisID === 'y1') {
+                                return `🛵 ${ctx.dataset.label}: ${ctx.raw} unit`;
+                            }
+                            return `${ctx.dataset.label}: ${fmtRp(ctx.raw)}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { callback: v => (v >= 1000 ? (v / 1000) + 'k' : v) }
+                },
+                y1: {
+                    beginAtZero: true,
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    ticks: { stepSize: 1, precision: 0 }
+                }
+            }
+        }
     });
+} else if (ctxTren) {
+    ctxTren.parentElement.innerHTML = '<div class="h-100 d-flex align-items-center justify-content-center text-muted small py-5">Belum ada transaksi di rentang tanggal ini.</div>';
+}
+
+// 2. Grafik Porsi Layanan Terlaris (Doughnut)
+const topServicesData = <%- JSON.stringify(topServices || []) %>;
+const ctxServices = document.getElementById('chartTopServices');
+if (ctxServices && topServicesData.length > 0) {
+    const palette = ['#0d6efd', '#198754', '#ffc107', '#0dcaf0', '#6f42c1', '#d63384', '#fd7e14'];
+    new Chart(ctxServices, {
+        type: 'doughnut',
+        data: {
+            labels: topServicesData.map(s => s.name),
+            datasets: [{
+                data: topServicesData.map(s => s.count),
+                backgroundColor: palette.slice(0, topServicesData.length),
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) {
+                            const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                            const pct = Math.round((ctx.raw / total) * 100);
+                            return ` ${ctx.label}: ${ctx.raw} motor (${pct}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+} else if (ctxServices) {
+    ctxServices.parentElement.innerHTML = '<div class="h-100 d-flex align-items-center justify-content-center text-muted small py-4">Belum ada data layanan.</div>';
+}
+
+// 3. Jam Paling Ramai (Peak Hours Bar Chart)
+const peakHoursData = <%- JSON.stringify(peakHours || []) %>;
+const ctxPeak = document.getElementById('chartPeakHours');
+if (ctxPeak) {
+    const hoursLabels = [];
+    const hoursCounts = [];
+    const hourMap = {};
+    (peakHoursData || []).forEach(h => { hourMap[parseInt(h.jam, 10)] = h.count; });
+    for (let h = 7; h <= 20; h++) {
+        hoursLabels.push((h < 10 ? '0' + h : '' + h) + ':00');
+        hoursCounts.push(hourMap[h] || 0);
+    }
+    const maxVal = Math.max(...hoursCounts, 1);
+    const bgColors = hoursCounts.map(c => c === maxVal && c > 0 ? 'rgba(220, 53, 69, 0.85)' : 'rgba(13, 110, 253, 0.7)');
+
+    new Chart(ctxPeak, {
+        type: 'bar',
+        data: {
+            labels: hoursLabels,
+            datasets: [{
+                label: 'Jumlah Motor',
+                data: hoursCounts,
+                backgroundColor: bgColors,
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ` ${ctx.raw} motor dicuci pada jam ${ctx.label}`
+                    }
+                }
+            },
+            scales: {
+                y: { beginAtZero: true, ticks: { stepSize: 1, precision: 0 } },
+                x: { ticks: { font: { size: 10 } } }
+            }
+        }
+    });
+}
+
+// 4. Metode Bayar Donut Chart
+const paymentsData = <%- JSON.stringify(payments || []) %>;
+const ctxPay = document.getElementById('chartPayments');
+if (ctxPay && paymentsData.length > 0) {
+    new Chart(ctxPay, {
+        type: 'doughnut',
+        data: {
+            labels: paymentsData.map(p => p.akun),
+            datasets: [{
+                data: paymentsData.map(p => p.total),
+                backgroundColor: ['#198754', '#0d6efd', '#ffc107', '#6c757d'],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ` ${ctx.label}: ${fmtRp(ctx.raw)}`
+                    }
+                }
+            }
+        }
+    });
+} else if (ctxPay) {
+    ctxPay.parentElement.innerHTML = '<div class="h-100 d-flex align-items-center justify-content-center text-muted small py-4">Belum ada data pembayaran.</div>';
 }
 </script>

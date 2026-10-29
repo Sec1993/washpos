@@ -321,39 +321,132 @@ app.post('/absen', requireLogin, absenUpload.single('photo'), async (req, res) =
     });
 });
 
-// Route - Dashboard / Default (5.7 low stock + 6.11 KPI + kas besar/kecil)
-app.get('/', requireLogin, (req, res) => {
+// Route - Dashboard / Default (Executive Analytics + Low Stock + KPI + Kas)
+app.get('/', requireLogin, async (req, res) => {
     if (req.session.user.role === 'owner') {
-        db.all("SELECT * FROM inventory WHERE stock <= COALESCE(min_stock,5) ORDER BY stock ASC", (err, lowStock) => {
-            const today=getWitaTime().toISOString().slice(0,10);
-            const firstDay=getWitaTime().toISOString().slice(0,8) + '01';
-            db.all("SELECT * FROM journals", (e, journals)=>{
-                let kasBesar=0, kasKecil=0, totalKasDynamic=0;
-                const isKasDynamic = (t)=> t!=='Pendapatan' && t!=='Biaya';
-                (journals||[]).forEach(j=>{
-                    if(isKasDynamic(j.account_type)) totalKasDynamic+= j.debit - j.credit;
-                    if(j.account_type==='Kas Besar') kasBesar+= j.debit - j.credit;
-                    else if(j.account_type==='Kas Kecil' || j.account_type==='Kas') kasKecil+= j.debit - j.credit;
-                });
-                db.get("SELECT COUNT(*) as c, COALESCE(SUM(price),0) as omzet FROM sales WHERE date(date)=date('now')", (e, todaySales)=>{
-                    db.get("SELECT COALESCE(SUM(price),0) as omzet FROM sales WHERE date(date) >= date(?)", [firstDay], (e, bulanSales)=>{
-                        db.get("SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE date(date)=date('now')", (e, todayExp)=>{
-                            db.all("SELECT COUNT(*) as c FROM sales", (e, sRow)=>{
-                                db.all("SELECT COUNT(*) as c FROM expenses", (e, eRow)=>{
-                                    db.all("SELECT date(date) as tgl, COUNT(*) as trx, COALESCE(SUM(price),0) as omzet FROM sales WHERE date(date) >= date('now','-6 days') GROUP BY date(date) ORDER BY tgl ASC", (e, tren)=>{
-                                        db.get("SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE date(date) >= date(?)", [firstDay], (e, bulanExp)=>{
-                                            const labaHari=(todaySales?todaySales.omzet:0)-(todayExp?todayExp.total:0);
-                                            const labaBulan=(bulanSales?bulanSales.omzet:0)-(bulanExp?bulanExp.total:0);
-                                            res.render('dashboard', { lowStock: lowStock||[], totalSales: sRow? sRow[0].c:0, totalExpenses: eRow? eRow[0].c:0, kpiTodaySales: todaySales||{c:0,omzet:0}, kpiBulanOmzet: bulanSales?bulanSales.omzet:0, kpiTodayExp: todayExp?todayExp.total:0, labaHari, labaBulan, tren: tren||[], kasBesar, kasKecil, totalKas: kasBesar+kasKecil });
-                                        });
-                                    });
-                                });
-                            });
-                        });
-                    });
+        try {
+            const nowWita = getWitaTime();
+            const today = nowWita.toISOString().slice(0, 10);
+            const firstDay = nowWita.toISOString().slice(0, 8) + '01';
+
+            // Filter rentang analitik (7 hari, 30 hari, bulan ini, atau semua data)
+            const range = req.query.range || '7';
+            let dateFilter = '1970-01-01';
+            let rangeLabel = 'Semua Data';
+
+            if (range === '7') {
+                const d = new Date(nowWita);
+                d.setDate(d.getDate() - 6);
+                dateFilter = d.toISOString().slice(0, 10);
+                rangeLabel = '7 Hari Terakhir';
+            } else if (range === '30') {
+                const d = new Date(nowWita);
+                d.setDate(d.getDate() - 29);
+                dateFilter = d.toISOString().slice(0, 10);
+                rangeLabel = '30 Hari Terakhir';
+            } else if (range === 'this_month') {
+                dateFilter = firstDay;
+                rangeLabel = 'Bulan Ini (' + nowWita.toLocaleDateString('id-ID', { month: 'long', year: 'numeric', timeZone: 'Asia/Makassar' }) + ')';
+            }
+
+            const [
+                lowStock, journals, todaySales, bulanSales, todayExp, sCountRow, eCountRow, bulanExp,
+                sTren, eTren, hRows, payRows, workerRows, svcRows
+            ] = await Promise.all([
+                new Promise(r => db.all("SELECT * FROM inventory WHERE stock <= COALESCE(min_stock,5) ORDER BY stock ASC", (e, rows) => r(rows || []))),
+                new Promise(r => db.all("SELECT * FROM journals", (e, rows) => r(rows || []))),
+                new Promise(r => db.get("SELECT COUNT(*) as c, COALESCE(SUM(price),0) as omzet FROM sales WHERE date(date)=date('now')", (e, row) => r(row || { c: 0, omzet: 0 }))),
+                new Promise(r => db.get("SELECT COALESCE(SUM(price),0) as omzet FROM sales WHERE date(date) >= date(?)", [firstDay], (e, row) => r(row ? row.omzet : 0))),
+                new Promise(r => db.get("SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE date(date)=date('now')", (e, row) => r(row ? row.total : 0))),
+                new Promise(r => db.get("SELECT COUNT(*) as c FROM sales", (e, row) => r(row ? row.c : 0))),
+                new Promise(r => db.get("SELECT COUNT(*) as c FROM expenses", (e, row) => r(row ? row.c : 0))),
+                new Promise(r => db.get("SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE date(date) >= date(?)", [firstDay], (e, row) => r(row ? row.total : 0))),
+                new Promise(r => db.all("SELECT date(date) as tgl, COUNT(*) as trx, COALESCE(SUM(price),0) as omzet FROM sales WHERE date(date) >= date(?) GROUP BY date(date) ORDER BY tgl ASC", [dateFilter], (e, rows) => r(rows || []))),
+                new Promise(r => db.all("SELECT date(date) as tgl, COALESCE(SUM(amount),0) as exp FROM expenses WHERE date(date) >= date(?) GROUP BY date(date) ORDER BY tgl ASC", [dateFilter], (e, rows) => r(rows || []))),
+                new Promise(r => db.all("SELECT strftime('%H', date) as jam, COUNT(*) as count FROM sales WHERE date(date) >= date(?) GROUP BY jam ORDER BY jam ASC", [dateFilter], (e, rows) => r(rows || []))),
+                new Promise(r => db.all("SELECT COALESCE(akun_kas, 'Kas Kecil') as akun, COUNT(*) as count, COALESCE(SUM(price), 0) as total FROM sales WHERE date(date) >= date(?) GROUP BY akun", [dateFilter], (e, rows) => r(rows || []))),
+                new Promise(r => db.all("SELECT worker_name, COUNT(*) as motor, COALESCE(SUM(price), 0) as omzet, COALESCE(SUM(commission), 0) as komisi FROM sales WHERE date(date) >= date(?) GROUP BY worker_name ORDER BY motor DESC", [dateFilter], (e, rows) => r(rows || []))),
+                new Promise(r => db.all("SELECT service_name, price FROM sales WHERE date(date) >= date(?)", [dateFilter], (e, rows) => r(rows || [])))
+            ]);
+
+            // Hitung saldo Kas
+            let kasBesar = 0, kasKecil = 0;
+            journals.forEach(j => {
+                if (j.account_type === 'Kas Besar') kasBesar += j.debit - j.credit;
+                else if (j.account_type === 'Kas Kecil' || j.account_type === 'Kas') kasKecil += j.debit - j.credit;
+            });
+
+            const labaHari = (todaySales ? todaySales.omzet : 0) - todayExp;
+            const labaBulan = bulanSales - bulanExp;
+
+            // Gabungkan Tren Harian (Sales & Expense)
+            const dateMap = {};
+            sTren.forEach(r => {
+                dateMap[r.tgl] = { tgl: r.tgl, omzet: r.omzet, trx: r.trx, exp: 0 };
+            });
+            eTren.forEach(r => {
+                if (!dateMap[r.tgl]) dateMap[r.tgl] = { tgl: r.tgl, omzet: 0, trx: 0, exp: r.exp };
+                else dateMap[r.tgl].exp = r.exp;
+            });
+            const dailyTrends = Object.values(dateMap).sort((a, b) => a.tgl.localeCompare(b.tgl));
+
+            // Hitung metrik rentang terpilih
+            let totalOmzetRange = 0;
+            let totalTrxRange = 0;
+            let totalExpRange = 0;
+            dailyTrends.forEach(d => {
+                totalOmzetRange += d.omzet;
+                totalTrxRange += d.trx;
+                totalExpRange += d.exp;
+            });
+            const aov = totalTrxRange > 0 ? Math.round(totalOmzetRange / totalTrxRange) : 0;
+            const labaRange = totalOmzetRange - totalExpRange;
+
+            // Agregasi Layanan Terlaris (Top Services)
+            const svcMap = {};
+            svcRows.forEach(r => {
+                (r.service_name || '').split(',').forEach(s => {
+                    const name = s.trim();
+                    if (name) {
+                        if (!svcMap[name]) svcMap[name] = { name, count: 0, revenue: 0 };
+                        svcMap[name].count += 1;
+                        svcMap[name].revenue += (r.price || 0);
+                    }
                 });
             });
-        });
+            const topServices = Object.values(svcMap).sort((a, b) => b.count - a.count);
+
+            res.render('dashboard', {
+                lowStock,
+                totalSales: sCountRow,
+                totalExpenses: eCountRow,
+                kpiTodaySales: todaySales,
+                kpiBulanOmzet: bulanSales,
+                kpiTodayExp: todayExp,
+                labaHari,
+                labaBulan,
+                kasBesar,
+                kasKecil,
+                totalKas: kasBesar + kasKecil,
+                tren: dailyTrends,
+                // Data Analitik & Grafik
+                range,
+                rangeLabel,
+                totalOmzetRange,
+                totalTrxRange,
+                totalExpRange,
+                labaRange,
+                aov,
+                dailyTrends,
+                peakHours: hRows,
+                payments: payRows,
+                workers: workerRows,
+                topServices
+            });
+        } catch (err) {
+            console.error('[Dashboard Error]', err);
+            res.status(500).send('Terjadi kesalahan memuat dashboard: ' + err.message);
+        }
     } else if (req.session.user.role === 'admin') {
         res.redirect('/sales');
     } else {
