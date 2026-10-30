@@ -60,8 +60,9 @@ function requireLogin(req, res, next) {
 }
 
 function requireOwner(req, res, next) {
-    if (req.session.user && req.session.user.role === 'owner') {
-        if (activeLogins[req.sessionID]) activeLogins[req.sessionID].lastSeen = new Date().toISOString();
+    if (!req.session.user) return res.redirect('/login');
+    if (activeLogins[req.sessionID]) activeLogins[req.sessionID].lastSeen = new Date().toISOString();
+    if (req.session.user.role === 'owner') {
         next();
     } else {
         res.status(403).send('Akses ditolak. Halaman ini khusus Owner.');
