@@ -1,6 +1,5 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2 class="mb-0">Master Data <small class="text-muted fs-6">(Owner Only)</small></h2>
-    <span class="badge bg-primary">Phase 2 - Kategori & Validasi</span>
 </div>
 
 <% if (typeof error !== 'undefined' && error) { %>
@@ -117,18 +116,6 @@
 
     <!-- INFO VALIDASI -->
     <div class="col-md-4">
-        <div class="card shadow-sm mb-4 border-primary">
-            <div class="card-header bg-primary text-white">Aturan Validasi Phase 2</div>
-            <div class="card-body">
-                <ul class="small mb-0">
-                    <li><strong>Layanan:</strong> nama unik, harga ≥ 1000 (tanpa kategori)</li>
-                    <li><strong>Karyawan:</strong> nama unik, tidak kosong</li>
-                    <li><strong>Kategori Pengeluaran:</strong> nama unik</li>
-                    <li>Semua Master <strong>hanya Owner</strong> (403 untuk Karyawan)</li>
-                    <li>Perubahan langsung live di modul Penjualan & Pengeluaran</li>
-                </ul>
-            </div>
-        </div>
         <div class="card shadow-sm">
             <div class="card-header bg-secondary text-white">Ringkasan</div>
             <div class="card-body small">
@@ -590,6 +577,3 @@ async function testTelegram() {
     </div>
 </div>
 
-<div class="alert alert-warning">
-    <small><strong>Catatan Phase 2:</strong> Semua Master hanya Owner. Karyawan tidak bisa akses - mereka hanya memakai dropdown di Penjualan/Pengeluaran yang sudah dinamis.</small>
-</div>

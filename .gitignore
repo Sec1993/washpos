@@ -7,3 +7,10 @@ Thumbs.db
 *.log
 npm-debug.log*
 dist/
+
+# File sensitif & debug
+cookies.txt
+cookies2.txt
+check2.js
+test-e2e.js
+test-server.js
