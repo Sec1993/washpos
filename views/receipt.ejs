@@ -11,18 +11,18 @@
         .bold { font-weight: bold; }
         hr { border-top: 1px dashed #000; border-bottom: none; margin: 8px 0; }
         .row { display: flex; justify-content: space-between; margin-bottom: 4px; }
-        .receipt-logo { max-width: 140px; max-height: 75px; object-fit: contain; margin-bottom: 6px; }
+        .receipt-logo { max-width: 150px; max-height: 75px; object-fit: contain; margin-bottom: 6px; filter: grayscale(100%) contrast(200%); -webkit-filter: grayscale(100%) contrast(200%); }
         @media print {
             body { padding: 0; margin: 0; width: 100%; max-width: 100%; }
             .no-print { display: none !important; }
-            .receipt-logo { filter: grayscale(100%) contrast(140%); }
+            .receipt-logo { filter: grayscale(100%) contrast(250%) !important; -webkit-filter: grayscale(100%) contrast(250%) !important; }
         }
     </style>
 </head>
 <body>
     <div class="text-center">
         <% if (typeof shopSettings === 'undefined' || !shopSettings || shopSettings.receipt_show_logo !== '0') { %>
-            <img src="<%= (typeof shopSettings !== 'undefined' && shopSettings.shop_logo) ? shopSettings.shop_logo : '/img/logo.png' %>" alt="Logo" class="receipt-logo" onerror="this.style.display='none'">
+            <img src="/img/logo-thermal.png" alt="Logo" class="receipt-logo" onerror="this.src='/img/logo.png'">
         <% } %>
         <h2 style="margin: 0; font-size: 18px; font-weight: bold; letter-spacing: 0.5px; text-transform: uppercase;">
             <%= (typeof shopSettings !== 'undefined' && shopSettings.shop_name) ? shopSettings.shop_name : 'Prime Motowash' %>

@@ -362,18 +362,10 @@ function openRoleModal(id, username, currentRole) {
                     <label class="form-label small fw-bold d-block text-start">Pilih Varian Logo:</label>
                     <div class="d-flex flex-column gap-2 text-start bg-light p-2 rounded border">
                         <div class="form-check">
-                            <input class="form-check-input" type="radio" name="shop_logo" id="logoOpt1" value="/img/logo.png" <%= (!shopLogo || shopLogo === '/img/logo.png') ? 'checked' : '' %> onchange="document.getElementById('logoPreviewImg').src=this.value">
+                            <input class="form-check-input" type="radio" name="shop_logo" id="logoOpt1" value="/img/logo.png" <%= (!shopLogo || shopLogo === '/img/logo.png' || shopLogo === '/img/logo-biru.png') ? 'checked' : '' %> onchange="document.getElementById('logoPreviewImg').src=this.value">
                             <label class="form-check-label small" for="logoOpt1">
-                                <strong>Transparan (Original)</strong>
-                                <span class="badge bg-success d-block mt-1">Rekomendasi Struk & Web</span>
-                            </label>
-                        </div>
-                        <hr class="my-1">
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="shop_logo" id="logoOpt2" value="/img/logo-biru.png" <%= (shopLogo === '/img/logo-biru.png') ? 'checked' : '' %> onchange="document.getElementById('logoPreviewImg').src=this.value">
-                            <label class="form-check-label small" for="logoOpt2">
-                                <strong>Background Biru</strong>
-                                <span class="text-muted d-block small">Senada dengan tema navbar</span>
+                                <strong>Background Biru (Utama)</strong>
+                                <span class="badge bg-primary d-block mt-1">Senada Tema Navbar &amp; Brand</span>
                             </label>
                         </div>
                         <hr class="my-1">
@@ -381,9 +373,12 @@ function openRoleModal(id, username, currentRole) {
                             <input class="form-check-input" type="radio" name="shop_logo" id="logoOpt3" value="/img/logo-hitam.png" <%= (shopLogo === '/img/logo-hitam.png') ? 'checked' : '' %> onchange="document.getElementById('logoPreviewImg').src=this.value">
                             <label class="form-check-label small" for="logoOpt3">
                                 <strong>Background Hitam</strong>
-                                <span class="text-muted d-block small">Nuansa gelap & eksklusif</span>
+                                <span class="text-muted d-block small">Nuansa gelap &amp; eksklusif</span>
                             </label>
                         </div>
+                    </div>
+                    <div class="alert alert-info py-2 px-2 mt-2 mb-0 small text-start">
+                        🖨️ <strong>Struk Cetak Thermal:</strong> Otomatis menggunakan logo <strong>Hitam-Putih</strong> kontras tinggi agar cetakan pada kertas thermal tajam, jelas, dan tidak menghabiskan kertas thermal.
                     </div>
                 </div>
 
