@@ -631,7 +631,8 @@ app.get('/receipt/:id', requireAdminOrOwner, (req, res) => {
                         dailySeq, 
                         receiptNumber, 
                         shopSettings: cachedShopSettings, 
-                        isPreview: false 
+                        isPreview: false,
+                        layout: false 
                     });
                 }
             );
@@ -665,7 +666,8 @@ app.get('/receipt-preview', requireOwner, (req, res) => {
         dailySeq: 1, 
         receiptNumber, 
         shopSettings: cachedShopSettings, 
-        isPreview: true 
+        isPreview: true,
+        layout: false 
     });
 });
 

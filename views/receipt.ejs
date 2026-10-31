@@ -10,7 +10,26 @@
         .text-center { text-align: center; }
         .bold { font-weight: bold; }
         hr { border-top: 1px dashed #000; border-bottom: none; margin: 8px 0; }
-        .row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+        .receipt-row {
+            display: flex !important;
+            flex-direction: row !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            flex-wrap: nowrap !important;
+            width: 100% !important;
+            margin-bottom: 3px !important;
+            text-align: left !important;
+        }
+        .receipt-row > span:first-child {
+            text-align: left !important;
+            flex: 1 1 auto !important;
+            padding-right: 4px !important;
+        }
+        .receipt-row > span:last-child {
+            text-align: right !important;
+            white-space: nowrap !important;
+            flex-shrink: 0 !important;
+        }
         .receipt-logo { max-width: 150px; max-height: 75px; object-fit: contain; margin-bottom: 6px; filter: grayscale(100%) contrast(200%); -webkit-filter: grayscale(100%) contrast(200%); }
         .btn-action { display: block; width: 100%; padding: 10px 14px; border: none; border-radius: 6px; font-weight: bold; font-family: sans-serif; font-size: 13px; cursor: pointer; margin-bottom: 8px; text-decoration: none; text-align: center; box-sizing: border-box; }
         .btn-print-sys { background: #0d6efd; color: #fff; }
@@ -46,12 +65,12 @@
         <% } %>
         <p style="margin: 6px 0 2px 0; font-size: 11px; font-weight: bold; letter-spacing: 1px;">STRUK BUKTI PEMBAYARAN</p>
         <hr>
-        <div class="row"><span>Waktu:</span> <span><%= new Date(sale.date).toLocaleString('id-ID', { timeZone: 'Asia/Makassar', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) %></span></div>
-        <div class="row"><span>No. Nota:</span> <span class="bold"><%= (typeof receiptNumber !== 'undefined') ? receiptNumber : ('#' + String(sale.id).padStart(4, '0')) %></span></div>
+        <div class="receipt-row"><span>Waktu:</span> <span><%= new Date(sale.date).toLocaleString('id-ID', { timeZone: 'Asia/Makassar', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) %></span></div>
+        <div class="receipt-row"><span>No. Nota:</span> <span class="bold"><%= (typeof receiptNumber !== 'undefined') ? receiptNumber : ('#' + String(sale.id).padStart(4, '0')) %></span></div>
         <hr>
-        <div class="row"><span>Pelanggan:</span> <span><%= sale.customer_name %></span></div>
-        <div class="row"><span>Plat Nomor:</span> <span class="bold"><%= sale.license_plate %></span></div>
-        <div class="row"><span>Pencuci:</span> <span><%= sale.worker_name %></span></div>
+        <div class="receipt-row"><span>Pelanggan:</span> <span><%= sale.customer_name %></span></div>
+        <div class="receipt-row"><span>Plat Nomor:</span> <span class="bold"><%= sale.license_plate %></span></div>
+        <div class="receipt-row"><span>Pencuci:</span> <span><%= sale.worker_name %></span></div>
         <hr>
         <div style="margin-bottom:6px;">
             <div style="display:flex; justify-content:space-between; font-weight:bold; border-bottom:1px solid #000; padding-bottom:3px; margin-bottom:4px;">
@@ -59,22 +78,22 @@
             </div>
             <% if (typeof serviceItems !== 'undefined' && serviceItems && serviceItems.length > 0) { %>
                 <% serviceItems.forEach(item => { %>
-                    <div class="row">
+                    <div class="receipt-row">
                         <span>- <%= item.name %></span>
                         <span><%= item.price ? ('Rp ' + Number(item.price).toLocaleString('id-ID')) : '-' %></span>
                     </div>
                 <% }) %>
             <% } else { %>
                 <% (sale.service_name||'').split(',').forEach(lay => { %>
-                    <div class="row"><span>- <%= lay.trim() %></span></div>
+                    <div class="receipt-row"><span>- <%= lay.trim() %></span></div>
                 <% }) %>
             <% } %>
         </div>
         <hr>
-        <div class="row bold" style="font-size: 14px;"><span>Total Tagihan:</span> <span>Rp <%= sale.price.toLocaleString('id-ID') %></span></div>
-        <div class="row"><span>Metode Bayar:</span> <span><%= sale.akun_kas || 'Kas Kecil (Tunai)' %></span></div>
+        <div class="receipt-row bold" style="font-size: 14px;"><span>Total Tagihan:</span> <span>Rp <%= sale.price.toLocaleString('id-ID') %></span></div>
+        <div class="receipt-row"><span>Metode Bayar:</span> <span><%= sale.akun_kas || 'Kas Kecil (Tunai)' %></span></div>
         <hr>
-        <div class="row"><span>Kasir:</span> <span><%= sale.admin_name %></span></div>
+        <div class="receipt-row"><span>Kasir:</span> <span><%= sale.admin_name %></span></div>
         
         <div class="text-center" style="margin-top:14px;">
             <p style="margin: 0; font-weight: bold; font-size: 12px;">
