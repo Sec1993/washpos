@@ -30,7 +30,7 @@
 <body>
     <div class="text-center" id="receiptPrintArea">
         <% if (typeof shopSettings === 'undefined' || !shopSettings || shopSettings.receipt_show_logo !== '0') { %>
-            <img src="/img/logo-thermal.png" alt="Logo" class="receipt-logo" onerror="this.src='/img/logo.png'">
+            <img src="/img/logo-thermal.png" id="receiptLogoImg" alt="Logo" class="receipt-logo" crossorigin="anonymous" onerror="this.src='/img/logo.png'">
         <% } %>
         <h2 style="margin: 0; font-size: 18px; font-weight: bold; letter-spacing: 0.5px; text-transform: uppercase;">
             <%= (typeof shopSettings !== 'undefined' && shopSettings.shop_name) ? shopSettings.shop_name : 'Prime Motowash' %>
@@ -47,7 +47,7 @@
         <p style="margin: 6px 0 2px 0; font-size: 11px; font-weight: bold; letter-spacing: 1px;">STRUK BUKTI PEMBAYARAN</p>
         <hr>
         <div class="row"><span>Waktu:</span> <span><%= new Date(sale.date).toLocaleString('id-ID', { timeZone: 'Asia/Makassar', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) %></span></div>
-        <div class="row"><span>No. Struk:</span> <span class="bold">#<%= sale.id %></span></div>
+        <div class="row"><span>No. Nota:</span> <span class="bold">#<%= String(sale.id).padStart(4, '0') %></span></div>
         <hr>
         <div class="row"><span>Pelanggan:</span> <span><%= sale.customer_name %></span></div>
         <div class="row"><span>Plat Nomor:</span> <span class="bold"><%= sale.license_plate %></span></div>
@@ -58,7 +58,7 @@
                 <span>Rincian Layanan</span><span>Biaya</span>
             </div>
             <% (sale.service_name||'').split(',').forEach(lay => { %>
-                <div class="row"><span>• <%= lay.trim() %></span></div>
+                <div class="row"><span>- <%= lay.trim() %></span></div>
             <% }) %>
         </div>
         <hr>
@@ -68,15 +68,15 @@
         <div class="row"><span>Kasir:</span> <span><%= sale.admin_name %></span></div>
         
         <div class="text-center" style="margin-top:16px;">
-            <img src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=<%= encodeURIComponent(((typeof shopSettings !== 'undefined' && shopSettings.shop_name) ? shopSettings.shop_name : 'PrimeMotowash') + '-Struk-' + sale.id) %>" alt="QR Code Struk" style="margin-bottom:6px;">
+            <img id="receiptQrImg" src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=2&data=<%= encodeURIComponent(((typeof shopSettings !== 'undefined' && shopSettings.shop_name) ? shopSettings.shop_name : 'PrimeMotowash') + '-Struk-' + sale.id) %>" alt="QR Code Struk" style="margin-bottom:6px; width:110px; height:110px;" crossorigin="anonymous">
             <p style="margin: 0; font-weight: bold; font-size: 12px;">
                 <%= (typeof shopSettings !== 'undefined' && shopSettings.receipt_footer) ? shopSettings.receipt_footer : 'Terima Kasih Atas Kunjungan Anda!' %>
             </p>
-            <p style="margin: 3px 0 0 0; font-size: 10px; color: #555;">Simpan struk ini sebagai bukti transaksi resmi.</p>
+            <p style="margin: 3px 0 0 0; font-size: 10px; color: #555;">Scan QR untuk bukti transaksi resmi</p>
         </div>
     </div>
     
-    <!-- TOMBOL AKSI CETAK & BLUETOOTH (TIDAK IKUT TERCETAK DI KERTAS) -->
+    <!-- TOMBOL AKSI CETAK & BLUETOOTH -->
     <div class="text-center no-print" style="margin-top:25px;">
         <% if (typeof isPreview !== 'undefined' && isPreview) { %>
             <div style="background:#e9f5ff; border:1px solid #b6d4fe; border-radius:5px; padding:8px; margin-bottom:12px; font-size:12px; color:#084298;">
@@ -84,17 +84,17 @@
             </div>
         <% } %>
 
-        <!-- OPSI 1: CETAK STANDAR WINDOWS / DRIVER / USB -->
-        <button onclick="window.print()" class="btn-action btn-print-sys">
-            🖨️ Cetak Struk (Sistem / USB / Driver)
-        </button>
-
-        <!-- OPSI 2: CETAK LANGSUNG VIA WEB BLUETOOTH (CHROME / ANDROID / LAPTOP) -->
+        <!-- OPSI 1: CETAK BLUETOOTH (LENGKAP: LOGO + DATA + QR CODE) -->
         <button type="button" onclick="printBluetoothDirect()" id="btnBluetoothPrint" class="btn-action btn-print-bt">
             🔵 Hubungkan & Cetak Printer Bluetooth
         </button>
 
-        <!-- OPSI 3: CETAK VIA RAWBT (KHUSUS HP/TABLET ANDROID DENGAN APLIKASI RAWBT) -->
+        <!-- OPSI 2: CETAK SISTEM / USB / DRIVER WINDOWS -->
+        <button onclick="window.print()" class="btn-action btn-print-sys">
+            🖨️ Cetak Struk (Sistem / USB / Driver)
+        </button>
+
+        <!-- OPSI 3: CETAK RAWBT (ANDROID) -->
         <a href="#" onclick="printViaRawBt(); return false;" class="btn-action btn-print-rawbt">
             📱 Cetak via RawBT (Android POS)
         </a>
@@ -102,7 +102,7 @@
         <!-- PETUNJUK KONEKSI BLUETOOTH -->
         <div style="margin-bottom: 12px;">
             <a href="javascript:void(0)" onclick="openHelpModal()" style="font-family: sans-serif; font-size: 11px; color: #0d6efd; text-decoration: underline;">
-                ❓ Printer Bluetooth belum muncul? Klik petunjuk di sini
+                ❓ Cara menghubungkan printer Bluetooth
             </a>
         </div>
 
@@ -121,29 +121,24 @@
         </a>
     </div>
 
-    <!-- MODAL PETUNJUK KONEKSI PRINTER BLUETOOTH -->
+    <!-- MODAL PETUNJUK -->
     <div id="helpModal" class="modal-help" onclick="if(event.target===this) closeHelpModal()">
         <div class="modal-help-content">
-            <h3 style="margin-top:0; font-size:15px; border-bottom:1px solid #ddd; padding-bottom:8px;">Cara Menghubungkan Printer Bluetooth</h3>
-            <p><strong>Kenapa printer Bluetooth tidak langsung muncul di menu cetak browser?</strong><br>
-            Browser web secara default hanya mendeteksi printer yang sudah terdaftar di sistem operasi.</p>
-            
-            <p><strong>Cara 1: Gunakan Tombol "🔵 Hubungkan & Cetak Bluetooth" (Paling Cepat)</strong><br>
-            Cukup klik tombol biru di atas pada browser Google Chrome/Edge, lalu pilih nama printer Bluetooth Anda (misal: <em>RPP02N, MPT-II, POS-58</em>) untuk pairing langsung.</p>
+            <h3 style="margin-top:0; font-size:15px; border-bottom:1px solid #ddd; padding-bottom:8px;">Petunjuk Printer Bluetooth</h3>
+            <p><strong>1. Tombol "🔵 Hubungkan & Cetak Bluetooth":</strong><br>
+            Cukup klik tombol biru di atas pada browser Google Chrome/Edge, lalu pilih nama printer Anda (misal: <em>RPP02N, MPT-II, POS-58</em>). Logo, rincian biaya, dan kode QR akan langsung tercetak!</p>
 
-            <p><strong>Cara 2: Sambungkan di Windows (Laptop Kasir)</strong><br>
-            1. Buka <strong>Settings > Bluetooth & devices > Add device</strong> di Windows.<br>
-            2. Nyalakan printer, pilih nama printer & masukkan PIN (biasanya <code>0000</code> atau <code>1234</code>).<br>
-            3. Pasang driver mini thermal POS-58 (pilih port COM/Bluetooth). Setelah itu printer otomatis muncul saat klik tombol <strong>Cetak Struk</strong>.</p>
+            <p><strong>2. Menghubungkan di Windows (Laptop):</strong><br>
+            Buka <strong>Windows Settings > Bluetooth & devices > Add device</strong>, sambungkan printer (PIN default: <code>0000</code> atau <code>1234</code>).</p>
 
-            <p><strong>Cara 3: Di HP / Tablet Android</strong><br>
-            Pasang aplikasi gratis <strong>RawBT Print Service</strong> dari Google Play Store, sambungkan bluetooth di RawBT, lalu klik tombol ungu <strong>Cetak via RawBT</strong>.</p>
+            <p><strong>3. Di HP Android:</strong><br>
+            Gunakan tombol <strong>Cetak via RawBT</strong> jika menggunakan aplikasi RawBT di Android.</p>
 
             <button onclick="closeHelpModal()" style="width:100%; padding:8px; background:#0d6efd; color:#fff; border:none; border-radius:4px; font-weight:bold; cursor:pointer; margin-top:10px;">Tutup</button>
         </div>
     </div>
 
-    <!-- JAVASCRIPT KONEKSI ESC/POS WEB BLUETOOTH & RAWBT -->
+    <!-- JAVASCRIPT ESC/POS: LOGO GRAPHIC + TEXT + QR CODE -->
     <script>
         function openHelpModal() {
             document.getElementById('helpModal').style.display = 'flex';
@@ -152,64 +147,167 @@
             document.getElementById('helpModal').style.display = 'none';
         }
 
-        // Siapkan Teks Struk ESC/POS
-        function buildReceiptText() {
+        // Konversi Gambar (Logo / QR) ke ESC/POS Raster Bit Image (GS v 0)
+        function convertImgToEscPos(imgEl, maxWidth = 320) {
+            if (!imgEl || !imgEl.complete || !imgEl.naturalWidth) {
+                return new Uint8Array(0);
+            }
+            try {
+                let w = imgEl.naturalWidth || imgEl.width;
+                let h = imgEl.naturalHeight || imgEl.height;
+                if (w > maxWidth) {
+                    h = Math.round(h * (maxWidth / w));
+                    w = maxWidth;
+                }
+                // Lebar kelipatan 8 bit (1 byte)
+                w = Math.floor(w / 8) * 8;
+                if (w < 8) w = 8;
+
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, w, h);
+                ctx.drawImage(imgEl, 0, 0, w, h);
+
+                const imgData = ctx.getImageData(0, 0, w, h).data;
+                const bytesWidth = w / 8;
+                const raster = [];
+
+                // Align center: ESC a 1
+                raster.push(0x1B, 0x61, 0x01);
+                // GS v 0 0 xL xH yL yH
+                const xL = bytesWidth % 256;
+                const xH = Math.floor(bytesWidth / 256);
+                const yL = h % 256;
+                const yH = Math.floor(h / 256);
+                raster.push(0x1D, 0x76, 0x30, 0x00, xL, xH, yL, yH);
+
+                for (let y = 0; y < h; y++) {
+                    for (let b = 0; b < bytesWidth; b++) {
+                        let byte = 0;
+                        for (let bit = 0; bit < 8; bit++) {
+                            const x = b * 8 + bit;
+                            const idx = (y * w + x) * 4;
+                            const r = imgData[idx];
+                            const g = imgData[idx + 1];
+                            const bVal = imgData[idx + 2];
+                            const a = imgData[idx + 3];
+
+                            const lum = 0.299 * r + 0.587 * g + 0.114 * bVal;
+                            const isBlack = (a > 64) && (lum < 165);
+                            if (isBlack) {
+                                byte |= (1 << (7 - bit));
+                            }
+                        }
+                        raster.push(byte);
+                    }
+                }
+                raster.push(0x0A); // Newline
+                return new Uint8Array(raster);
+            } catch (e) {
+                console.warn("Gagal konversi raster:", e);
+                return new Uint8Array(0);
+            }
+        }
+
+        // Susun Seluruh Paket Cetak (Logo + Teks Bersih + QR Code)
+        function buildCompleteReceiptPayload() {
+            const parts = [];
+
+            // 1. Reset Printer: ESC @
+            parts.push(new Uint8Array([0x1B, 0x40]));
+
+            // 2. Tambahkan Logo Gambar (jika aktif & ada)
+            const logoEl = document.getElementById('receiptLogoImg');
+            if (logoEl) {
+                const logoRaster = convertImgToEscPos(logoEl, 280);
+                if (logoRaster.length > 0) {
+                    parts.push(logoRaster);
+                }
+            }
+
+            // 3. Teks Header
             const shopName = "<%= (typeof shopSettings !== 'undefined' && shopSettings.shop_name) ? shopSettings.shop_name : 'Prime Motowash' %>";
             const shopAddress = "<%= (typeof shopSettings !== 'undefined' && shopSettings.shop_address) ? shopSettings.shop_address : '' %>";
             const shopPhone = "<%= (typeof shopSettings !== 'undefined' && shopSettings.shop_phone) ? shopSettings.shop_phone : '' %>";
             const dateStr = "<%= new Date(sale.date).toLocaleString('id-ID', { timeZone: 'Asia/Makassar', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) %>";
             const footer = "<%= (typeof shopSettings !== 'undefined' && shopSettings.receipt_footer) ? shopSettings.receipt_footer : 'Terima Kasih Atas Kunjungan Anda!' %>";
 
-            let txt = "";
-            txt += "\x1B\x40"; // ESC @ - Reset printer
-            txt += "\x1B\x61\x01"; // Center align
-            txt += "\x1B\x21\x20" + shopName + "\x1B\x21\x00\n"; // Double height
-            if (shopAddress) txt += shopAddress + "\n";
-            if (shopPhone) txt += "Telp/WA: " + shopPhone + "\n";
-            txt += "STRUK BUKTI PEMBAYARAN\n";
-            txt += "--------------------------------\n";
-            txt += "\x1B\x61\x00"; // Left align
-            txt += "Waktu   : " + dateStr + "\n";
-            txt += "Struk # : <%= sale.id %>\n";
-            txt += "Plat    : <%= sale.license_plate %>\n";
-            txt += "Plgn    : <%= sale.customer_name %>\n";
-            txt += "Pencuci : <%= sale.worker_name %>\n";
-            txt += "--------------------------------\n";
-            txt += "Layanan:\n";
+            let headerTxt = "";
+            headerTxt += "\x1B\x61\x01"; // Center align
+            headerTxt += "\x1B\x21\x20" + shopName + "\x1B\x21\x00\n"; // Double height font
+            if (shopAddress) headerTxt += shopAddress + "\n";
+            if (shopPhone) headerTxt += "Telp/WA: " + shopPhone + "\n";
+            headerTxt += "STRUK BUKTI PEMBAYARAN\n";
+            headerTxt += "--------------------------------\n";
+            headerTxt += "\x1B\x61\x00"; // Left align
+            headerTxt += "Waktu   : " + dateStr + "\n";
+            headerTxt += "No. Nota: #<%= String(sale.id).padStart(4, '0') %>\n";
+            headerTxt += "Plat    : <%= sale.license_plate %>\n";
+            headerTxt += "Plgn    : <%= sale.customer_name %>\n";
+            headerTxt += "Pencuci : <%= sale.worker_name %>\n";
+            headerTxt += "--------------------------------\n";
+            headerTxt += "Layanan:\n";
             <% (sale.service_name||'').split(',').forEach(lay => { %>
-                txt += " • <%= lay.trim() %>\n";
+                headerTxt += " - <%= lay.trim() %>\n";
             <% }) %>
-            txt += "--------------------------------\n";
-            txt += "Total   : Rp <%= sale.price.toLocaleString('id-ID') %>\n";
-            txt += "Bayar   : <%= sale.akun_kas || 'Kas Kecil (Tunai)' %>\n";
-            txt += "Kasir   : <%= sale.admin_name %>\n";
-            txt += "--------------------------------\n";
-            txt += "\x1B\x61\x01"; // Center align
-            txt += footer + "\n";
-            txt += "Simpan sebagai bukti transaksi\n\n\n\n";
-            txt += "\x1D\x56\x41\x03"; // Cut paper (if cutter exists)
-            return txt;
+            headerTxt += "--------------------------------\n";
+            headerTxt += "\x1B\x21\x08Total   : Rp <%= sale.price.toLocaleString('id-ID') %>\x1B\x21\x00\n"; // Bold
+            headerTxt += "Bayar   : <%= sale.akun_kas || 'Kas Kecil (Tunai)' %>\n";
+            headerTxt += "Kasir   : <%= sale.admin_name %>\n";
+            headerTxt += "--------------------------------\n";
+            headerTxt += "\x1B\x61\x01"; // Center align
+            headerTxt += footer + "\n";
+            headerTxt += "Simpan sebagai bukti transaksi\n\n";
+
+            parts.push(new TextEncoder().encode(headerTxt));
+
+            // 4. Tambahkan Gambar Barcode / QR Code
+            const qrEl = document.getElementById('receiptQrImg');
+            if (qrEl) {
+                const qrRaster = convertImgToEscPos(qrEl, 150);
+                if (qrRaster.length > 0) {
+                    parts.push(qrRaster);
+                    parts.push(new TextEncoder().encode("\n[ Scan Nota Online ]\n"));
+                }
+            }
+
+            // 5. Feed kertas & Cut
+            parts.push(new TextEncoder().encode("\n\n\n\n\x1D\x56\x41\x03"));
+
+            // Gabungkan semua part menjadi 1 Uint8Array tunggal
+            let totalLen = 0;
+            parts.forEach(p => totalLen += p.length);
+            const combined = new Uint8Array(totalLen);
+            let offset = 0;
+            parts.forEach(p => {
+                combined.set(p, offset);
+                offset += p.length;
+            });
+
+            return combined;
         }
 
-        // Cetak via Web Bluetooth API (Google Chrome / Edge)
+        // Cetak Langsung via Web Bluetooth
         async function printBluetoothDirect() {
             if (!navigator.bluetooth) {
-                alert("Browser ini belum mendukung Web Bluetooth secara langsung.\n\nGunakan Google Chrome / Edge versi terbaru, atau gunakan tombol 'Cetak via RawBT' jika menggunakan HP Android.");
+                alert("Browser ini belum mendukung Web Bluetooth secara langsung.\n\nGunakan Google Chrome atau Microsoft Edge versi terbaru, atau gunakan tombol 'Cetak via RawBT' jika dari HP Android.");
                 openHelpModal();
                 return;
             }
 
             const btn = document.getElementById('btnBluetoothPrint');
             const origText = btn.innerHTML;
-            btn.innerHTML = "⏳ Mencari Printer...";
+            btn.innerHTML = "⏳ Menghubungkan Printer...";
             btn.disabled = true;
 
             try {
-                // Request Bluetooth Device
                 const device = await navigator.bluetooth.requestDevice({
                     acceptAllDevices: true,
                     optionalServices: [
-                        '000018f0-0000-1000-8000-00805f9b34fb', // Serial port printer
+                        '000018f0-0000-1000-8000-00805f9b34fb',
                         'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
                         '49535343-fe7d-4ae5-8fa9-9fafd205e455',
                         '0000ff00-0000-1000-8000-00805f9b34fb',
@@ -217,10 +315,9 @@
                     ]
                 });
 
-                btn.innerHTML = "⏳ Menghubungkan ke " + device.name + "...";
+                btn.innerHTML = "⏳ Menyambung ke " + device.name + "...";
                 const server = await device.gatt.connect();
 
-                // Cari service dan characteristic yang bisa ditulisi (write)
                 const services = await server.getPrimaryServices();
                 let writeChar = null;
 
@@ -238,20 +335,17 @@
                 }
 
                 if (!writeChar) {
-                    throw new Error("Karakteristik cetak Bluetooth tidak ditemukan pada perangkat ini.");
+                    throw new Error("Saluran tulis Bluetooth tidak ditemukan pada printer ini.");
                 }
 
-                btn.innerHTML = "⏳ Mengirim Data Cetak...";
+                btn.innerHTML = "⏳ Mengirim Logo & Struk...";
 
-                // Siapkan data biner teks
-                const receiptStr = buildReceiptText();
-                const encoder = new TextEncoder();
-                const data = encoder.encode(receiptStr);
+                const payload = buildCompleteReceiptPayload();
 
-                // Kirim per chunk (512 byte) agar buffer printer tidak overflow
+                // Kirim data bertahap per 512 byte agar tidak macet di printer
                 const chunkSize = 512;
-                for (let i = 0; i < data.length; i += chunkSize) {
-                    const chunk = data.slice(i, i + chunkSize);
+                for (let i = 0; i < payload.length; i += chunkSize) {
+                    const chunk = payload.slice(i, i + chunkSize);
                     if (writeChar.properties.write) {
                         await writeChar.writeValueWithResponse(chunk);
                     } else {
@@ -263,13 +357,13 @@
                 setTimeout(() => {
                     btn.innerHTML = origText;
                     btn.disabled = false;
-                    device.gatt.disconnect();
+                    try { device.gatt.disconnect(); } catch (e) {}
                 }, 3000);
 
             } catch (err) {
-                console.error("Bluetooth print error:", err);
-                if (err.name !== 'NotFoundError') { // Ignore jika user sengaja klik cancel
-                    alert("Gagal mencetak via Bluetooth: " + err.message);
+                console.error("Bluetooth error:", err);
+                if (err.name !== 'NotFoundError') {
+                    alert("Gagal mencetak Bluetooth: " + err.message);
                 }
                 btn.innerHTML = origText;
                 btn.disabled = false;
@@ -278,15 +372,15 @@
 
         // Cetak via RawBT (Android)
         function printViaRawBt() {
-            const rawText = buildReceiptText();
-            // Format URL intent RawBT
-            const base64Data = btoa(unescape(encodeURIComponent(rawText)));
-            const rawBtUrl = "rawbt:data:base64," + base64Data;
-            
-            // Coba buka aplikasi RawBT
-            window.location.href = rawBtUrl;
+            const payload = buildCompleteReceiptPayload();
+            let binary = '';
+            const len = payload.byteLength;
+            for (let i = 0; i < len; i++) {
+                binary += String.fromCharCode(payload[i]);
+            }
+            const base64Data = btoa(binary);
+            window.location.href = "rawbt:data:base64," + base64Data;
 
-            // Fallback petunjuk jika RawBT belum terpasang
             setTimeout(() => {
                 const conf = confirm("Apakah printer sudah mencetak?\n\nJika belum, pastikan Anda telah memasang aplikasi gratis 'RawBT Print Service' dari Google Play Store pada HP/Tablet ini.");
                 if (!conf) {
