@@ -415,6 +415,22 @@ function openRoleModal(id, username, currentRole) {
                         <small class="text-muted">Pesan penutup di bagian paling bawah struk thermal kasir.</small>
                     </div>
 
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Teks Saran & Kritik Pelanggan</label>
+                        <input type="text" name="receipt_feedback" class="form-control form-control-sm" value="<%= typeof receiptFeedback !== 'undefined' ? receiptFeedback : 'Jika ada saran dan kritik silahkan hubungi 082187777080' %>" placeholder="Contoh: Jika ada saran dan kritik silahkan hubungi 082187777080">
+                        <small class="text-muted">Dicetak di bawah ucapan terima kasih pada struk thermal.</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Format Penomoran Nota</label>
+                        <select name="receipt_number_format" class="form-select form-select-sm">
+                            <option value="daily" <%= (typeof receiptNumberFormat === 'undefined' || receiptNumberFormat === 'daily') ? 'selected' : '' %>>Nomor Urut Harian (#0001, #0002 - Reset Tiap Pagi)</option>
+                            <option value="date_seq" <%= (typeof receiptNumberFormat !== 'undefined' && receiptNumberFormat === 'date_seq') ? 'selected' : '' %>>Kombinasi Tanggal + Urutan (261028-001, 261028-002)</option>
+                            <option value="global" <%= (typeof receiptNumberFormat !== 'undefined' && receiptNumberFormat === 'global') ? 'selected' : '' %>>Nomor ID Database Kumulatif (#0026)</option>
+                        </select>
+                        <small class="text-muted">Pilih format penomoran nota yang tampil dan tercetak pada struk kasir.</small>
+                    </div>
+
                     <div class="form-check form-switch mb-4">
                         <input class="form-check-input" type="checkbox" name="receipt_show_logo" id="showLogoSwitch" value="1" <%= (typeof receiptShowLogo === 'undefined' || receiptShowLogo) ? 'checked' : '' %>>
                         <label class="form-check-label small fw-bold" for="showLogoSwitch">Tampilkan Logo pada Struk Cetak Kasir</label>

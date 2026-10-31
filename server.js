@@ -165,10 +165,29 @@ const cachedShopSettings = {
     shop_slogan: '',
     shop_address: '',
     shop_phone: '',
-    receipt_footer: 'Terima kasih atas kunjungan Anda!',
+    receipt_footer: 'Terima kasih atas kunjungan Anda',
+    receipt_feedback: 'Jika ada saran dan kritik silahkan hubungi 082187777080',
+    receipt_number_format: 'daily',
     receipt_show_logo: '1',
     shop_logo: '/img/logo.png'
 };
+
+// Helper: Format Nomor Nota Kasir (Daily Reset, Date+Seq, or Global ID)
+function formatReceiptNumber(sale, dailySeq, format = 'daily') {
+    const seq = dailySeq || 1;
+    if (format === 'date_seq') {
+        const d = new Date(sale.date);
+        const yy = String(d.getFullYear()).slice(-2);
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yy}${mm}${dd}-${String(seq).padStart(3, '0')}`;
+    }
+    if (format === 'global') {
+        return '#' + String(sale.id).padStart(4, '0');
+    }
+    // Default: daily sequence (reset otomatis setiap hari)
+    return '#' + String(seq).padStart(4, '0');
+}
 
 function refreshShopSettings() {
     db.all("SELECT key, value FROM settings WHERE key LIKE 'shop_%' OR key LIKE 'receipt_%'", (err, rows) => {
@@ -579,7 +598,24 @@ app.get('/receipt/:id', requireAdminOrOwner, (req, res) => {
     const saleId = req.params.id;
     db.get("SELECT * FROM sales WHERE id = ?", [saleId], (err, sale) => {
         if (err || !sale) return res.send('Transaksi tidak ditemukan.');
-        res.render('receipt', { sale, shopSettings: cachedShopSettings, isPreview: false });
+        
+        // Hitung nomor urutan transaksi pada tanggal tersebut (reset harian)
+        db.get(
+            "SELECT COUNT(*) as daily_seq FROM sales WHERE date(date) = date(?) AND id <= ?",
+            [sale.date, sale.id],
+            (err2, seqRow) => {
+                const dailySeq = (seqRow && seqRow.daily_seq) ? seqRow.daily_seq : 1;
+                const format = cachedShopSettings.receipt_number_format || 'daily';
+                const receiptNumber = formatReceiptNumber(sale, dailySeq, format);
+                res.render('receipt', { 
+                    sale, 
+                    dailySeq, 
+                    receiptNumber, 
+                    shopSettings: cachedShopSettings, 
+                    isPreview: false 
+                });
+            }
+        );
     });
 });
 
@@ -597,7 +633,15 @@ app.get('/receipt-preview', requireOwner, (req, res) => {
         admin_name: req.session.user ? req.session.user.username : 'owner',
         phone: '081234567890'
     };
-    res.render('receipt', { sale: dummySale, shopSettings: cachedShopSettings, isPreview: true });
+    const format = cachedShopSettings.receipt_number_format || 'daily';
+    const receiptNumber = formatReceiptNumber(dummySale, 1, format);
+    res.render('receipt', { 
+        sale: dummySale, 
+        dailySeq: 1, 
+        receiptNumber, 
+        shopSettings: cachedShopSettings, 
+        isPreview: true 
+    });
 });
 
 // Routes - Expenses (Phase 4 formal: filter tanggal, search, pagination + foto + stok integrasi 5.4)
@@ -782,7 +826,9 @@ function renderMaster(res, error = null, success = null) {
                         const shopSlogan = rawSlogan;
                         const shopAddress = settingsMap.shop_address || '';
                         const shopPhone = settingsMap.shop_phone || '';
-                        const receiptFooter = settingsMap.receipt_footer || 'Terima kasih atas kunjungan Anda!';
+                        const receiptFooter = settingsMap.receipt_footer || 'Terima kasih atas kunjungan Anda';
+                        const receiptFeedback = settingsMap.receipt_feedback || 'Jika ada saran dan kritik silahkan hubungi 082187777080';
+                        const receiptNumberFormat = settingsMap.receipt_number_format || 'daily';
                         const receiptShowLogo = settingsMap.receipt_show_logo !== '0';
                         const shopLogo = settingsMap.shop_logo || '/img/logo.png';
 
@@ -810,6 +856,8 @@ function renderMaster(res, error = null, success = null) {
                             shopAddress,
                             shopPhone,
                             receiptFooter,
+                            receiptFeedback,
+                            receiptNumberFormat,
                             receiptShowLogo,
                             shopLogo,
                             telegramBotToken,
@@ -1002,7 +1050,9 @@ app.post('/master/settings/shop', requireOwner, (req, res) => {
     const shopSlogan = (req.body.shop_slogan || '').trim();
     const shopAddress = (req.body.shop_address || '').trim();
     const shopPhone = (req.body.shop_phone || '').trim();
-    const receiptFooter = (req.body.receipt_footer || 'Terima kasih atas kunjungan Anda!').trim();
+    const receiptFooter = (req.body.receipt_footer || 'Terima kasih atas kunjungan Anda').trim();
+    const receiptFeedback = (req.body.receipt_feedback || 'Jika ada saran dan kritik silahkan hubungi 082187777080').trim();
+    const receiptNumberFormat = (req.body.receipt_number_format || 'daily').trim();
     const receiptShowLogo = (req.body.receipt_show_logo === '1' || req.body.receipt_show_logo === 'on') ? '1' : '0';
     const shopLogo = (req.body.shop_logo || '/img/logo.png').trim();
 
@@ -1012,6 +1062,8 @@ app.post('/master/settings/shop', requireOwner, (req, res) => {
         db.run("INSERT INTO settings (key, value) VALUES ('shop_address', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [shopAddress]);
         db.run("INSERT INTO settings (key, value) VALUES ('shop_phone', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [shopPhone]);
         db.run("INSERT INTO settings (key, value) VALUES ('receipt_footer', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [receiptFooter]);
+        db.run("INSERT INTO settings (key, value) VALUES ('receipt_feedback', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [receiptFeedback]);
+        db.run("INSERT INTO settings (key, value) VALUES ('receipt_number_format', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [receiptNumberFormat]);
         db.run("INSERT INTO settings (key, value) VALUES ('receipt_show_logo', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [receiptShowLogo]);
         db.run("INSERT INTO settings (key, value) VALUES ('shop_logo', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [shopLogo], (err) => {
             if (err) return renderMaster(res, 'Gagal menyimpan profil usaha: ' + err.message);

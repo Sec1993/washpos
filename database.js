@@ -191,7 +191,9 @@ db.serialize(() => {
             ['shop_slogan', ''],
             ['shop_address', ''],
             ['shop_phone', ''],
-            ['receipt_footer', 'Terima kasih atas kunjungan Anda!'],
+            ['receipt_footer', 'Terima kasih atas kunjungan Anda'],
+            ['receipt_feedback', 'Jika ada saran dan kritik silahkan hubungi 082187777080'],
+            ['receipt_number_format', 'daily'],
             ['receipt_show_logo', '1'],
             ['shop_logo', '/img/logo.png']
         ];
