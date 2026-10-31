@@ -195,6 +195,7 @@ db.serialize(() => {
             ['receipt_feedback', 'Jika ada saran dan kritik silahkan hubungi 082187777080'],
             ['receipt_number_format', 'daily'],
             ['receipt_show_logo', '1'],
+            ['receipt_show_qr', '1'],
             ['shop_logo', '/img/logo.png']
         ];
         defaultSettings.forEach(([k, v]) => {

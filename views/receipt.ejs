@@ -57,9 +57,18 @@
             <div style="display:flex; justify-content:space-between; font-weight:bold; border-bottom:1px solid #000; padding-bottom:3px; margin-bottom:4px;">
                 <span>Rincian Layanan</span><span>Biaya</span>
             </div>
-            <% (sale.service_name||'').split(',').forEach(lay => { %>
-                <div class="row"><span>- <%= lay.trim() %></span></div>
-            <% }) %>
+            <% if (typeof serviceItems !== 'undefined' && serviceItems && serviceItems.length > 0) { %>
+                <% serviceItems.forEach(item => { %>
+                    <div class="row">
+                        <span>- <%= item.name %></span>
+                        <span><%= item.price ? ('Rp ' + Number(item.price).toLocaleString('id-ID')) : '-' %></span>
+                    </div>
+                <% }) %>
+            <% } else { %>
+                <% (sale.service_name||'').split(',').forEach(lay => { %>
+                    <div class="row"><span>- <%= lay.trim() %></span></div>
+                <% }) %>
+            <% } %>
         </div>
         <hr>
         <div class="row bold" style="font-size: 14px;"><span>Total Tagihan:</span> <span>Rp <%= sale.price.toLocaleString('id-ID') %></span></div>
@@ -67,10 +76,9 @@
         <hr>
         <div class="row"><span>Kasir:</span> <span><%= sale.admin_name %></span></div>
         
-        <div class="text-center" style="margin-top:16px;">
-            <img id="receiptQrImg" src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=2&data=<%= encodeURIComponent(((typeof shopSettings !== 'undefined' && shopSettings.shop_name) ? shopSettings.shop_name : 'PrimeMotowash') + '-Struk-' + sale.id) %>" alt="QR Code Struk" style="margin-bottom:6px; width:110px; height:110px;" crossorigin="anonymous">
+        <div class="text-center" style="margin-top:14px;">
             <p style="margin: 0; font-weight: bold; font-size: 12px;">
-                <%= (typeof shopSettings !== 'undefined' && shopSettings.receipt_footer) ? shopSettings.receipt_footer : 'Terima kasih atas kunjungan Anda' %>
+                <%= ((typeof shopSettings !== 'undefined' && shopSettings.receipt_footer) ? shopSettings.receipt_footer : 'Terima kasih atas kunjungan Anda').replace(/!+$/, '').trim() %>
             </p>
             <% if (typeof shopSettings !== 'undefined' && shopSettings.receipt_feedback && shopSettings.receipt_feedback.trim()) { %>
                 <p style="margin: 4px 0 0 0; font-size: 11px; color: #222; line-height: 1.3;">
@@ -78,6 +86,13 @@
                 </p>
             <% } %>
             <p style="margin: 4px 0 0 0; font-size: 10px; color: #555;">Simpan sebagai bukti transaksi resmi</p>
+
+            <% if (typeof shopSettings === 'undefined' || !shopSettings || shopSettings.receipt_show_qr !== '0') { %>
+                <div style="margin-top:10px;">
+                    <img id="receiptQrImg" src="https://api.qrserver.com/v1/create-qr-code/?size=130x130&margin=2&data=<%= encodeURIComponent('https://washpos.onrender.com/receipt/' + sale.id) %>" alt="QR Code Struk" style="margin-bottom:2px; width:95px; height:95px;" crossorigin="anonymous">
+                    <p style="margin: 2px 0 0 0; font-size: 9px; color: #666;">Scan QR untuk nota digital online</p>
+                </div>
+            <% } %>
         </div>
     </div>
     
@@ -238,7 +253,7 @@
             const shopAddress = "<%= (typeof shopSettings !== 'undefined' && shopSettings.shop_address) ? shopSettings.shop_address : '' %>";
             const shopPhone = "<%= (typeof shopSettings !== 'undefined' && shopSettings.shop_phone) ? shopSettings.shop_phone : '' %>";
             const dateStr = "<%= new Date(sale.date).toLocaleString('id-ID', { timeZone: 'Asia/Makassar', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) %>";
-            const footer = "<%= (typeof shopSettings !== 'undefined' && shopSettings.receipt_footer) ? shopSettings.receipt_footer : 'Terima kasih atas kunjungan Anda' %>";
+            const footer = "<%= ((typeof shopSettings !== 'undefined' && shopSettings.receipt_footer) ? shopSettings.receipt_footer : 'Terima kasih atas kunjungan Anda').replace(/!+$/, '').trim() %>";
             const feedback = "<%= (typeof shopSettings !== 'undefined' && shopSettings.receipt_feedback) ? shopSettings.receipt_feedback : 'Jika ada saran dan kritik silahkan hubungi 082187777080' %>";
             const receiptNum = "<%= (typeof receiptNumber !== 'undefined') ? receiptNumber : ('#' + String(sale.id).padStart(4, '0')) %>";
 
@@ -257,9 +272,24 @@
             headerTxt += "Pencuci : <%= sale.worker_name %>\n";
             headerTxt += "--------------------------------\n";
             headerTxt += "Layanan:\n";
-            <% (sale.service_name||'').split(',').forEach(lay => { %>
-                headerTxt += " - <%= lay.trim() %>\n";
-            <% }) %>
+            <% if (typeof serviceItems !== 'undefined' && serviceItems && serviceItems.length > 0) { %>
+                <% serviceItems.forEach(item => { %>
+                    {
+                        const name = "- " + "<%= item.name %>";
+                        const pr = "<%= item.price ? Number(item.price).toLocaleString('id-ID') : '' %>";
+                        if (pr) {
+                            const spaces = Math.max(1, 32 - name.length - pr.length);
+                            headerTxt += name + " ".repeat(spaces) + pr + "\n";
+                        } else {
+                            headerTxt += name + "\n";
+                        }
+                    }
+                <% }) %>
+            <% } else { %>
+                <% (sale.service_name||'').split(',').forEach(lay => { %>
+                    headerTxt += " - <%= lay.trim() %>\n";
+                <% }) %>
+            <% } %>
             headerTxt += "--------------------------------\n";
             headerTxt += "\x1B\x21\x08Total   : Rp <%= sale.price.toLocaleString('id-ID') %>\x1B\x21\x00\n"; // Bold
             headerTxt += "Bayar   : <%= sale.akun_kas || 'Kas Kecil (Tunai)' %>\n";
@@ -280,22 +310,23 @@
                 });
                 if (curLine) headerTxt += curLine + "\n";
             }
-            headerTxt += "Simpan sebagai bukti transaksi\n\n";
+            headerTxt += "Simpan sebagai bukti transaksi\n";
 
             parts.push(new TextEncoder().encode(headerTxt));
 
-            // 4. Tambahkan Gambar Barcode / QR Code
+            // 4. Tambahkan Gambar Barcode / QR Code (jika aktif)
             const qrEl = document.getElementById('receiptQrImg');
             if (qrEl) {
-                const qrRaster = convertImgToEscPos(qrEl, 150);
+                const qrRaster = convertImgToEscPos(qrEl, 120);
                 if (qrRaster.length > 0) {
+                    parts.push(new TextEncoder().encode("\n"));
                     parts.push(qrRaster);
-                    parts.push(new TextEncoder().encode("\n[ Scan Nota Online ]\n"));
+                    parts.push(new TextEncoder().encode("[ Nota Digital Online ]\n"));
                 }
             }
 
-            // 5. Feed kertas & Cut
-            parts.push(new TextEncoder().encode("\n\n\n\n\x1D\x56\x41\x03"));
+            // 5. Feed kertas hemat (hanya 2 baris agar pas di gerigi sobek tanpa membuang kertas)
+            parts.push(new TextEncoder().encode("\n\n"));
 
             // Gabungkan semua part menjadi 1 Uint8Array tunggal
             let totalLen = 0;
