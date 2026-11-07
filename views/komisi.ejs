@@ -1,19 +1,30 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
-        <h2 class="mb-0">Rekap Komisi Pencuci & Bagi Hasil</h2>
-        <small class="text-muted">Perhitungan upah & komisi pencuci otomatis berdasarkan jumlah motor dan layanan yang dikerjakan.</small>
+        <h2 class="mb-0">Rekap Gaji & Komisi Karyawan</h2>
+        <small class="text-muted">Perhitungan gaji harian terintegrasi absensi (off 1x seminggu tidak hitung gaji) + komisi hasil cuci motor.</small>
     </div>
-    <div>
-        <button type="button" class="btn btn-outline-dark" onclick="window.print()">
-            🖨️ Cetak Laporan
+    <div class="d-flex gap-2">
+        <a href="/master" class="btn btn-outline-primary btn-sm">
+            ⚙️ Atur Tarif Gaji Master
+        </a>
+        <button type="button" class="btn btn-outline-dark btn-sm" onclick="window.print()">
+            🖨️ Cetak Halaman
         </button>
     </div>
 </div>
+
+<% if (typeof successMsg !== 'undefined' && successMsg) { %>
+    <div class="alert alert-success alert-dismissible fade show py-2" role="alert">
+        <strong>✅ Berhasil!</strong> <%= successMsg %>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+<% } %>
 
 <!-- Filter Toolbar -->
 <div class="card shadow-sm mb-4">
     <div class="card-body">
         <form method="GET" action="/komisi" id="filterKomisiForm" class="row g-2 align-items-end">
+            <input type="hidden" name="tab" id="activeTabInput" value="<%= activeTab %>">
             <div class="col-md-3 col-sm-6">
                 <label class="form-label small fw-bold mb-1">Dari Tanggal</label>
                 <input type="date" name="from" id="filterFrom" value="<%= from %>" class="form-control form-control-sm">
@@ -25,7 +36,7 @@
             <div class="col-md-3 col-sm-6">
                 <label class="form-label small fw-bold mb-1">Pencuci / Karyawan</label>
                 <select name="worker" class="form-select form-select-sm">
-                    <option value="all" <%= selectedWorker==='all'?'selected':'' %>>-- Semua Pencuci --</option>
+                    <option value="all" <%= selectedWorker==='all'?'selected':'' %>>-- Semua Karyawan --</option>
                     <% workers.forEach(w => { %>
                         <option value="<%= w.name %>" <%= selectedWorker===w.name?'selected':'' %>><%= w.name %></option>
                     <% }) %>
@@ -39,180 +50,423 @@
 
         <!-- Quick Shortcut Buttons -->
         <div class="d-flex gap-1 mt-2 flex-wrap align-items-center">
-            <small class="text-muted me-1">Pilihan Cepat:</small>
+            <small class="text-muted me-1 fw-bold">Periode Cepat:</small>
+            <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2" style="font-size:12px;" onclick="setPeriode('month')">📅 Bulan Ini</button>
+            <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2" style="font-size:12px;" onclick="setPeriode('last_month')">Bulan Lalu</button>
             <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2" style="font-size:12px;" onclick="setPeriode('today')">Hari Ini</button>
-            <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2" style="font-size:12px;" onclick="setPeriode('yesterday')">Kemarin</button>
             <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2" style="font-size:12px;" onclick="setPeriode('last7')">7 Hari Terakhir</button>
-            <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2" style="font-size:12px;" onclick="setPeriode('month')">Bulan Ini</button>
         </div>
     </div>
 </div>
 
-<!-- KPI Summary Cards -->
-<div class="row g-3 mb-4">
-    <div class="col-md-3 col-6">
-        <div class="card text-bg-primary shadow-sm h-100">
-            <div class="card-body">
-                <div class="text-uppercase small fw-bold opacity-75">Total Motor Dicuci</div>
-                <h3 class="mb-0 mt-1 fw-bold"><%= grandTotalMotor %> <span class="fs-6 fw-normal">unit</span></h3>
-                <small class="opacity-75">Periode <%= from %> s/d <%= to %></small>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3 col-6">
-        <div class="card text-bg-dark shadow-sm h-100">
-            <div class="card-body">
-                <div class="text-uppercase small fw-bold opacity-75">Total Omset Cuci</div>
-                <h3 class="mb-0 mt-1 fw-bold">Rp <%= grandTotalOmzet.toLocaleString('id-ID') %></h3>
-                <small class="opacity-75">Semua transaksi periode ini</small>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3 col-6">
-        <div class="card text-bg-success shadow-sm h-100">
-            <div class="card-body">
-                <div class="text-uppercase small fw-bold opacity-75">Total Komisi Pencuci</div>
-                <h3 class="mb-0 mt-1 fw-bold">Rp <%= grandTotalKomisi.toLocaleString('id-ID') %></h3>
-                <small class="opacity-75">Hak upah bagi hasil pencuci</small>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3 col-6">
-        <div class="card text-bg-info text-white shadow-sm h-100">
-            <div class="card-body">
-                <div class="text-uppercase small fw-bold opacity-75">Porsi Bersih Outlet</div>
-                <h3 class="mb-0 mt-1 fw-bold">Rp <%= (grandTotalOmzet - grandTotalKomisi).toLocaleString('id-ID') %></h3>
-                <small class="opacity-75">Omset dikurangi komisi pekerja</small>
-            </div>
-        </div>
-    </div>
-</div>
+<!-- Nav Tabs -->
+<ul class="nav nav-tabs mb-4">
+    <li class="nav-item">
+        <a class="nav-link <%= activeTab === 'payroll' ? 'active fw-bold text-primary' : 'text-dark' %>" href="javascript:void(0)" onclick="switchTab('payroll')">
+            💰 Rekap Gaji Bulanan (Absen + Komisi Cuci)
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link <%= activeTab === 'detail' ? 'active fw-bold text-primary' : 'text-dark' %>" href="javascript:void(0)" onclick="switchTab('detail')">
+            📋 Rincian Transaksi Cuci Motor (<%= trxDetails.length %>)
+        </a>
+    </li>
+</ul>
 
-<!-- Tabel Rekap Komisi per Pencuci -->
-<div class="card shadow-sm mb-4 border-success">
-    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-        <span class="fw-bold">📊 Rekap Hak Komisi per Pencuci</span>
-        <span class="badge bg-light text-dark"><%= workerSummary.length %> pencuci aktif</span>
+<!-- ============================================================== -->
+<!-- TAB 1: REKAP GAJI BULANAN (TERINTEGRASI ABSEN & KOMISI) -->
+<!-- ============================================================== -->
+<div id="tabPayrollContent" style="<%= activeTab === 'payroll' ? 'display:block;' : 'display:none;' %>">
+    <!-- Banner Penjelasan Aturan Penggajian -->
+    <div class="alert alert-primary shadow-sm py-2 mb-4">
+        <div class="d-flex align-items-center gap-2">
+            <span class="fs-4">💡</span>
+            <div class="small">
+                <strong>Aturan Penggajian:</strong> Karyawan off 1x seminggu (hari libur/off tidak dihitung gaji).
+                Gaji pokok kehadiran murni dihitung dari <strong>Hari Hadir Absen Masuk × Tarif Gaji Harian</strong> (ditentukan Owner di menu Master). Total Gaji Bersih = Gaji Kehadiran + Komisi Cuci Motor.
+            </div>
+        </div>
     </div>
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table table-hover table-striped mb-0 align-middle">
-                <thead class="table-light">
-                    <tr>
-                        <th style="width: 50px;">No</th>
-                        <th>Nama Pencuci</th>
-                        <th class="text-center">Motor Dicuci</th>
-                        <th class="text-end">Omset Dihasilkan</th>
-                        <th class="text-end">Total Komisi (Hak Pekerja)</th>
-                        <th class="text-end">Rata-rata / Motor</th>
-                        <th class="text-center" style="width: 140px;">Cetak Slip</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <% if (workerSummary.length === 0) { %>
+
+    <!-- KPI Summary Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3 col-6">
+            <div class="card text-bg-success shadow-sm h-100">
+                <div class="card-body">
+                    <div class="text-uppercase small fw-bold opacity-75">Total Gaji Bersih</div>
+                    <h3 class="mb-0 mt-1 fw-bold">Rp <%= (grandTotalGajiBersih || 0).toLocaleString('id-ID') %></h3>
+                    <small class="opacity-75">Gaji Kehadiran + Komisi</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card text-bg-primary shadow-sm h-100">
+                <div class="card-body">
+                    <div class="text-uppercase small fw-bold opacity-75">Gaji Kehadiran (Absen)</div>
+                    <h3 class="mb-0 mt-1 fw-bold">Rp <%= (grandTotalGajiKehadiran || 0).toLocaleString('id-ID') %></h3>
+                    <small class="opacity-75">Total <%= grandTotalHariHadir || 0 %> hari masuk kerja</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card text-bg-dark shadow-sm h-100">
+                <div class="card-body">
+                    <div class="text-uppercase small fw-bold opacity-75">Total Komisi Cuci</div>
+                    <h3 class="mb-0 mt-1 fw-bold">Rp <%= (grandTotalKomisi || 0).toLocaleString('id-ID') %></h3>
+                    <small class="opacity-75">Dari <%= grandTotalMotor || 0 %> unit motor</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card text-bg-info text-white shadow-sm h-100">
+                <div class="card-body">
+                    <div class="text-uppercase small fw-bold opacity-75">Total Omset Cuci</div>
+                    <h3 class="mb-0 mt-1 fw-bold">Rp <%= (grandTotalOmzet || 0).toLocaleString('id-ID') %></h3>
+                    <small class="opacity-75">Periode <%= from %> s/d <%= to %></small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabel Rekap Gaji Bulanan per Karyawan -->
+    <div class="card shadow-sm mb-4 border-primary">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <span class="fw-bold">💵 Daftar Gaji & Komisi per Karyawan (<%= from %> s/d <%= to %>)</span>
+            <span class="badge bg-light text-dark"><%= payrollSummary.length %> Karyawan</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped mb-0 align-middle">
+                    <thead class="table-light">
                         <tr>
-                            <td colspan="7" class="text-center text-muted py-4">
-                                Tidak ada data pengerjaan pencuci pada periode yang dipilih.
-                            </td>
+                            <th style="width: 40px;">No</th>
+                            <th>Nama Karyawan</th>
+                            <th class="text-center">Hari Hadir</th>
+                            <th class="text-end">Tarif Harian</th>
+                            <th class="text-end">Gaji Kehadiran</th>
+                            <th class="text-center">Motor Dicuci</th>
+                            <th class="text-end">Komisi Cuci</th>
+                            <th class="text-end">Total Gaji Bersih</th>
+                            <th class="text-center">Status</th>
+                            <th class="text-center" style="width: 220px;">Aksi</th>
                         </tr>
-                    <% } %>
-                    <% workerSummary.forEach((w, idx) => { %>
-                        <% const avg = w.total_motor > 0 ? Math.round(w.total_komisi / w.total_motor) : 0; %>
+                    </thead>
+                    <tbody>
+                        <% if (payrollSummary.length === 0) { %>
+                            <tr>
+                                <td colspan="10" class="text-center text-muted py-4">
+                                    Belum ada data karyawan. Tambahkan karyawan di menu <a href="/master">Master Karyawan</a>.
+                                </td>
+                            </tr>
+                        <% } %>
+                        <% payrollSummary.forEach((p, idx) => { %>
+                            <tr>
+                                <td class="text-muted"><%= idx + 1 %></td>
+                                <td>
+                                    <strong><%= p.name %></strong>
+                                    <% if (p.phone) { %>
+                                        <br><small class="text-muted">📱 <%= p.phone %></small>
+                                    <% } %>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-success fs-6"><%= p.days_present %> Hari</span>
+                                    <br><small class="text-muted" style="font-size: 11px;">Absen Masuk</small>
+                                </td>
+                                <td class="text-end">
+                                    <% if (p.daily_rate > 0) { %>
+                                        <span class="fw-bold">Rp <%= p.daily_rate.toLocaleString('id-ID') %></span>
+                                    <% } else { %>
+                                        <span class="badge bg-warning text-dark">Rp 0 (Belum diatur)</span>
+                                    <% } %>
+                                    <br><small class="text-muted"><a href="/master" style="font-size: 10px;">Ubah</a></small>
+                                </td>
+                                <td class="text-end fw-bold text-primary">
+                                    Rp <%= p.total_daily_salary.toLocaleString('id-ID') %>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-dark fs-6"><%= p.total_motor %> unit</span>
+                                </td>
+                                <td class="text-end fw-bold text-success">
+                                    Rp <%= p.total_komisi.toLocaleString('id-ID') %>
+                                </td>
+                                <td class="text-end">
+                                    <span class="badge bg-success fs-6 px-2 py-1">
+                                        Rp <%= p.total_gaji.toLocaleString('id-ID') %>
+                                    </span>
+                                </td>
+                                <td class="text-center">
+                                    <% if (p.is_paid) { %>
+                                        <span class="badge bg-success">✅ Lunas</span>
+                                        <br><small class="text-muted" style="font-size: 10px;"><%= new Date(p.paid_record.paid_at).toLocaleDateString('id-ID') %></small>
+                                    <% } else { %>
+                                        <span class="badge bg-warning text-dark">⏳ Belum Bayar</span>
+                                    <% } %>
+                                </td>
+                                <td class="text-center">
+                                    <div class="d-flex justify-content-center gap-1 flex-wrap">
+                                        <!-- Cetak Slip Gaji -->
+                                        <a href="/komisi/slip/<%= encodeURIComponent(p.name) %>?from=<%= from %>&to=<%= to %>" target="_blank" class="btn btn-xs btn-outline-primary py-1 px-2" style="font-size:12px;" title="Cetak Slip Gaji Resmi">
+                                            🧾 Slip
+                                        </a>
+
+                                        <!-- Kirim WhatsApp -->
+                                        <button type="button" class="btn btn-xs btn-outline-success py-1 px-2" style="font-size:12px;" onclick='kirimWaGaji(<%= JSON.stringify(p) %>, "<%= from %>", "<%= to %>")' title="Kirim Slip Gaji via WhatsApp">
+                                            📱 WA
+                                        </button>
+
+                                        <!-- Bayar Gaji (Owner) -->
+                                        <button type="button" class="btn btn-xs btn-success py-1 px-2" style="font-size:12px;" onclick='openBayarGajiModal(<%= JSON.stringify(p) %>, "<%= from %>", "<%= to %>")' title="Bayarkan Gaji & Catat ke Pengeluaran">
+                                            💵 Bayar
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                    <% if (payrollSummary.length > 0) { %>
+                    <tfoot class="table-light fw-bold">
                         <tr>
-                            <td class="text-muted"><%= idx + 1 %></td>
+                            <td colspan="2" class="text-center">TOTAL KESELURUHAN</td>
+                            <td class="text-center text-success fs-6"><%= grandTotalHariHadir || 0 %> Hari</td>
+                            <td></td>
+                            <td class="text-end text-primary fs-6">Rp <%= (grandTotalGajiKehadiran || 0).toLocaleString('id-ID') %></td>
+                            <td class="text-center text-dark fs-6"><%= grandTotalMotor || 0 %> unit</td>
+                            <td class="text-end text-success fs-6">Rp <%= (grandTotalKomisi || 0).toLocaleString('id-ID') %></td>
+                            <td class="text-end text-success fs-5">Rp <%= (grandTotalGajiBersih || 0).toLocaleString('id-ID') %></td>
+                            <td colspan="2"></td>
+                        </tr>
+                    </tfoot>
+                    <% } %>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================== -->
+<!-- TAB 2: RINCIAN KOMISI & TRANSAKSI CUCI MOTOR -->
+<!-- ============================================================== -->
+<div id="tabDetailContent" style="<%= activeTab === 'detail' ? 'display:block;' : 'display:none;' %>">
+    <!-- Tabel Rekap Komisi Pencuci -->
+    <div class="card shadow-sm mb-4 border-success">
+        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+            <span class="fw-bold">📊 Rekap Hak Komisi per Pencuci</span>
+            <span class="badge bg-light text-dark"><%= workerSummary.length %> pencuci aktif</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 50px;">No</th>
+                            <th>Nama Pencuci</th>
+                            <th class="text-center">Motor Dicuci</th>
+                            <th class="text-end">Omset Dihasilkan</th>
+                            <th class="text-end">Total Komisi (Hak Pekerja)</th>
+                            <th class="text-end">Rata-rata / Motor</th>
+                            <th class="text-center" style="width: 140px;">Cetak Slip</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% if (workerSummary.length === 0) { %>
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-4">
+                                    Tidak ada data pengerjaan pencuci pada periode yang dipilih.
+                                </td>
+                            </tr>
+                        <% } %>
+                        <% workerSummary.forEach((w, idx) => { %>
+                            <% const avg = w.total_motor > 0 ? Math.round(w.total_komisi / w.total_motor) : 0; %>
+                            <tr>
+                                <td class="text-muted"><%= idx + 1 %></td>
+                                <td>
+                                    <strong><%= w.worker_name %></strong>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-primary fs-6"><%= w.total_motor %> unit</span>
+                                </td>
+                                <td class="text-end">
+                                    Rp <%= w.total_omzet.toLocaleString('id-ID') %>
+                                </td>
+                                <td class="text-end">
+                                    <span class="fw-bold text-success fs-6">Rp <%= w.total_komisi.toLocaleString('id-ID') %></span>
+                                </td>
+                                <td class="text-end text-muted small">
+                                    Rp <%= avg.toLocaleString('id-ID') %>
+                                </td>
+                                <td class="text-center">
+                                    <a href="/komisi/slip/<%= encodeURIComponent(w.worker_name) %>?from=<%= from %>&to=<%= to %>" target="_blank" class="btn btn-sm btn-outline-success py-1 px-2" title="Cetak slip komisi untuk pencuci ini">
+                                        🧾 Cetak Slip
+                                    </a>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                    <% if (workerSummary.length > 0) { %>
+                    <tfoot class="table-light fw-bold">
+                        <tr>
+                            <td colspan="2" class="text-center">TOTAL KESELURUHAN</td>
+                            <td class="text-center text-primary fs-6"><%= grandTotalMotor %> unit</td>
+                            <td class="text-end">Rp <%= grandTotalOmzet.toLocaleString('id-ID') %></td>
+                            <td class="text-end text-success fs-6">Rp <%= grandTotalKomisi.toLocaleString('id-ID') %></td>
+                            <td class="text-end text-muted small">Rp <%= (grandTotalMotor>0?Math.round(grandTotalKomisi/grandTotalMotor):0).toLocaleString('id-ID') %></td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                    <% } %>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabel Rincian Transaksi Pengerjaan -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+            <span>📋 Rincian Transaksi & Komisi Motor</span>
+            <small><%= trxDetails.length %> transaksi</small>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-striped table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Waktu</th>
+                            <th>Pencuci</th>
+                            <th>Plat & Pelanggan</th>
+                            <th>Layanan</th>
+                            <th class="text-end">Harga Jual</th>
+                            <th class="text-end">Komisi</th>
+                            <th>Kasir</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% if (trxDetails.length === 0) { %>
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-3">Tidak ada transaksi ditemukan.</td>
+                            </tr>
+                        <% } %>
+                        <% trxDetails.forEach(t => { %>
+                        <tr>
+                            <td><small><%= new Date(t.date).toLocaleString('id-ID') %></small></td>
                             <td>
-                                <strong><%= w.worker_name %></strong>
+                                <span class="badge bg-light text-dark border"><%= t.worker_name %></span>
                             </td>
-                            <td class="text-center">
-                                <span class="badge bg-primary fs-6"><%= w.total_motor %> unit</span>
+                            <td>
+                                <strong><%= t.license_plate %></strong><br>
+                                <small class="text-muted"><%= t.customer_name %></small>
                             </td>
-                            <td class="text-end">
-                                Rp <%= w.total_omzet.toLocaleString('id-ID') %>
+                            <td>
+                                <% (t.service_name || '').split(',').forEach(lay => { %>
+                                    <span class="badge bg-success mb-1"><%= lay.trim() %></span>
+                                <% }) %>
                             </td>
-                            <td class="text-end">
-                                <span class="fw-bold text-success fs-6">Rp <%= w.total_komisi.toLocaleString('id-ID') %></span>
-                            </td>
-                            <td class="text-end text-muted small">
-                                Rp <%= avg.toLocaleString('id-ID') %>
-                            </td>
-                            <td class="text-center">
-                                <a href="/komisi/slip/<%= encodeURIComponent(w.worker_name) %>?from=<%= from %>&to=<%= to %>" target="_blank" class="btn btn-sm btn-outline-success py-1 px-2" title="Cetak slip komisi untuk pencuci ini">
-                                    🧾 Cetak Slip
-                                </a>
-                            </td>
+                            <td class="text-end">Rp <%= t.price.toLocaleString('id-ID') %></td>
+                            <td class="text-end fw-bold text-success">Rp <%= (t.commission || 0).toLocaleString('id-ID') %></td>
+                            <td><small class="text-muted"><%= t.admin_name %></small></td>
                         </tr>
-                    <% }) %>
-                </tbody>
-                <% if (workerSummary.length > 0) { %>
-                <tfoot class="table-light fw-bold">
-                    <tr>
-                        <td colspan="2" class="text-center">TOTAL KESELURUHAN</td>
-                        <td class="text-center text-primary fs-6"><%= grandTotalMotor %> unit</td>
-                        <td class="text-end">Rp <%= grandTotalOmzet.toLocaleString('id-ID') %></td>
-                        <td class="text-end text-success fs-6">Rp <%= grandTotalKomisi.toLocaleString('id-ID') %></td>
-                        <td class="text-end text-muted small">Rp <%= (grandTotalMotor>0?Math.round(grandTotalKomisi/grandTotalMotor):0).toLocaleString('id-ID') %></td>
-                        <td></td>
-                    </tr>
-                </tfoot>
-                <% } %>
-            </table>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </div>
 
-<!-- Tabel Rincian Transaksi Pengerjaan -->
-<div class="card shadow-sm mb-4">
-    <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
-        <span>📋 Rincian Transaksi & Komisi Motor</span>
-        <small><%= trxDetails.length %> transaksi</small>
-    </div>
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table table-sm table-striped table-hover mb-0 align-middle">
-                <thead class="table-light">
-                    <tr>
-                        <th>Waktu</th>
-                        <th>Pencuci</th>
-                        <th>Plat & Pelanggan</th>
-                        <th>Layanan</th>
-                        <th class="text-end">Harga Jual</th>
-                        <th class="text-end">Komisi</th>
-                        <th>Kasir</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <% if (trxDetails.length === 0) { %>
-                        <tr>
-                            <td colspan="7" class="text-center text-muted py-3">Tidak ada transaksi ditemukan.</td>
-                        </tr>
-                    <% } %>
-                    <% trxDetails.forEach(t => { %>
-                    <tr>
-                        <td><small><%= new Date(t.date).toLocaleString('id-ID') %></small></td>
-                        <td>
-                            <span class="badge bg-light text-dark border"><%= t.worker_name %></span>
-                        </td>
-                        <td>
-                            <strong><%= t.license_plate %></strong><br>
-                            <small class="text-muted"><%= t.customer_name %></small>
-                        </td>
-                        <td>
-                            <% (t.service_name || '').split(',').forEach(lay => { %>
-                                <span class="badge bg-success mb-1"><%= lay.trim() %></span>
+<!-- Modal Bayar Gaji Karyawan -->
+<div class="modal fade" id="modalBayarGaji" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form action="/payroll/pay" method="POST" onsubmit="return validateRupiahForm(this)">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title">💵 Pembayaran Gaji & Komisi</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="worker_name" id="payWorkerName">
+                    <input type="hidden" name="period_from" id="payPeriodFrom">
+                    <input type="hidden" name="period_to" id="payPeriodTo">
+                    <input type="hidden" name="days_present" id="payDaysPresent">
+                    <input type="hidden" name="daily_rate" id="payDailyRate">
+                    <input type="hidden" name="total_daily_salary" id="payTotalDailySalary">
+                    <input type="hidden" name="total_motor" id="payTotalMotor">
+                    <input type="hidden" name="total_commission" id="payTotalCommission">
+
+                    <div class="alert alert-light border py-2 mb-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span>Karyawan:</span>
+                            <strong id="displayWorkerName">-</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-1">
+                            <span>Periode:</span>
+                            <span id="displayPeriod" class="fw-bold">-</span>
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small text-muted mb-1">Gaji Kehadiran (<span id="displayDays">0</span> hari)</label>
+                            <input type="text" id="displayGajiHadir" class="form-control form-control-sm bg-light fw-bold text-primary" readonly>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small text-muted mb-1">Komisi Cuci (<span id="displayMotor">0</span> motor)</label>
+                            <input type="text" id="displayKomisiCuci" class="form-control form-control-sm bg-light fw-bold text-success" readonly>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small text-muted mb-1">Bonus / Lembur (+Rp)</label>
+                            <input type="text" name="bonus" id="payBonus" class="form-control form-control-sm rupiah-input" value="0" oninput="hitungTotalGajiModal()">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small text-muted mb-1">Kasbon / Potongan (-Rp)</label>
+                            <input type="text" name="kasbon" id="payKasbon" class="form-control form-control-sm rupiah-input" value="0" oninput="hitungTotalGajiModal()">
+                        </div>
+                    </div>
+
+                    <div class="mb-3 p-2 bg-success bg-opacity-10 border border-success rounded">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="fw-bold text-success">TOTAL GAJI DIBAYARKAN:</span>
+                            <h4 class="mb-0 fw-bold text-success" id="displayTotalGajiNet">Rp 0</h4>
+                        </div>
+                        <input type="hidden" name="total_paid" id="payTotalPaid" value="0">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">Dibayarkan dari Akun Kas:</label>
+                        <select name="akun_kas" class="form-select form-select-sm" required>
+                            <% (typeof accounts !== 'undefined' ? accounts : []).forEach(acc => { %>
+                                <option value="<%= acc %>"><%= acc %></option>
                             <% }) %>
-                        </td>
-                        <td class="text-end">Rp <%= t.price.toLocaleString('id-ID') %></td>
-                        <td class="text-end fw-bold text-success">Rp <%= (t.commission || 0).toLocaleString('id-ID') %></td>
-                        <td><small class="text-muted"><%= t.admin_name %></small></td>
-                    </tr>
-                    <% }) %>
-                </tbody>
-            </table>
+                        </select>
+                        <small class="text-muted" style="font-size: 11px;">Otomatis memotong saldo kas akun yang dipilih dan dicatat ke Pengeluaran (Beban Gaji).</small>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label fw-bold small">Catatan Pembayaran (Opsional):</label>
+                        <input type="text" name="notes" class="form-control form-control-sm" placeholder="Contoh: Gaji transfer BCA / Tunai kas kecil">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-success btn-sm fw-bold">✅ Konfirmasi & Bayarkan</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
 
 <script>
+let currentModalBaseGaji = 0;
+
+function switchTab(tab) {
+    document.getElementById('activeTabInput').value = tab;
+    if (tab === 'payroll') {
+        document.getElementById('tabPayrollContent').style.display = 'block';
+        document.getElementById('tabDetailContent').style.display = 'none';
+    } else {
+        document.getElementById('tabPayrollContent').style.display = 'none';
+        document.getElementById('tabDetailContent').style.display = 'block';
+    }
+}
+
 function setPeriode(type) {
     const fromInput = document.getElementById('filterFrom');
     const toInput = document.getElementById('filterTo');
@@ -238,7 +492,81 @@ function setPeriode(type) {
         const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
         fromInput.value = fmt(firstDay);
         toInput.value = fmt(today);
+    } else if (type === 'last_month') {
+        const firstPrev = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        const lastPrev = new Date(today.getFullYear(), today.getMonth(), 0);
+        fromInput.value = fmt(firstPrev);
+        toInput.value = fmt(lastPrev);
     }
     form.submit();
+}
+
+function openBayarGajiModal(p, fromDate, toDate) {
+    document.getElementById('payWorkerName').value = p.name;
+    document.getElementById('displayWorkerName').textContent = p.name;
+    document.getElementById('displayPeriod').textContent = fromDate + ' s/d ' + toDate;
+    document.getElementById('payPeriodFrom').value = fromDate;
+    document.getElementById('payPeriodTo').value = toDate;
+
+    document.getElementById('payDaysPresent').value = p.days_present;
+    document.getElementById('displayDays').textContent = p.days_present;
+    document.getElementById('payDailyRate').value = p.daily_rate;
+    document.getElementById('payTotalDailySalary').value = p.total_daily_salary;
+    document.getElementById('displayGajiHadir').value = 'Rp ' + p.total_daily_salary.toLocaleString('id-ID');
+
+    document.getElementById('payTotalMotor').value = p.total_motor;
+    document.getElementById('displayMotor').textContent = p.total_motor;
+    document.getElementById('payTotalCommission').value = p.total_komisi;
+    document.getElementById('displayKomisiCuci').value = 'Rp ' + p.total_komisi.toLocaleString('id-ID');
+
+    currentModalBaseGaji = p.total_daily_salary + p.total_komisi;
+    document.getElementById('payBonus').value = '0';
+    document.getElementById('payKasbon').value = '0';
+
+    hitungTotalGajiModal();
+
+    const modal = new bootstrap.Modal(document.getElementById('modalBayarGaji'));
+    modal.show();
+}
+
+function hitungTotalGajiModal() {
+    const parse = (val) => {
+        if (!val) return 0;
+        return parseFloat(String(val).replace(/[^0-9]/g, '')) || 0;
+    };
+
+    const bonus = parse(document.getElementById('payBonus').value);
+    const kasbon = parse(document.getElementById('payKasbon').value);
+    const totalNet = Math.max(0, currentModalBaseGaji + bonus - kasbon);
+
+    document.getElementById('displayTotalGajiNet').textContent = 'Rp ' + totalNet.toLocaleString('id-ID');
+    document.getElementById('payTotalPaid').value = totalNet;
+}
+
+function kirimWaGaji(p, fromDate, toDate) {
+    const cleanPhone = (p.phone || '').replace(/[^0-9]/g, '');
+    const waNumber = cleanPhone.startsWith('0') ? '62' + cleanPhone.slice(1) : cleanPhone;
+    
+    const text = encodeURIComponent(
+        `Halo ${p.name},\n\n` +
+        `Berikut rincian Rekap Gaji & Komisi Anda di *Prime Motowash*:\n` +
+        `🗓 *Periode:* ${fromDate} s/d ${toDate}\n\n` +
+        `📌 *Rincian Kehadiran:* ${p.days_present} Hari Masuk × Rp ${p.daily_rate.toLocaleString('id-ID')} = *Rp ${p.total_daily_salary.toLocaleString('id-ID')}*\n` +
+        `🏍 *Komisi Cuci Motor:* ${p.total_motor} Unit = *Rp ${p.total_komisi.toLocaleString('id-ID')}*\n` +
+        `-----------------------------------------\n` +
+        `💰 *TOTAL GAJI BERSIH:* *Rp ${p.total_gaji.toLocaleString('id-ID')}*\n\n` +
+        `Terima kasih atas kerja keras Anda! 🙏✨`
+    );
+
+    if (waNumber) {
+        window.open(`https://wa.me/${waNumber}?text=${text}`, '_blank');
+    } else {
+        const inputPhone = prompt(`Masukkan nomor WhatsApp untuk ${p.name} (contoh: 08123456789):`);
+        if (inputPhone) {
+            const clean = inputPhone.replace(/[^0-9]/g, '');
+            const target = clean.startsWith('0') ? '62' + clean.slice(1) : clean;
+            window.open(`https://wa.me/${target}?text=${text}`, '_blank');
+        }
+    }
 }
 </script>

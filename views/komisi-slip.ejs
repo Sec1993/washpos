@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Slip Komisi - <%= workerName %></title>
+    <title>Slip Gaji & Komisi - <%= workerName %></title>
     <style>
         body {
             font-family: 'Courier New', Courier, monospace, sans-serif;
             font-size: 13px;
-            max-width: 360px;
+            max-width: 380px;
             margin: 0 auto;
             padding: 15px;
             color: #000;
@@ -21,6 +21,13 @@
         table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 12px; }
         th, td { padding: 4px 0; text-align: left; }
         th { border-bottom: 1px solid #000; }
+        .section-title {
+            font-weight: bold;
+            margin-top: 6px;
+            margin-bottom: 3px;
+            text-transform: uppercase;
+            font-size: 11.5px;
+        }
         .signatures {
             display: flex;
             justify-content: space-between;
@@ -31,22 +38,57 @@
         .sig-line { margin-top: 45px; border-top: 1px solid #000; font-size: 11px; }
         @media print {
             .no-print { display: none !important; }
-            body { padding: 0; }
+            body { padding: 0; max-width: 100%; }
         }
     </style>
 </head>
 <body>
     <div class="text-center">
-        <h2 style="margin: 0; font-size: 20px;">WashPOS</h2>
-        <p style="margin: 2px 0 0 0; font-size: 13px;">SLIP KOMISI PENCUCI</p>
+        <h2 style="margin: 0; font-size: 18px; letter-spacing: 1px;">PRIME MOTOWASH</h2>
+        <p style="margin: 2px 0 0 0; font-size: 12px; font-weight: bold;">SLIP GAJI & KOMISI KARYAWAN</p>
     </div>
     <hr>
-    <div class="row"><span>Nama Pencuci:</span> <span class="fw-bold"><%= workerName %></span></div>
-    <div class="row"><span>Periode:</span> <span><%= from %> s/d <%= to %></span></div>
-    <div class="row"><span>Dicetak:</span> <span><%= new Date(printedAt).toLocaleString('id-ID') %></span></div>
+    <div class="row"><span>Nama Karyawan:</span> <span class="fw-bold"><%= workerName %></span></div>
+    <div class="row"><span>Periode Gaji:</span> <span><%= from %> s/d <%= to %></span></div>
+    <div class="row"><span>Tanggal Cetak:</span> <span><%= new Date(printedAt).toLocaleString('id-ID') %></span></div>
     <hr>
 
-    <div class="fw-bold" style="margin-bottom: 4px;">Rincian Pengerjaan Motor:</div>
+    <!-- 1. Rincian Kehadiran (Absensi) -->
+    <div class="section-title">1. GAJI KEHADIRAN (ABSENSI)</div>
+    <div class="row">
+        <span>Hari Hadir (Masuk):</span>
+        <span class="fw-bold"><%= daysPresent %> Hari</span>
+    </div>
+    <div class="row">
+        <span>Tarif Gaji Harian:</span>
+        <span>Rp <%= (dailyRate || 0).toLocaleString('id-ID') %> / Hari</span>
+    </div>
+    <div class="row fw-bold" style="margin-top: 2px;">
+        <span>Subtotal Gaji Kehadiran:</span>
+        <span>Rp <%= (totalDailySalary || 0).toLocaleString('id-ID') %></span>
+    </div>
+    <div style="font-size: 10px; font-style: italic; color: #444; margin-top: 2px;">
+        *Catatan: Off 1x seminggu tidak dihitung gaji.
+    </div>
+    <hr>
+
+    <!-- 2. Rincian Komisi Cuci Motor -->
+    <div class="section-title">2. KOMISI HASIL CUCI MOTOR</div>
+    <div class="row">
+        <span>Total Motor Dicuci:</span>
+        <span class="fw-bold"><%= totalMotor %> unit</span>
+    </div>
+    <div class="row">
+        <span>Total Omset Cuci:</span>
+        <span>Rp <%= totalOmzet.toLocaleString('id-ID') %></span>
+    </div>
+    <div class="row fw-bold" style="margin-top: 2px;">
+        <span>Subtotal Komisi Cuci:</span>
+        <span>Rp <%= totalKomisi.toLocaleString('id-ID') %></span>
+    </div>
+
+    <% if (rows && rows.length > 0) { %>
+    <div style="margin-top: 6px; font-size: 11px; font-weight: bold;">Rincian Unit Motor:</div>
     <table>
         <thead>
             <tr>
@@ -56,10 +98,7 @@
             </tr>
         </thead>
         <tbody>
-            <% if (rows.length === 0) { %>
-                <tr><td colspan="3" class="text-center">Tidak ada pengerjaan</td></tr>
-            <% } %>
-            <% rows.forEach(r => { %>
+            <% rows.slice(0, 30).forEach(r => { %>
                 <tr>
                     <td>
                         <span class="fw-bold"><%= r.license_plate %></span><br>
@@ -69,41 +108,54 @@
                     <td class="text-end fw-bold">Rp <%= (r.commission || 0).toLocaleString('id-ID') %></td>
                 </tr>
             <% }) %>
+            <% if (rows.length > 30) { %>
+                <tr>
+                    <td colspan="3" class="text-center" style="font-size: 10.5px; font-style: italic;">
+                        ... dan <%= rows.length - 30 %> pengerjaan motor lainnya ...
+                    </td>
+                </tr>
+            <% } %>
         </tbody>
     </table>
+    <% } %>
     <hr>
 
+    <!-- 3. Total Akhir -->
+    <% if (bonus > 0) { %>
     <div class="row">
-        <span>Total Motor Dicuci:</span>
-        <span class="fw-bold"><%= totalMotor %> unit</span>
+        <span>Bonus / Lembur:</span>
+        <span class="fw-bold">+ Rp <%= bonus.toLocaleString('id-ID') %></span>
     </div>
+    <% } %>
+    <% if (kasbon > 0) { %>
     <div class="row">
-        <span>Total Omset Dihasilkan:</span>
-        <span>Rp <%= totalOmzet.toLocaleString('id-ID') %></span>
+        <span>Potongan Kasbon:</span>
+        <span class="fw-bold text-danger">- Rp <%= kasbon.toLocaleString('id-ID') %></span>
     </div>
-    <hr>
-    <div class="row fw-bold" style="font-size: 15px;">
-        <span>TOTAL KOMISI:</span>
-        <span>Rp <%= totalKomisi.toLocaleString('id-ID') %></span>
+    <% } %>
+
+    <div class="row fw-bold" style="font-size: 15px; margin-top: 6px;">
+        <span>TOTAL GAJI DITERIMA:</span>
+        <span>Rp <%= grandTotalGaji.toLocaleString('id-ID') %></span>
     </div>
     <hr>
 
     <div class="signatures">
         <div class="sig-box">
-            <small>Penerima (Pencuci)</small>
+            <small>Penerima (Karyawan)</small>
             <div class="sig-line">( <%= workerName %> )</div>
         </div>
         <div class="sig-box">
-            <small>Mengetahui (Kasir/Owner)</small>
+            <small>Mengetahui (Owner/Kasir)</small>
             <div class="sig-line">( ................... )</div>
         </div>
     </div>
 
-    <div class="text-center no-print" style="margin-top: 30px;">
-        <button onclick="window.print()" style="padding: 10px 20px; font-weight: bold; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%; margin-bottom: 8px;">
-            🖨️ Cetak Slip Sekarang
+    <div class="text-center no-print" style="margin-top: 25px;">
+        <button onclick="window.print()" style="padding: 10px 20px; font-weight: bold; background: #0284C7; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%; margin-bottom: 8px;">
+            🖨️ Cetak Slip Gaji Sekarang
         </button>
-        <button onclick="window.close()" style="padding: 8px 15px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;">
+        <button onclick="window.close()" style="padding: 8px 15px; background: #64748B; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;">
             Tutup Jendela
         </button>
     </div>

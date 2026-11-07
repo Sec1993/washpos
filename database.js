@@ -58,13 +58,13 @@ db.serialize(() => {
     db.run(`CREATE TABLE IF NOT EXISTS workers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE,
-        join_date TEXT
+        join_date TEXT,
+        daily_salary REAL DEFAULT 0,
+        phone TEXT
     )`);
-    db.run(`ALTER TABLE workers ADD COLUMN join_date TEXT`, (err) => {
-        if (err && !err.message.includes('duplicate column')) {
-            // ignore
-        }
-    });
+    db.run(`ALTER TABLE workers ADD COLUMN join_date TEXT`, (err) => {});
+    db.run(`ALTER TABLE workers ADD COLUMN daily_salary REAL DEFAULT 0`, (err) => {});
+    db.run(`ALTER TABLE workers ADD COLUMN phone TEXT`, (err) => {});
 
     // 4. Sales table
     db.run(`CREATE TABLE IF NOT EXISTS sales (
@@ -161,6 +161,7 @@ db.serialize(() => {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         username TEXT,
+        worker_name TEXT,
         date TEXT,
         time TEXT,
         datetime DATETIME,
@@ -171,6 +172,7 @@ db.serialize(() => {
         address TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
+    db.run(`ALTER TABLE attendance ADD COLUMN worker_name TEXT`, (err) => {});
 
     // 10. Akun Kas/Bank/QRIS (Owner kelola)
     db.run(`CREATE TABLE IF NOT EXISTS accounts (
@@ -238,6 +240,30 @@ db.serialize(() => {
         db.run("UPDATE services SET commission=25000 WHERE name='Coating Motor' AND commission IS NULL");
         db.run("UPDATE services SET commission=ROUND(price * 0.3) WHERE commission IS NULL");
     });
+
+    // 12. Payroll Records (Riwayat Slip & Pembayaran Gaji Karyawan)
+    db.run(`CREATE TABLE IF NOT EXISTS payroll_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        worker_name TEXT,
+        period_month TEXT,
+        period_from TEXT,
+        period_to TEXT,
+        days_present INTEGER DEFAULT 0,
+        daily_rate REAL DEFAULT 0,
+        total_daily_salary REAL DEFAULT 0,
+        total_motor INTEGER DEFAULT 0,
+        total_commission REAL DEFAULT 0,
+        bonus REAL DEFAULT 0,
+        kasbon REAL DEFAULT 0,
+        total_paid REAL DEFAULT 0,
+        status TEXT DEFAULT 'paid',
+        paid_at DATETIME,
+        paid_by TEXT,
+        akun_kas TEXT,
+        expense_id INTEGER,
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
 
     // Seed default owner account if no users exist
     db.get("SELECT COUNT(*) as count FROM users", (err, row) => {

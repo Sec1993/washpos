@@ -294,24 +294,32 @@ app.get('/absen', requireLogin, (req, res) => {
     const today = getWitaTime().toISOString().slice(0,10);
     const uid = req.session.user.id;
     const isOwner = req.session.user.role === 'owner' || req.session.user.role === 'admin';
-    // ambil absen hari ini untuk user ini
-    db.all("SELECT * FROM attendance WHERE user_id=? AND date=? ORDER BY time ASC", [uid, today], (e, todayRows)=>{
-        // untuk owner, tampilkan semua absen hari ini
-        const whereOwner = isOwner ? "WHERE date=?" : "WHERE user_id=? AND date=?";
-        const paramsOwner = isOwner ? [today] : [uid, today];
-        db.all(`SELECT * FROM attendance ${whereOwner} ORDER BY datetime DESC LIMIT 20`, paramsOwner, (e, recent)=>{
-            // history mingguan untuk user
-            db.all("SELECT * FROM attendance WHERE user_id=? ORDER BY datetime DESC LIMIT 30", [uid], (e, history)=>{
-                res.render('absen', { todayRows: todayRows||[], recent: recent||[], history: history||[], isOwner, today });
+    db.all("SELECT * FROM workers ORDER BY name ASC", (errW, workers) => {
+        // ambil absen hari ini untuk user ini / semua jika owner
+        const whereToday = isOwner ? "WHERE date=?" : "WHERE (user_id=? OR worker_name=?) AND date=?";
+        const paramsToday = isOwner ? [today] : [uid, req.session.user.username, today];
+        db.all(`SELECT * FROM attendance ${whereToday} ORDER BY time ASC`, paramsToday, (e, todayRows)=>{
+            const whereRecent = isOwner ? "" : "WHERE user_id=? OR worker_name=?";
+            const paramsRecent = isOwner ? [] : [uid, req.session.user.username];
+            db.all(`SELECT * FROM attendance ${whereRecent} ORDER BY datetime DESC LIMIT 30`, paramsRecent, (e, recent)=>{
+                res.render('absen', { 
+                    todayRows: todayRows||[], 
+                    recent: recent||[], 
+                    history: recent||[], 
+                    workers: workers||[], 
+                    isOwner, 
+                    today 
+                });
             });
         });
     });
 });
 
 app.post('/absen', requireLogin, absenUpload.single('photo'), async (req, res) => {
-    const { type, latitude, longitude, address } = req.body;
+    const { type, latitude, longitude, address, worker_name } = req.body;
     const t = (type==='keluar' ? 'keluar' : 'masuk');
     if (!req.file) return res.status(400).send('Validasi gagal: Foto wajib. <a href="/absen">Kembali</a>');
+    const finalWorker = (worker_name && worker_name.trim()) ? worker_name.trim() : req.session.user.username;
     const lat = latitude ? parseFloat(latitude) : null;
     const lng = longitude ? parseFloat(longitude) : null;
     // lokasi opsional — jika tidak ada, tetap simpan dengan 0,0
@@ -324,18 +332,20 @@ app.post('/absen', requireLogin, absenUpload.single('photo'), async (req, res) =
     const datetime = wita.toISOString();
     const uid = req.session.user.id;
     const username = req.session.user.username;
-    db.get("SELECT * FROM attendance WHERE user_id=? AND date=? AND type=?", [uid, date, t], async (e,row)=>{
+
+    // Cek double absen untuk worker yang sama di tanggal & tipe yang sama
+    db.get("SELECT * FROM attendance WHERE (worker_name=? OR (worker_name IS NULL AND user_id=?)) AND date=? AND type=?", [finalWorker, uid, date, t], async (e,row)=>{
         if (row) {
             try { fs.unlinkSync(req.file.path); } catch(e){}
-            return res.status(400).send(`Sudah absen ${t} hari ini jam ${row.time}. <a href="/absen">Kembali</a>`);
+            return res.status(400).send(`Karyawan "${finalWorker}" sudah absen ${t} hari ini jam ${row.time}. <a href="/absen">Kembali</a>`);
         }
         let photo = '/uploads/absen/' + path.basename(req.file.path);
         const remoteName = 'absen/' + path.basename(req.file.path);
         const cloudUrl = await uploadToSupabase(req.file.path, remoteName, req.file.mimetype);
         if (cloudUrl) photo = cloudUrl;
 
-        db.run("INSERT INTO attendance (user_id, username, date, time, datetime, type, photo, latitude, longitude, address) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            [uid, username, date, time, datetime, t, photo, finalLat, finalLng, finalAddr], (err)=>{
+        db.run("INSERT INTO attendance (user_id, username, worker_name, date, time, datetime, type, photo, latitude, longitude, address) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            [uid, username, finalWorker, date, time, datetime, t, photo, finalLat, finalLng, finalAddr], (err)=>{
                 if (err) { 
                     try { fs.unlinkSync(req.file.path); } catch(e){}
                     return res.status(500).send('Gagal simpan absen: '+err.message); 
@@ -963,14 +973,33 @@ app.post('/master/services/delete', requireOwner, (req, res) => {
 });
 
 app.post('/master/workers/add', requireOwner, (req, res) => {
-    const { name, join_date } = req.body;
-    if (!isValidName(name,2)) {
+    const { name, join_date, daily_salary, phone } = req.body;
+    if (!isValidName(name, 2)) {
         return renderMaster(res, 'Validasi gagal: Nama karyawan min 2 karakter.');
     }
-    const finalJoinDate = join_date && join_date.trim() ? join_date.trim() : getWitaTime().toISOString().slice(0,10);
-    db.run("INSERT INTO workers (name, join_date) VALUES (?, ?)", [name.trim(), finalJoinDate], (err) => {
+    const finalJoinDate = join_date && join_date.trim() ? join_date.trim() : getWitaTime().toISOString().slice(0, 10);
+    const parsedDailySalary = parseRupiah(daily_salary || 0);
+    const cleanPhone = phone ? phone.trim() : '';
+
+    db.run("INSERT INTO workers (name, join_date, daily_salary, phone) VALUES (?, ?, ?, ?)", [name.trim(), finalJoinDate, parsedDailySalary, cleanPhone], (err) => {
         if (err) {
             return renderMaster(res, 'Validasi gagal: Nama karyawan sudah ada (unik).');
+        }
+        res.redirect('/master');
+    });
+});
+
+app.post('/master/workers/update', requireOwner, (req, res) => {
+    const { id, name, join_date, daily_salary, phone } = req.body;
+    if (!id || !isValidName(name, 2)) {
+        return renderMaster(res, 'Validasi gagal: ID atau nama karyawan tidak valid.');
+    }
+    const parsedDailySalary = parseRupiah(daily_salary || 0);
+    const cleanPhone = phone ? phone.trim() : '';
+
+    db.run("UPDATE workers SET name = ?, join_date = ?, daily_salary = ?, phone = ? WHERE id = ?", [name.trim(), join_date, parsedDailySalary, cleanPhone, id], (err) => {
+        if (err) {
+            return renderMaster(res, 'Gagal memperbarui data karyawan: ' + err.message);
         }
         res.redirect('/master');
     });
@@ -1229,13 +1258,17 @@ app.post('/akun/edit', requireOwner, (req, res) => {
     });
 });
 
-// Routes - Rekap Komisi Pencuci (Owner & Admin)
+// Routes - Rekap Komisi Pencuci & Penggajian Terintegrasi Absen (Owner & Admin)
 app.get('/komisi', requireAdminOrOwner, (req, res) => {
-    let { from, to, worker } = req.query;
+    let { from, to, worker, tab } = req.query;
     const nowWita = getWitaTime();
     const todayStr = nowWita.toISOString().slice(0, 10);
-    if (!from) from = todayStr;
+    const firstDayOfMonth = new Date(nowWita.getFullYear(), nowWita.getMonth(), 1).toISOString().slice(0, 10);
+    
+    // Default rentang tanggal adalah Bulan Berjalan (1 s/d hari ini) sesuai siklus bulanan
+    if (!from) from = firstDayOfMonth;
     if (!to) to = todayStr;
+    const activeTab = tab || 'payroll';
 
     let where = ["date(date) >= date(?)", "date(date) <= date(?)"];
     let params = [from, to];
@@ -1248,85 +1281,258 @@ app.get('/komisi', requireAdminOrOwner, (req, res) => {
     const whereClause = "WHERE " + where.join(" AND ");
 
     db.all("SELECT * FROM workers ORDER BY name ASC", (err, workers) => {
-        const summarySql = `
+        const workerList = workers || [];
+
+        // 1. Hitung Hari Hadir dari Absensi (tipe masuk) per Karyawan
+        const attSql = `
             SELECT 
-                worker_name,
-                COUNT(id) as total_motor,
-                COALESCE(SUM(price), 0) as total_omzet,
-                COALESCE(SUM(commission), 0) as total_komisi
-            FROM sales 
-            ${whereClause}
-            GROUP BY worker_name
-            ORDER BY total_komisi DESC, total_motor DESC
+                COALESCE(worker_name, username) as worker_identifier,
+                COUNT(DISTINCT date) as days_present
+            FROM attendance
+            WHERE date(date) >= date(?) AND date(date) <= date(?) AND type = 'masuk'
+            GROUP BY worker_identifier
         `;
-        db.all(summarySql, params, (err, workerSummary) => {
-            let grandTotalMotor = 0;
-            let grandTotalOmzet = 0;
-            let grandTotalKomisi = 0;
-            (workerSummary || []).forEach(w => {
-                grandTotalMotor += w.total_motor;
-                grandTotalOmzet += w.total_omzet;
-                grandTotalKomisi += w.total_komisi;
+        db.all(attSql, [from, to], (errAtt, attRows) => {
+            const attMap = {};
+            (attRows || []).forEach(r => {
+                if (r.worker_identifier) {
+                    attMap[r.worker_identifier.toLowerCase().trim()] = r.days_present;
+                }
             });
 
-            const detailSql = `
-                SELECT id, date, customer_name, license_plate, service_name, price, worker_name, admin_name, akun_kas, commission
-                FROM sales
+            // 2. Hitung Komisi & Unit Motor dari Sales per Karyawan
+            const summarySql = `
+                SELECT 
+                    worker_name,
+                    COUNT(id) as total_motor,
+                    COALESCE(SUM(price), 0) as total_omzet,
+                    COALESCE(SUM(commission), 0) as total_komisi
+                FROM sales 
                 ${whereClause}
-                ORDER BY date DESC, id DESC
+                GROUP BY worker_name
+                ORDER BY total_komisi DESC, total_motor DESC
             `;
-            db.all(detailSql, params, (err, trxDetails) => {
-                res.render('komisi', {
-                    workers: workers || [],
-                    workerSummary: workerSummary || [],
-                    trxDetails: trxDetails || [],
-                    from,
-                    to,
-                    selectedWorker: worker || 'all',
-                    grandTotalMotor,
-                    grandTotalOmzet,
-                    grandTotalKomisi,
-                    todayStr
+            db.all(summarySql, params, (errSum, workerSummary) => {
+                const salesMap = {};
+                let grandTotalMotor = 0;
+                let grandTotalOmzet = 0;
+                let grandTotalKomisi = 0;
+
+                (workerSummary || []).forEach(w => {
+                    grandTotalMotor += w.total_motor;
+                    grandTotalOmzet += w.total_omzet;
+                    grandTotalKomisi += w.total_komisi;
+                    if (w.worker_name) {
+                        salesMap[w.worker_name.toLowerCase().trim()] = w;
+                    }
+                });
+
+                // 3. Ambil data riwayat pembayaran gaji pada periode ini
+                db.all("SELECT * FROM payroll_records WHERE date(period_from) = date(?) AND date(period_to) = date(?)", [from, to], (errPay, payRecords) => {
+                    const payMap = {};
+                    (payRecords || []).forEach(p => {
+                        if (p.worker_name) {
+                            payMap[p.worker_name.toLowerCase().trim()] = p;
+                        }
+                    });
+
+                    // 4. Susun Payroll Summary Gabungan (Kehadiran Absen + Komisi Cuci Motor)
+                    let grandTotalGajiKehadiran = 0;
+                    let grandTotalGajiBersih = 0;
+                    let grandTotalHariHadir = 0;
+
+                    const payrollSummary = workerList.map(w => {
+                        const key = w.name.toLowerCase().trim();
+                        const days = attMap[key] || 0;
+                        const dailyRate = w.daily_salary || 0;
+                        const totalDailySalary = days * dailyRate;
+                        const salesData = salesMap[key] || { total_motor: 0, total_omzet: 0, total_komisi: 0 };
+                        const totalGaji = totalDailySalary + salesData.total_komisi;
+                        const paidInfo = payMap[key] || null;
+
+                        grandTotalHariHadir += days;
+                        grandTotalGajiKehadiran += totalDailySalary;
+                        grandTotalGajiBersih += totalGaji;
+
+                        return {
+                            id: w.id,
+                            name: w.name,
+                            phone: w.phone || '',
+                            join_date: w.join_date || '-',
+                            days_present: days,
+                            daily_rate: dailyRate,
+                            total_daily_salary: totalDailySalary,
+                            total_motor: salesData.total_motor,
+                            total_omzet: salesData.total_omzet,
+                            total_komisi: salesData.total_komisi,
+                            total_gaji: totalGaji,
+                            is_paid: !!paidInfo,
+                            paid_record: paidInfo
+                        };
+                    });
+
+                    // 5. Ambil data akun kas untuk pilihan pembayaran gaji
+                    db.all("SELECT name FROM accounts ORDER BY id ASC", (errAcc, accounts) => {
+                        const accountList = (accounts && accounts.length > 0) 
+                            ? accounts.map(a => a.name) 
+                            : ['Kas Kecil (Outlet)', 'Kas Besar', 'Bank'];
+
+                        // 6. Ambil rincian transaksi cuci untuk tab detail
+                        const detailSql = `
+                            SELECT id, date, customer_name, license_plate, service_name, price, worker_name, admin_name, akun_kas, commission
+                            FROM sales
+                            ${whereClause}
+                            ORDER BY date DESC, id DESC
+                        `;
+                        db.all(detailSql, params, (errDet, trxDetails) => {
+                            res.render('komisi', {
+                                workers: workerList,
+                                payrollSummary,
+                                workerSummary: workerSummary || [],
+                                trxDetails: trxDetails || [],
+                                accounts: accountList,
+                                from,
+                                to,
+                                activeTab,
+                                selectedWorker: worker || 'all',
+                                grandTotalMotor,
+                                grandTotalOmzet,
+                                grandTotalKomisi,
+                                grandTotalHariHadir,
+                                grandTotalGajiKehadiran,
+                                grandTotalGajiBersih,
+                                todayStr,
+                                successMsg: req.query.paid ? 'Pembayaran gaji berhasil dicatat dan masuk ke pengeluaran kas!' : null
+                            });
+                        });
+                    });
                 });
             });
         });
     });
 });
 
-// Route - Print Slip Komisi Pencuci
+// Route - Bayar Gaji Karyawan (Simpan ke payroll_records & Catat ke expenses kategori Gaji)
+app.post('/payroll/pay', requireOwner, (req, res) => {
+    const { 
+        worker_name, 
+        period_from, 
+        period_to, 
+        days_present, 
+        daily_rate, 
+        total_daily_salary, 
+        total_motor, 
+        total_commission, 
+        bonus, 
+        kasbon, 
+        total_paid, 
+        akun_kas, 
+        notes 
+    } = req.body;
+
+    const numBonus = parseRupiah(bonus || 0);
+    const numKasbon = parseRupiah(kasbon || 0);
+    const numTotalPaid = parseRupiah(total_paid || 0);
+    const numDailySalary = parseRupiah(total_daily_salary || 0);
+    const numCommission = parseRupiah(total_commission || 0);
+    const numDays = parseInt(days_present, 10) || 0;
+    const numRate = parseRupiah(daily_rate || 0);
+    const numTotalMotor = parseInt(total_motor, 10) || 0;
+    const account = akun_kas || 'Kas Kecil (Outlet)';
+    const currentUser = req.session.user.username;
+    const nowWita = getWitaTime();
+    const nowStr = nowWita.toISOString().slice(0, 19).replace('T', ' ');
+
+    const desc = `Gaji & Komisi: ${worker_name} (${numDays} hari hadir, ${numTotalMotor} motor) - Periode ${period_from} s/d ${period_to}`;
+
+    // 1. Simpan ke expenses kategori 'Gaji'
+    db.run("INSERT INTO expenses (category, amount, description, akun_kas, created_by) VALUES (?, ?, ?, ?, ?)",
+        ['Gaji', numTotalPaid, desc, account, currentUser],
+        function(errExp) {
+            const expenseId = this ? this.lastID : null;
+
+            // 2. Simpan ke payroll_records
+            db.run(`INSERT INTO payroll_records (
+                worker_name, period_from, period_to, days_present, daily_rate, 
+                total_daily_salary, total_motor, total_commission, bonus, kasbon, 
+                total_paid, status, paid_at, paid_by, akun_kas, expense_id, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'paid', ?, ?, ?, ?, ?)`,
+                [
+                    worker_name, period_from, period_to, numDays, numRate, 
+                    numDailySalary, numTotalMotor, numCommission, numBonus, numKasbon, 
+                    numTotalPaid, nowStr, currentUser, account, expenseId, notes || ''
+                ],
+                (errPay) => {
+                    res.redirect(`/komisi?from=${period_from}&to=${period_to}&tab=payroll&paid=1`);
+                }
+            );
+        }
+    );
+});
+
+// Route - Print Slip Gaji & Komisi Karyawan (Terintegrasi Absen & Cuci Motor)
 app.get('/komisi/slip/:workerName', requireAdminOrOwner, (req, res) => {
     const workerName = req.params.workerName;
-    let { from, to } = req.query;
+    let { from, to, bonus, kasbon } = req.query;
     const nowWita = getWitaTime();
     const todayStr = nowWita.toISOString().slice(0, 10);
-    if (!from) from = todayStr;
+    const firstDay = new Date(nowWita.getFullYear(), nowWita.getMonth(), 1).toISOString().slice(0, 10);
+    if (!from) from = firstDay;
     if (!to) to = todayStr;
 
-    const sql = `
-        SELECT id, date, customer_name, license_plate, service_name, price, commission
-        FROM sales
-        WHERE worker_name = ? AND date(date) >= date(?) AND date(date) <= date(?)
-        ORDER BY date ASC, id ASC
-    `;
-    db.all(sql, [workerName, from, to], (err, rows) => {
-        let totalKomisi = 0;
-        let totalOmzet = 0;
-        (rows || []).forEach(r => {
-            totalKomisi += (r.commission || 0);
-            totalOmzet += (r.price || 0);
-        });
+    db.get("SELECT * FROM workers WHERE name = ?", [workerName], (errW, worker) => {
+        const dailyRate = worker ? (worker.daily_salary || 0) : 0;
+        const workerPhone = worker ? (worker.phone || '') : '';
 
-        res.render('komisi-slip', {
-            layout: false,
-            workerName,
-            from,
-            to,
-            rows: rows || [],
-            totalMotor: (rows || []).length,
-            totalKomisi,
-            totalOmzet,
-            printedAt: getWitaTime()
-        });
+        // Hitung hari hadir dari absensi masuk
+        db.get(`SELECT COUNT(DISTINCT date) as days_present FROM attendance 
+                WHERE (worker_name = ? OR (worker_name IS NULL AND username = ?)) 
+                AND date(date) >= date(?) AND date(date) <= date(?) AND type = 'masuk'`,
+            [workerName, workerName, from, to],
+            (errAtt, attRow) => {
+                const daysPresent = attRow ? attRow.days_present : 0;
+                const totalDailySalary = daysPresent * dailyRate;
+
+                // Ambil rincian pengerjaan motor
+                const sql = `
+                    SELECT id, date, customer_name, license_plate, service_name, price, commission
+                    FROM sales
+                    WHERE worker_name = ? AND date(date) >= date(?) AND date(date) <= date(?)
+                    ORDER BY date ASC, id ASC
+                `;
+                db.all(sql, [workerName, from, to], (err, rows) => {
+                    let totalKomisi = 0;
+                    let totalOmzet = 0;
+                    (rows || []).forEach(r => {
+                        totalKomisi += (r.commission || 0);
+                        totalOmzet += (r.price || 0);
+                    });
+
+                    const numBonus = parseRupiah(bonus || 0);
+                    const numKasbon = parseRupiah(kasbon || 0);
+                    const grandTotalGaji = totalDailySalary + totalKomisi + numBonus - numKasbon;
+
+                    res.render('komisi-slip', {
+                        layout: false,
+                        workerName,
+                        workerPhone,
+                        from,
+                        to,
+                        daysPresent,
+                        dailyRate,
+                        totalDailySalary,
+                        rows: rows || [],
+                        totalMotor: (rows || []).length,
+                        totalKomisi,
+                        totalOmzet,
+                        bonus: numBonus,
+                        kasbon: numKasbon,
+                        grandTotalGaji,
+                        printedAt: getWitaTime()
+                    });
+                });
+            }
+        );
     });
 });
 

@@ -18,7 +18,18 @@
 
                 <form action="/absen" method="POST" enctype="multipart/form-data" onsubmit="return validateAbsen(this)">
                     <div class="mb-2">
-                        <label class="form-label">Jenis Absen</label>
+                        <label class="form-label fw-bold">Nama Karyawan <span class="text-danger">*</span></label>
+                        <select name="worker_name" id="workerSelect" class="form-select" required>
+                            <option value="">-- Pilih Nama Anda --</option>
+                            <% (typeof workers !== 'undefined' ? workers : []).forEach(w => { %>
+                                <option value="<%= w.name %>"><%= w.name %></option>
+                            <% }) %>
+                        </select>
+                        <small class="text-muted">Pilih nama Anda sesuai daftar pekerja agar hari hadir tercatat ke slip gaji.</small>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label fw-bold">Jenis Absen</label>
                         <select name="type" class="form-select" required>
                             <option value="masuk" <%= !hasMasuk ? 'selected' : (hasKeluar?'disabled':'') %>>Masuk</option>
                             <option value="keluar" <%= hasMasuk && !hasKeluar ? 'selected' : (!hasMasuk?'disabled':'') %>>Keluar</option>
@@ -74,13 +85,13 @@
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-sm table-hover mb-0 align-middle">
-                        <thead class="table-light"><tr><th>Jam</th><th>User</th><th>Tipe</th><th>Foto</th><th>Lokasi</th></tr></thead>
+                        <thead class="table-light"><tr><th>Jam</th><th>Karyawan</th><th>Tipe</th><th>Foto</th><th>Lokasi</th></tr></thead>
                         <tbody>
                             <% if (recent.length===0) { %><tr><td colspan="5" class="text-center text-muted py-3">Belum ada absen hari ini.</td></tr><% } %>
                             <% recent.forEach(r=>{ %>
                             <tr>
                                 <td><span class="badge bg-light text-dark"><%= r.time %></span><br><small class="text-muted"><%= r.date %></small></td>
-                                <td><strong><%= r.username %></strong><br><small class="badge <%= r.type==='masuk'?'bg-success':'bg-danger' %>"><%= r.type %></small></td>
+                                <td><strong><%= r.worker_name || r.username %></strong><% if (r.worker_name && r.worker_name !== r.username) { %><br><small class="text-muted"><%= r.username %></small><% } %></td>
                                 <td><span class="badge <%= r.type==='masuk'?'bg-success':'bg-danger' %>"><%= r.type %></span></td>
                                 <td><% if(r.photo){ %><a href="<%= r.photo %>" target="_blank"><img src="<%= r.photo %>" style="width:60px; height:60px; object-fit:cover; border-radius:6px; border:1px solid #ddd;"></a><% } else { %>-<% } %></td>
                                 <td>
