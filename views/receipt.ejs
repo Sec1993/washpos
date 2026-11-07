@@ -138,9 +138,9 @@
             📱 Cetak via RawBT (Android POS)
         </a>
 
-        <!-- PETUNJUK KONEKSI BLUETOOTH -->
+        <!-- PETUNJUK KONEKSI BLUETOOTH / PENGATURAN PRINTER -->
         <div style="margin-bottom: 12px;">
-            <a href="javascript:void(0)" onclick="openHelpModal()" style="font-family: sans-serif; font-size: 11px; color: #0d6efd; text-decoration: underline;">
+            <a href="javascript:void(0)" onclick="openNativePrinterSettings()" id="linkPrinterHelp" style="font-family: sans-serif; font-size: 11px; color: #0d6efd; text-decoration: underline;">
                 ❓ Cara menghubungkan printer Bluetooth
             </a>
         </div>
@@ -360,15 +360,98 @@
             return combined;
         }
 
-        // Otomatis sesuaikan tombol cetak berdasarkan perangkat (HP Android vs Laptop/PC)
+        // Deteksi apakah sedang dibuka di dalam aplikasi Android WashPOS-Mobile
+        function isNativeApp() {
+            return !!(window.ReactNativeWebView && window.ReactNativeWebView.postMessage);
+        }
+
+        // Cetak Langsung via Native Bluetooth WashPOS-Mobile (Tanpa Aplikasi RawBT)
+        function printViaNativeApp() {
+            const btn = document.getElementById('btnBluetoothPrint');
+            const origText = btn ? btn.innerHTML : '';
+            if (btn) btn.innerHTML = "⏳ Mengirim Struk ke Printer...";
+
+            const payload = buildCompleteReceiptPayload();
+            const numberArray = Array.from(payload);
+
+            let binary = '';
+            const len = payload.byteLength;
+            for (let i = 0; i < len; i++) {
+                binary += String.fromCharCode(payload[i]);
+            }
+            const base64Data = btoa(binary);
+
+            if (isNativeApp()) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                    action: 'PRINT_RECEIPT',
+                    payload: numberArray,
+                    base64: base64Data
+                }));
+            } else {
+                printViaRawBt();
+            }
+
+            setTimeout(() => {
+                if (btn && !btn.innerHTML.includes('Berhasil')) {
+                    btn.innerHTML = origText;
+                }
+            }, 3000);
+        }
+
+        // Buka pengaturan printer di aplikasi native
+        function openNativePrinterSettings() {
+            if (isNativeApp()) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                    action: 'OPEN_PRINTER_SETTINGS'
+                }));
+            } else {
+                openHelpModal();
+            }
+        }
+
+        // Tangkap respon balik dari aplikasi native WashPOS-Mobile
+        function handleNativeResponse(event) {
+            try {
+                const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+                const btn = document.getElementById('btnBluetoothPrint');
+                if (data && data.action === 'PRINT_SUCCESS') {
+                    if (btn) btn.innerHTML = "✅ Berhasil Dicetak!";
+                    setTimeout(() => {
+                        if (btn) btn.innerHTML = isNativeApp() ? "🖨️ Cetak Struk (Bluetooth Langsung)" : "🔵 Hubungkan & Cetak Printer Bluetooth";
+                    }, 3500);
+                } else if (data && data.action === 'PRINT_ERROR') {
+                    if (btn) btn.innerHTML = "❌ Gagal Cetak";
+                    setTimeout(() => {
+                        if (btn) btn.innerHTML = isNativeApp() ? "🖨️ Cetak Struk (Bluetooth Langsung)" : "🔵 Hubungkan & Cetak Printer Bluetooth";
+                    }, 3500);
+                }
+            } catch(e) {}
+        }
+        window.addEventListener('message', handleNativeResponse);
+        document.addEventListener('message', handleNativeResponse);
+
+        // Otomatis sesuaikan tombol cetak berdasarkan perangkat (Aplikasi Mobile vs Browser HP vs PC)
         document.addEventListener("DOMContentLoaded", function() {
             const isAndroid = /Android/i.test(navigator.userAgent);
             const hasWebBt = !!(navigator.bluetooth && navigator.bluetooth.requestDevice);
             const btnBt = document.getElementById('btnBluetoothPrint');
             const btnRawBt = document.getElementById('btnRawBtPrint');
 
-            if (isAndroid || !hasWebBt) {
-                // Di HP Android atau WebView aplikasi: jadikan tombol utama langsung cetak Bluetooth HP (RawBT)
+            if (isNativeApp()) {
+                // Di dalam aplikasi APK WashPOS-Mobile: Cetak langsung tanpa RawBT!
+                if (btnBt) {
+                    btnBt.innerHTML = "🖨️ Cetak Struk (Bluetooth Langsung)";
+                    btnBt.onclick = function() { printViaNativeApp(); };
+                }
+                if (btnRawBt) {
+                    btnRawBt.style.display = "none";
+                }
+                const linkHelp = document.getElementById('linkPrinterHelp');
+                if (linkHelp) {
+                    linkHelp.innerHTML = "⚙️ Atur / Ganti Printer Bluetooth";
+                }
+            } else if (isAndroid || !hasWebBt) {
+                // Di browser Chrome HP Android luar: Gunakan RawBT
                 if (btnBt) {
                     btnBt.innerHTML = "📱 Cetak Struk ke Printer Bluetooth (HP)";
                     btnBt.onclick = function() { printViaRawBt(); };
@@ -381,6 +464,11 @@
 
         // Cetak Langsung via Web Bluetooth (Untuk Google Chrome Laptop/PC)
         async function printBluetoothDirect() {
+            if (isNativeApp()) {
+                printViaNativeApp();
+                return;
+            }
+
             if (!navigator.bluetooth || !navigator.bluetooth.requestDevice) {
                 if (/Android/i.test(navigator.userAgent)) {
                     printViaRawBt();
