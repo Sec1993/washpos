@@ -134,7 +134,7 @@
         </button>
 
         <!-- OPSI 3: CETAK RAWBT (ANDROID) -->
-        <a href="#" onclick="printViaRawBt(); return false;" class="btn-action btn-print-rawbt">
+        <a href="#" onclick="printViaRawBt(); return false;" id="btnRawBtPrint" class="btn-action btn-print-rawbt">
             📱 Cetak via RawBT (Android POS)
         </a>
 
@@ -360,10 +360,33 @@
             return combined;
         }
 
-        // Cetak Langsung via Web Bluetooth
+        // Otomatis sesuaikan tombol cetak berdasarkan perangkat (HP Android vs Laptop/PC)
+        document.addEventListener("DOMContentLoaded", function() {
+            const isAndroid = /Android/i.test(navigator.userAgent);
+            const hasWebBt = !!(navigator.bluetooth && navigator.bluetooth.requestDevice);
+            const btnBt = document.getElementById('btnBluetoothPrint');
+            const btnRawBt = document.getElementById('btnRawBtPrint');
+
+            if (isAndroid || !hasWebBt) {
+                // Di HP Android atau WebView aplikasi: jadikan tombol utama langsung cetak Bluetooth HP (RawBT)
+                if (btnBt) {
+                    btnBt.innerHTML = "📱 Cetak Struk ke Printer Bluetooth (HP)";
+                    btnBt.onclick = function() { printViaRawBt(); };
+                }
+                if (btnRawBt) {
+                    btnRawBt.style.display = "none";
+                }
+            }
+        });
+
+        // Cetak Langsung via Web Bluetooth (Untuk Google Chrome Laptop/PC)
         async function printBluetoothDirect() {
-            if (!navigator.bluetooth) {
-                alert("Browser ini belum mendukung Web Bluetooth secara langsung.\n\nGunakan Google Chrome atau Microsoft Edge versi terbaru, atau gunakan tombol 'Cetak via RawBT' jika dari HP Android.");
+            if (!navigator.bluetooth || !navigator.bluetooth.requestDevice) {
+                if (/Android/i.test(navigator.userAgent)) {
+                    printViaRawBt();
+                    return;
+                }
+                alert("Browser ini belum mendukung Web Bluetooth secara langsung.\n\nGunakan Google Chrome atau Microsoft Edge versi terbaru pada Laptop/PC, atau gunakan tombol 'Cetak via RawBT' jika dari HP Android.");
                 openHelpModal();
                 return;
             }
@@ -440,8 +463,12 @@
             }
         }
 
-        // Cetak via RawBT (Android)
+        // Cetak via RawBT (Android POS / Aplikasi HP)
         function printViaRawBt() {
+            const btn = document.getElementById('btnBluetoothPrint');
+            const origText = btn ? btn.innerHTML : '';
+            if (btn) btn.innerHTML = "⏳ Mengirim Struk ke Printer...";
+
             const payload = buildCompleteReceiptPayload();
             let binary = '';
             const len = payload.byteLength;
@@ -449,14 +476,27 @@
                 binary += String.fromCharCode(payload[i]);
             }
             const base64Data = btoa(binary);
-            window.location.href = "rawbt:data:base64," + base64Data;
+
+            // Buka via Intent Android RawBT (standar resmi Android WebView)
+            const intentUri = "intent:base64," + base64Data + "#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dru.a402d.rawbtprinter;end;";
+            const rawbtUri = "rawbt:data:base64," + base64Data;
+
+            try {
+                window.location.href = intentUri;
+            } catch(e) {
+                window.location.href = rawbtUri;
+            }
 
             setTimeout(() => {
-                const conf = confirm("Apakah printer sudah mencetak?\n\nJika belum, pastikan Anda telah memasang aplikasi gratis 'RawBT Print Service' dari Google Play Store pada HP/Tablet ini.");
-                if (!conf) {
+                if (btn) btn.innerHTML = origText;
+            }, 2500);
+
+            setTimeout(() => {
+                const conf = confirm("Apakah printer Bluetooth sudah mencetak?\n\nJika belum mencetak atau aplikasi printer belum terbuka, pastikan HP Anda sudah terhubung ke printer Bluetooth dan sudah memasang aplikasi gratis 'RawBT Print Service' dari Google Play Store.\n\nKlik OK untuk membuka petunjuk download RawBT di Play Store.");
+                if (conf) {
                     window.open("https://play.google.com/store/apps/details?id=ru.a402d.rawbtprinter", "_blank");
                 }
-            }, 3000);
+            }, 4500);
         }
     </script>
 </body>
