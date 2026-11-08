@@ -26,13 +26,20 @@ function req(method, path, body, cookies){
   });
 }
 (async function(){
-  console.log('=== E2E Staff login -> jual -> cetak ===');
-  let r=await req('POST','/login',{username:'karyawan', password:'karyawan123'});
+  console.log('=== E2E Admin/Kasir login -> jual -> cetak ===');
+  let r=await req('POST','/login',{username:'admin', password:'admin123'});
+  let cookiesAdmin=r.cookies;
+  r=await req('GET','/sales',null,cookiesAdmin);
+  console.log('Admin GET /sales', r.status===200 ? 'OK':'FAIL', r.body.includes('Modul Penjualan')?'page OK':'no page');
+  r=await req('POST','/sales',{customer_name:'E2E', license_plate:'B-E2E', service_names:'Cuci Motor Kecil', price:'15.000', worker_name:'Budi'}, cookiesAdmin);
+  console.log('Admin POST /sales', r.status, (r.body.includes('Struk')||r.headers.location)? 'OK':'FAIL');
+
+  console.log('=== E2E Staff/Pencuci login -> RBAC redirect ke absen ===');
+  r=await req('POST','/login',{username:'karyawan', password:'karyawan123'});
   cookiesStaff=r.cookies;
   r=await req('GET','/sales',null,cookiesStaff);
-  console.log('Staff GET /sales', r.status===200 ? 'OK':'FAIL', r.body.includes('Modul Penjualan')?'page OK':'no page');
-  r=await req('POST','/sales',{customer_name:'E2E', license_plate:'B-E2E', service_names:'Cuci Motor Kecil', price:'15.000', worker_name:'Budi'}, cookiesStaff);
-  console.log('Staff POST /sales', r.status, (r.body.includes('Struk')||r.headers.location)? 'OK':'FAIL');
+  console.log('Staff GET /sales should redirect to /absen', r.status===302 && r.headers.location==='/absen' ? 'OK (302 -> /absen)':'FAIL '+r.status);
+
   console.log('=== E2E Owner login -> laporan -> export ===');
   r=await req('POST','/login',{username:'owner', password:'owner123'});
   cookiesOwner=r.cookies;
@@ -40,8 +47,8 @@ function req(method, path, body, cookies){
   console.log('Owner GET /reports', r.status===200 && r.body.includes('Jurnal Umum')?'OK':'FAIL');
   console.log('Owner laporan contains Laba Bersih', r.body.includes('Laba Bersih')?'OK':'FAIL');
   console.log('Owner laporan exportExcel func', r.body.includes('exportExcel')?'OK':'FAIL');
-  r=await req('GET','/reports',null,cookiesStaff);
-  console.log('Staff GET /reports should 403', r.status===403?'OK (403)':'FAIL '+r.status);
+  r=await req('GET','/reports',null,cookiesAdmin);
+  console.log('Admin GET /reports should 403', r.status===403?'OK (403)':'FAIL '+r.status);
   console.log('=== Jurnal immutable check ===');
   r=await req('GET','/karyawan-aktif',null,cookiesOwner);
   console.log('Owner GET /karyawan-aktif', r.status===200?'OK':'FAIL');
