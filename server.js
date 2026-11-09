@@ -975,10 +975,11 @@ app.post('/master/services/add', requireOwner, (req, res) => {
         return renderMaster(res, 'Validasi gagal: Harga harus angka ≥ 1.000 (contoh: 15.000 atau 15000).');
     }
     const finalComm = isNaN(c) || c < 0 ? 0 : c;
-    db.run("INSERT INTO services (name, price, category, isActive, commission) VALUES (?, ?, 'Motor Kecil', 1, ?)", [name.trim(), p, finalComm], (err) => {
+    db.run("INSERT INTO services (name, price, category, isActive, commission) VALUES (?, ?, 'Motor Kecil', 1, ?)", [name.trim(), p, finalComm], async (err) => {
         if (err) {
             return renderMaster(res, 'Validasi gagal: Nama layanan sudah ada (unik).');
         }
+        try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Master] uploadDbNow error:', e.message); }
         res.redirect('/master');
     });
 });
@@ -998,13 +999,19 @@ app.post('/master/services/update', requireOwner, (req, res) => {
         if (row) {
             return renderMaster(res, 'Validasi gagal: Nama layanan sudah dipakai layanan lain.');
         }
-        db.run("UPDATE services SET name = ?, price = ?, commission = ? WHERE id = ?", [name.trim(), p, finalComm, id], () => res.redirect('/master'));
+        db.run("UPDATE services SET name = ?, price = ?, commission = ? WHERE id = ?", [name.trim(), p, finalComm, id], async () => {
+            try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Master] uploadDbNow error:', e.message); }
+            res.redirect('/master');
+        });
     });
 });
 
 app.post('/master/services/delete', requireOwner, (req, res) => {
     const { id } = req.body;
-    db.run("DELETE FROM services WHERE id = ?", [id], () => res.redirect('/master'));
+    db.run("DELETE FROM services WHERE id = ?", [id], async () => {
+        try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Master] uploadDbNow error:', e.message); }
+        res.redirect('/master');
+    });
 });
 
 app.post('/master/workers/add', requireOwner, (req, res) => {

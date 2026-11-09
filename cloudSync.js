@@ -53,6 +53,12 @@ async function downloadDb() {
  * Mengupload file pos.db lokal ke Supabase Storage.
  */
 async function uploadDb() {
+    const isCloudSyncAllowed = process.env.RENDER || process.env.NODE_ENV === 'production' || process.env.FORCE_CLOUD_SYNC === 'true';
+    if (!isCloudSyncAllowed) {
+        // Jangan timpa DB Supabase produksi saat testing / dev lokal di laptop
+        return;
+    }
+
     if (isUploading) {
         hasPendingUpload = true;
         return;
@@ -96,6 +102,17 @@ async function uploadDb() {
 }
 
 /**
+ * Upload langsung tanpa menunggu debounce (misal saat edit harga master / setting toko).
+ */
+async function uploadDbNow() {
+    if (debounceTimer) {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
+    }
+    return await uploadDb();
+}
+
+/**
  * Debounce upload agar tidak membebani network saat banyak transaksi beruntun.
  */
 function scheduleUpload(delayMs = 2500) {
@@ -109,6 +126,7 @@ function scheduleUpload(delayMs = 2500) {
 module.exports = {
     downloadDb,
     uploadDb,
+    uploadDbNow,
     scheduleUpload,
     DB_PATH
 };
