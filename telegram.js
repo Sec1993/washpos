@@ -185,7 +185,7 @@ async function sendTelegramReport({ date, includeDb = true, senderName = 'Kasir'
     const reportData = await new Promise((resolve) => {
         db.get(`
             SELECT 
-                COALESCE(SUM(CASE WHEN license_plate LIKE '%/%' THEN 2 ELSE 1 END), 0) as total_motor,
+                COALESCE(SUM((LENGTH(license_plate) - LENGTH(REPLACE(license_plate, '/', ''))) + 1), 0) as total_motor,
                 COALESCE(SUM(price), 0) as total_omzet,
                 COALESCE(SUM(commission), 0) as total_komisi
             FROM sales 
@@ -213,7 +213,7 @@ async function sendTelegramReport({ date, includeDb = true, senderName = 'Kasir'
                         db.all(`
                             SELECT 
                                 worker_name,
-                                SUM(CASE WHEN license_plate LIKE '%/%' THEN 2 ELSE 1 END) as motor,
+                                SUM((LENGTH(license_plate) - LENGTH(REPLACE(license_plate, '/', ''))) + 1) as motor,
                                 COALESCE(SUM(commission), 0) as komisi
                             FROM sales
                             WHERE date(date) = date(?)

@@ -307,8 +307,12 @@
             headerTxt += "Waktu   : " + dateStr + "\n";
             headerTxt += "No. Nota: " + receiptNum + "\n";
             const platVal = "<%= sale.license_plate %>";
-            if (platVal.length > 20) {
-                headerTxt += "Plat    :\n  " + platVal + "\n";
+            if (platVal.includes('/') || platVal.length > 20) {
+                headerTxt += "Plat:\n";
+                const parts = platVal.split(/\s*[\/,]\s*/);
+                parts.forEach((p, idx) => {
+                    if (p.trim()) headerTxt += " " + (idx + 1) + ". " + p.trim() + "\n";
+                });
             } else {
                 headerTxt += "Plat    : " + platVal + "\n";
             }

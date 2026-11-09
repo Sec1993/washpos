@@ -15,29 +15,32 @@
             <div class="card-header bg-success text-white">Input Transaksi Baru</div>
             <div class="card-body">
                 <form action="/sales" method="POST" enctype="multipart/form-data" onsubmit="return validatePenjualan(this)">
-                    <!-- Mode Transaksi: 1 Motor vs 2 Motor (Bayar Bareng) -->
+                    <!-- Mode Transaksi Jumlah Motor -->
                     <div class="mb-3">
-                        <label class="form-label fw-bold d-flex justify-content-between align-items-center mb-1">
-                            <span>Jumlah Motor</span>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label fw-bold mb-0">Jumlah Motor</label>
                             <span class="badge bg-primary" id="badgeMotorMode">🏍️ 1 Motor</span>
-                        </label>
-                        <div class="btn-group w-100" role="group">
-                            <input type="radio" class="btn-check" name="motor_mode_btn" id="mode1Motor" value="1" checked onchange="switchMotorMode('1')">
-                            <label class="btn btn-outline-success fw-bold py-2" for="mode1Motor">
+                        </div>
+                        <div class="d-flex gap-1 align-items-center">
+                            <button type="button" class="btn btn-outline-success fw-bold flex-fill btn-motor-quick active" id="btnM1" onclick="setMotorCount(1)">
                                 🏍️ 1 Motor
-                            </label>
-
-                            <input type="radio" class="btn-check" name="motor_mode_btn" id="mode2Motor" value="2" onchange="switchMotorMode('2')">
-                            <label class="btn btn-outline-success fw-bold py-2" for="mode2Motor">
-                                👥 2 Motor (Bayar Bareng)
-                            </label>
+                            </button>
+                            <button type="button" class="btn btn-outline-success fw-bold flex-fill btn-motor-quick" id="btnM2" onclick="setMotorCount(2)">
+                                👥 2 Motor
+                            </button>
+                            <button type="button" class="btn btn-outline-success fw-bold flex-fill btn-motor-quick" id="btnM3" onclick="setMotorCount(3)">
+                                👥 3 Motor
+                            </button>
+                            <button type="button" class="btn btn-outline-primary fw-bold px-3" id="btnAddMotor" onclick="addMotorSlot()" title="Tambah Motor Lainnya (4+)">
+                                ➕ Tambah
+                            </button>
                         </div>
                         <input type="hidden" name="motor_count" id="motorCountInput" value="1">
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label">Nama Pelanggan / Pemilik</label>
-                        <input type="text" name="customer_name" class="form-control" required minlength="2" maxlength="50" placeholder="Nama Pemilik Kendaraan">
+                        <input type="text" name="customer_name" class="form-control" required minlength="2" maxlength="50" placeholder="Nama Pemilik Kendaraan / Rombongan">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">No WhatsApp (Opsional)</label>
@@ -47,26 +50,24 @@
                     <!-- Input Plat Nomor (Mode 1 Motor) -->
                     <div id="platSingleWrap" class="mb-3">
                         <label class="form-label fw-bold">Plat Nomor <span class="text-danger">*</span></label>
-                        <input type="text" id="platSingleInput" class="form-control text-uppercase" placeholder="Contoh: DD 1234 ABC" maxlength="20" oninput="syncPlat()">
+                        <input type="text" id="platSingleInput" class="form-control text-uppercase" placeholder="Contoh: DD 1234 ABC" maxlength="20" oninput="syncPlats()">
                     </div>
 
-                    <!-- Input Plat Nomor (Mode 2 Motor) -->
-                    <div id="platDoubleWrap" class="mb-3 p-3 bg-light border border-success rounded" style="display:none;">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <span class="fw-bold text-success" style="font-size: 13px;">👥 Plat 2 Motor (Bayar Bareng)</span>
-                            <span class="badge bg-success" style="font-size: 10px;">1 Lembar Struk</span>
+                    <!-- Container Multi Motor (Mode 2+ Motor / Rombongan) -->
+                    <div id="multiMotorWrap" class="mb-3 p-2 bg-light border border-success rounded" style="display:none;">
+                        <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom">
+                            <span class="fw-bold text-success small">👥 Rombongan Motor (Bayar 1 Struk)</span>
+                            <span class="badge bg-success" id="multiMotorBadge">2 Motor</span>
                         </div>
-                        <div class="row g-2">
-                            <div class="col-6">
-                                <label class="form-label small fw-bold mb-1">🏍️ Motor 1 <span class="text-danger">*</span></label>
-                                <input type="text" id="plat1Input" class="form-control text-uppercase form-control-sm" placeholder="DD 1234 AB" maxlength="15" oninput="syncPlat()">
-                            </div>
-                            <div class="col-6">
-                                <label class="form-label small fw-bold mb-1">🏍️ Motor 2 <span class="text-danger">*</span></label>
-                                <input type="text" id="plat2Input" class="form-control text-uppercase form-control-sm" placeholder="DD 5678 CD" maxlength="15" oninput="syncPlat()">
-                            </div>
+                        <div id="motorSlotsContainer">
+                            <!-- Slot kartu motor akan diisi secara dinamis oleh JavaScript -->
                         </div>
-                        <small class="text-muted d-block mt-2" style="font-size: 11px;">Struk nota tercantum: <strong id="platPreviewStr" class="text-dark">-</strong></small>
+                        <div class="d-flex justify-content-between align-items-center mt-2 pt-1 border-top">
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="addMotorSlot()">
+                                ➕ Tambah Motor Lagi
+                            </button>
+                            <small class="text-muted" style="font-size: 11px;">Struk: <strong id="platPreviewStr" class="text-dark">-</strong></small>
+                        </div>
                     </div>
 
                     <!-- Input Plat Sebenarnya yang Dikirim ke Server -->
@@ -107,34 +108,9 @@
                                 <% } %>
                             </div>
 
-                            <!-- MODE 2 MOTOR: Dropdown Paket Cuci untuk Motor 1 & Motor 2 -->
-                            <div id="cuci2MotorWrap" style="display:none;">
-                                <div class="p-2 mb-2 bg-light border border-primary rounded">
-                                    <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom">
-                                        <span class="badge bg-primary" style="font-size: 11px;">🏍️ Paket Cuci 2 Motor</span>
-                                        <small class="text-muted" style="font-size: 10px;">Bisa sama atau beda paket</small>
-                                    </div>
-                                    <div class="mb-2">
-                                        <label class="form-label small fw-bold mb-1 text-primary">🏍️ Paket Motor 1 (Plat 1):</label>
-                                        <select class="form-select form-select-sm cuci-2m-select" id="cuciMotor1Select" disabled onchange="updatePriceMulti()">
-                                            <% cuciServices.forEach(s => { %>
-                                                <option value="<%= s.name %>" data-price="<%= s.price %>" data-commission="<%= s.commission || 0 %>">
-                                                    <%= s.name %> — Rp <%= s.price.toLocaleString('id-ID') %>
-                                                </option>
-                                            <% }) %>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="form-label small fw-bold mb-1 text-primary">🏍️ Paket Motor 2 (Plat 2):</label>
-                                        <select class="form-select form-select-sm cuci-2m-select" id="cuciMotor2Select" disabled onchange="updatePriceMulti()">
-                                            <% cuciServices.forEach(s => { %>
-                                                <option value="<%= s.name %>" data-price="<%= s.price %>" data-commission="<%= s.commission || 0 %>">
-                                                    <%= s.name %> — Rp <%= s.price.toLocaleString('id-ID') %>
-                                                </option>
-                                            <% }) %>
-                                        </select>
-                                    </div>
-                                </div>
+                            <!-- Catatan Info untuk Mode Rombongan -->
+                            <div id="cuciMultiInfoWrap" class="alert alert-info py-2 px-3 mb-2" style="display:none; font-size:12px;">
+                                ℹ️ <strong>Paket Cuci:</strong> Sudah dipilih di kartu masing-masing motor di atas.
                             </div>
 
                             <!-- LAYANAN TAMBAHAN (Aktif di Kedua Mode) -->
@@ -485,51 +461,75 @@ function captureFotoQris(){
     }, 'image/jpeg', 0.85);
 }
 
-let currentMotorMode = '1';
+// Data Layanan Cuci Motor (dari backend)
+const CUCI_SERVICES = <%- JSON.stringify(cuciServices || []) %>;
 
-function switchMotorMode(mode) {
-    currentMotorMode = mode;
+let currentMotorCount = 1;
+let motorSlotsData = [
+    { plat: '', service: CUCI_SERVICES[0] ? CUCI_SERVICES[0].name : 'Cuci Motor Besar' }
+];
+
+function setMotorCount(count) {
+    count = parseInt(count, 10);
+    if (isNaN(count) || count < 1) count = 1;
+    currentMotorCount = count;
     const motorCountInput = document.getElementById('motorCountInput');
-    if (motorCountInput) motorCountInput.value = mode;
+    if (motorCountInput) motorCountInput.value = count;
+
+    // Update status tombol pill
+    document.querySelectorAll('.btn-motor-quick').forEach(btn => btn.classList.remove('active'));
+    if (count === 1) {
+        const btn1 = document.getElementById('btnM1');
+        if (btn1) btn1.classList.add('active');
+    } else if (count === 2) {
+        const btn2 = document.getElementById('btnM2');
+        if (btn2) btn2.classList.add('active');
+    } else if (count === 3) {
+        const btn3 = document.getElementById('btnM3');
+        if (btn3) btn3.classList.add('active');
+    }
 
     const badge = document.getElementById('badgeMotorMode');
     const platSingleWrap = document.getElementById('platSingleWrap');
-    const platDoubleWrap = document.getElementById('platDoubleWrap');
+    const multiMotorWrap = document.getElementById('multiMotorWrap');
+    const multiMotorBadge = document.getElementById('multiMotorBadge');
     const cuci1MotorWrap = document.getElementById('cuci1MotorWrap');
-    const cuci2MotorWrap = document.getElementById('cuci2MotorWrap');
+    const cuciMultiInfoWrap = document.getElementById('cuciMultiInfoWrap');
     const subtitleBadge = document.getElementById('layananSubtitleBadge');
     const helpNote = document.getElementById('layananHelpNote');
-
     const cuciChecks = document.querySelectorAll('.layanan-cuci');
-    const cuci1Select = document.getElementById('cuciMotor1Select');
-    const cuci2Select = document.getElementById('cuciMotor2Select');
 
-    if (mode === '2') {
+    if (count > 1) {
         if (badge) {
-            badge.textContent = '👥 2 Motor (Bayar Bareng)';
+            badge.textContent = `👥 ${count} Motor (Rombongan)`;
             badge.className = 'badge bg-success';
         }
+        if (multiMotorBadge) multiMotorBadge.textContent = `${count} Motor`;
         if (platSingleWrap) platSingleWrap.style.display = 'none';
-        if (platDoubleWrap) platDoubleWrap.style.display = 'block';
+        if (multiMotorWrap) multiMotorWrap.style.display = 'block';
         if (cuci1MotorWrap) cuci1MotorWrap.style.display = 'none';
-        if (cuci2MotorWrap) cuci2MotorWrap.style.display = 'block';
-        if (subtitleBadge) subtitleBadge.textContent = '2 Cuci Motor + Tambahan';
+        if (cuciMultiInfoWrap) cuciMultiInfoWrap.style.display = 'block';
+        if (subtitleBadge) subtitleBadge.textContent = `${count} Cuci Motor + Tambahan`;
 
-        // Nonaktifkan checkbox cuci 1 motor dan aktifkan dropdown 2 motor
+        // Nonaktifkan checkbox cuci 1 motor
         cuciChecks.forEach(c => {
             c.disabled = true;
             c.checked = false;
         });
-        if (cuci1Select) {
-            cuci1Select.disabled = false;
-            cuci1Select.name = 'service_names';
+
+        // Sesuaikan jumlah elemen di motorSlotsData
+        saveSlotsFromDom();
+        while (motorSlotsData.length < count) {
+            const defaultSvc = CUCI_SERVICES[0] ? CUCI_SERVICES[0].name : 'Cuci Motor Besar';
+            motorSlotsData.push({ plat: '', service: defaultSvc });
         }
-        if (cuci2Select) {
-            cuci2Select.disabled = false;
-            cuci2Select.name = 'service_names';
+        if (motorSlotsData.length > count) {
+            motorSlotsData = motorSlotsData.slice(0, count);
         }
+
+        renderMotorSlots();
         if (helpNote) {
-            helpNote.innerHTML = 'Mode 2 Motor: 2 paket cuci motor aktif. Tambahan seperti Poles Helm dapat diceklis. Total dipilih <span id="layananCount">2</span> layanan.';
+            helpNote.innerHTML = `Mode Rombongan: ${count} paket cuci motor aktif. Tambahan seperti Poles Helm dapat diceklis. Total dipilih <span id="layananCount">${count}</span> layanan.`;
         }
     } else {
         if (badge) {
@@ -537,57 +537,125 @@ function switchMotorMode(mode) {
             badge.className = 'badge bg-primary';
         }
         if (platSingleWrap) platSingleWrap.style.display = 'block';
-        if (platDoubleWrap) platDoubleWrap.style.display = 'none';
+        if (multiMotorWrap) multiMotorWrap.style.display = 'none';
         if (cuci1MotorWrap) cuci1MotorWrap.style.display = 'block';
-        if (cuci2MotorWrap) cuci2MotorWrap.style.display = 'none';
+        if (cuciMultiInfoWrap) cuciMultiInfoWrap.style.display = 'none';
         if (subtitleBadge) subtitleBadge.textContent = '1 Cuci Motor + Tambahan';
 
-        // Aktifkan kembali checkbox cuci 1 motor dan matikan select 2 motor
+        // Aktifkan kembali checkbox cuci 1 motor
         cuciChecks.forEach(c => {
             c.disabled = false;
         });
-        if (cuci1Select) {
-            cuci1Select.disabled = true;
-            cuci1Select.removeAttribute('name');
-        }
-        if (cuci2Select) {
-            cuci2Select.disabled = true;
-            cuci2Select.removeAttribute('name');
-        }
+
+        motorSlotsData = [
+            { plat: '', service: CUCI_SERVICES[0] ? CUCI_SERVICES[0].name : 'Cuci Motor Besar' }
+        ];
+        renderMotorSlots();
+
         if (helpNote) {
             helpNote.innerHTML = 'Maksimal 1 paket cuci motor. Layanan tambahan (seperti Poles Helm) bisa dipilih bersamaan. Dipilih <span id="layananCount">0</span> layanan.';
         }
     }
 
-    syncPlat();
+    syncPlats();
     updatePriceMulti();
 }
 
-function syncPlat() {
+function addMotorSlot() {
+    saveSlotsFromDom();
+    setMotorCount(currentMotorCount + 1);
+}
+
+function removeMotorSlot(slotIndex) {
+    saveSlotsFromDom();
+    if (motorSlotsData.length <= 2) {
+        setMotorCount(1);
+        return;
+    }
+    motorSlotsData.splice(slotIndex - 1, 1);
+    setMotorCount(motorSlotsData.length);
+}
+
+function saveSlotsFromDom() {
+    for (let i = 0; i < motorSlotsData.length; i++) {
+        const platEl = document.getElementById(`platSlot_${i + 1}`);
+        const svcEl = document.getElementById(`svcSlot_${i + 1}`);
+        if (platEl) motorSlotsData[i].plat = platEl.value.trim();
+        if (svcEl) motorSlotsData[i].service = svcEl.value;
+    }
+}
+
+function renderMotorSlots() {
+    const container = document.getElementById('motorSlotsContainer');
+    if (!container) return;
+
+    if (currentMotorCount <= 1) {
+        container.innerHTML = '';
+        return;
+    }
+
+    let html = '';
+    motorSlotsData.forEach((slot, i) => {
+        const idx = i + 1;
+        let optionsHtml = '';
+        CUCI_SERVICES.forEach(s => {
+            const isSel = s.name === slot.service ? 'selected' : '';
+            optionsHtml += `<option value="${s.name}" data-price="${s.price}" data-commission="${s.commission || 0}" ${isSel}>${s.name} — Rp ${Number(s.price).toLocaleString('id-ID')}</option>`;
+        });
+
+        html += `
+        <div class="card mb-2 border-success shadow-none motor-slot-card" id="slotCard_${idx}">
+            <div class="card-header bg-white py-1 px-2 d-flex justify-content-between align-items-center">
+                <span class="fw-bold text-success" style="font-size:12px;">🏍️ Motor #${idx}</span>
+                ${currentMotorCount > 2 ? `<button type="button" class="btn btn-sm btn-link text-danger p-0 text-decoration-none fw-bold" onclick="removeMotorSlot(${idx})" style="font-size:11px;">✕ Hapus</button>` : ''}
+            </div>
+            <div class="card-body p-2 bg-light">
+                <div class="row g-2">
+                    <div class="col-sm-5 col-12">
+                        <label class="form-label small mb-1 fw-bold">Plat Motor #${idx} <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control form-control-sm text-uppercase motor-plat-input" id="platSlot_${idx}" placeholder="DD 1234 AB" maxlength="15" value="${slot.plat || ''}" oninput="onSlotPlatChange(${idx}, this.value)">
+                    </div>
+                    <div class="col-sm-7 col-12">
+                        <label class="form-label small mb-1 fw-bold">Paket Cuci Motor #${idx} <span class="text-danger">*</span></label>
+                        <select class="form-select form-select-sm motor-svc-select" id="svcSlot_${idx}" name="service_names" onchange="onSlotSvcChange(${idx}, this.value)">
+                            ${optionsHtml}
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+        `;
+    });
+
+    container.innerHTML = html;
+}
+
+function onSlotPlatChange(idx, val) {
+    if (motorSlotsData[idx - 1]) {
+        motorSlotsData[idx - 1].plat = val.trim();
+    }
+    syncPlats();
+}
+
+function onSlotSvcChange(idx, val) {
+    if (motorSlotsData[idx - 1]) {
+        motorSlotsData[idx - 1].service = val;
+    }
+    updatePriceMulti();
+}
+
+function syncPlats() {
     const hiddenInput = document.getElementById('licensePlateHidden');
     const singleInput = document.getElementById('platSingleInput');
-    const p1Input = document.getElementById('plat1Input');
-    const p2Input = document.getElementById('plat2Input');
     const previewStr = document.getElementById('platPreviewStr');
 
     if (!hiddenInput) return;
 
-    if (currentMotorMode === '2') {
-        const p1 = (p1Input ? p1Input.value.trim() : '').toUpperCase();
-        const p2 = (p2Input ? p2Input.value.trim() : '').toUpperCase();
-        if (p1 && p2) {
-            hiddenInput.value = p1 + ' / ' + p2;
-            if (previewStr) previewStr.textContent = p1 + ' / ' + p2;
-        } else if (p1) {
-            hiddenInput.value = p1;
-            if (previewStr) previewStr.textContent = p1 + ' / ...';
-        } else if (p2) {
-            hiddenInput.value = p2;
-            if (previewStr) previewStr.textContent = '... / ' + p2;
-        } else {
-            hiddenInput.value = '';
-            if (previewStr) previewStr.textContent = '-';
-        }
+    if (currentMotorCount > 1) {
+        saveSlotsFromDom();
+        const plates = motorSlotsData.map(s => s.plat.trim().toUpperCase()).filter(Boolean);
+        hiddenInput.value = plates.join(' / ');
+        if (previewStr) previewStr.textContent = hiddenInput.value || '-';
     } else {
         const val = (singleInput ? singleInput.value.trim() : '').toUpperCase();
         hiddenInput.value = val;
@@ -611,19 +679,15 @@ function updatePriceMulti(){
     let sum = 0;
     let count = 0;
 
-    if (currentMotorMode === '2') {
-        const cuci1 = document.getElementById('cuciMotor1Select');
-        const cuci2 = document.getElementById('cuciMotor2Select');
-        if (cuci1 && cuci1.selectedIndex >= 0) {
-            const opt1 = cuci1.options[cuci1.selectedIndex];
-            sum += parseInt(opt1.dataset.price || 0, 10);
+    if (currentMotorCount > 1) {
+        saveSlotsFromDom();
+        motorSlotsData.forEach(slot => {
+            const svc = CUCI_SERVICES.find(s => s.name === slot.service);
+            if (svc) {
+                sum += parseInt(svc.price || 0, 10);
+            }
             count++;
-        }
-        if (cuci2 && cuci2.selectedIndex >= 0) {
-            const opt2 = cuci2.options[cuci2.selectedIndex];
-            sum += parseInt(opt2.dataset.price || 0, 10);
-            count++;
-        }
+        });
     } else {
         const cuciChecks = document.querySelectorAll('.layanan-cuci:checked');
         cuciChecks.forEach(c => {
@@ -646,25 +710,23 @@ function updatePriceMulti(){
 }
 
 function validatePenjualan(form){
-    syncPlat();
+    syncPlats();
 
     const hiddenPlat = document.getElementById('licensePlateHidden');
     const errEl = document.getElementById('layananError');
 
-    if (currentMotorMode === '2') {
-        const p1 = document.getElementById('plat1Input').value.trim();
-        const p2 = document.getElementById('plat2Input').value.trim();
-        if (!p1 || p1.length < 2) {
-            alert('Validasi gagal: Harap masukkan Plat Nomor Motor 1 (minimal 2 karakter)!');
-            document.getElementById('plat1Input').focus();
-            return false;
+    if (currentMotorCount > 1) {
+        saveSlotsFromDom();
+        for (let i = 0; i < motorSlotsData.length; i++) {
+            const p = motorSlotsData[i].plat.trim();
+            if (!p || p.length < 2) {
+                alert(`Validasi gagal: Harap masukkan Plat Nomor untuk Motor #${i + 1} (minimal 2 karakter)!`);
+                const inputEl = document.getElementById(`platSlot_${i + 1}`);
+                if (inputEl) inputEl.focus();
+                return false;
+            }
         }
-        if (!p2 || p2.length < 2) {
-            alert('Validasi gagal: Harap masukkan Plat Nomor Motor 2 (minimal 2 karakter)!');
-            document.getElementById('plat2Input').focus();
-            return false;
-        }
-        hiddenPlat.value = (p1 + ' / ' + p2).toUpperCase();
+        hiddenPlat.value = motorSlotsData.map(s => s.plat.trim().toUpperCase()).join(' / ');
     } else {
         const ps = document.getElementById('platSingleInput').value.trim();
         if (!ps || ps.length < 2) {
@@ -676,7 +738,7 @@ function validatePenjualan(form){
 
         const cuciChecked = document.querySelectorAll('.layanan-cuci:checked');
         if (cuciChecked.length > 1) {
-            alert('Validasi gagal: Hanya boleh memilih 1 paket cuci motor per transaksi di mode 1 Motor. Gunakan mode "2 Motor (Bayar Bareng)" jika ingin membayar 2 motor!');
+            alert('Validasi gagal: Hanya boleh memilih 1 paket cuci motor per transaksi di mode 1 Motor. Gunakan mode rombongan jika ingin membayar lebih dari 1 motor!');
             return false;
         }
         const anyChecked = document.querySelectorAll('.layanan-check:checked');
@@ -768,7 +830,7 @@ async function syncOfflineSales(manual = false) {
 
 window.addEventListener('online', () => syncOfflineSales(false));
 document.addEventListener('DOMContentLoaded', () => {
-    switchMotorMode('1');
+    setMotorCount(1);
     toggleQrisProof();
     const modalEl = document.getElementById('modalKameraQris');
     if (modalEl) {

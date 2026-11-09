@@ -91,7 +91,7 @@ function isValidName(name, min=2) {
     return typeof name === 'string' && name.trim().length >= min && name.trim().length <= 50;
 }
 function isValidPlat(plat){
-    return typeof plat === 'string' && /^[A-Z0-9 -,/&]{2,50}$/i.test(plat.trim());
+    return typeof plat === 'string' && /^[A-Z0-9 -,/&]{2,150}$/i.test(plat.trim());
 }
 
 // Multer setup untuk upload foto nota pengeluaran & bukti pembayaran QRIS
@@ -410,7 +410,7 @@ app.get('/', requireLogin, async (req, res) => {
             ] = await Promise.all([
                 new Promise(r => db.all("SELECT * FROM inventory WHERE stock <= COALESCE(min_stock,5) ORDER BY stock ASC", (e, rows) => r(rows || []))),
                 new Promise(r => db.all("SELECT * FROM journals", (e, rows) => r(rows || []))),
-                new Promise(r => db.get("SELECT COALESCE(SUM(CASE WHEN license_plate LIKE '%/%' THEN 2 ELSE 1 END), 0) as c, COALESCE(SUM(price),0) as omzet FROM sales WHERE date(date)=date('now')", (e, row) => r(row || { c: 0, omzet: 0 }))),
+                new Promise(r => db.get("SELECT COALESCE(SUM((LENGTH(license_plate) - LENGTH(REPLACE(license_plate, '/', ''))) + 1), 0) as c, COALESCE(SUM(price),0) as omzet FROM sales WHERE date(date)=date('now')", (e, row) => r(row || { c: 0, omzet: 0 }))),
                 new Promise(r => db.get("SELECT COALESCE(SUM(price),0) as omzet FROM sales WHERE date(date) >= date(?)", [firstDay], (e, row) => r(row ? row.omzet : 0))),
                 new Promise(r => db.get("SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE date(date)=date('now')", (e, row) => r(row ? row.total : 0))),
                 new Promise(r => db.get("SELECT COUNT(*) as c FROM sales", (e, row) => r(row ? row.c : 0))),
@@ -420,7 +420,7 @@ app.get('/', requireLogin, async (req, res) => {
                 new Promise(r => db.all("SELECT date(date) as tgl, COALESCE(SUM(amount),0) as exp FROM expenses WHERE date(date) >= date(?) GROUP BY date(date) ORDER BY tgl ASC", [dateFilter], (e, rows) => r(rows || []))),
                 new Promise(r => db.all("SELECT strftime('%H', date) as jam, COUNT(*) as count FROM sales WHERE date(date) >= date(?) GROUP BY jam ORDER BY jam ASC", [dateFilter], (e, rows) => r(rows || []))),
                 new Promise(r => db.all("SELECT COALESCE(akun_kas, 'Kas Kecil') as akun, COUNT(*) as count, COALESCE(SUM(price), 0) as total FROM sales WHERE date(date) >= date(?) GROUP BY akun", [dateFilter], (e, rows) => r(rows || []))),
-                new Promise(r => db.all("SELECT worker_name, SUM(CASE WHEN license_plate LIKE '%/%' THEN 2 ELSE 1 END) as motor, COALESCE(SUM(price), 0) as omzet, COALESCE(SUM(commission), 0) as komisi FROM sales WHERE date(date) >= date(?) GROUP BY worker_name ORDER BY motor DESC", [dateFilter], (e, rows) => r(rows || []))),
+                new Promise(r => db.all("SELECT worker_name, SUM((LENGTH(license_plate) - LENGTH(REPLACE(license_plate, '/', ''))) + 1) as motor, COALESCE(SUM(price), 0) as omzet, COALESCE(SUM(commission), 0) as komisi FROM sales WHERE date(date) >= date(?) GROUP BY worker_name ORDER BY motor DESC", [dateFilter], (e, rows) => r(rows || []))),
                 new Promise(r => db.all("SELECT service_name, price FROM sales WHERE date(date) >= date(?)", [dateFilter], (e, rows) => r(rows || [])))
             ]);
 
@@ -562,7 +562,7 @@ app.post('/sales', requireAdminOrOwner, upload.single('photo'), (req, res) => {
 
     if (!isValidName(customer_name,2) || !isValidPlat(license_plate) || serviceNames.length===0 || !worker_name) {
         if (req.file) { try { fs.unlinkSync(req.file.path); } catch(e){} }
-        return res.status(400).send('Validasi gagal: Nama (≥2) / Plat alfanumerik 2-50 (contoh: DD 1234 ABC atau DD 1234 AB / DD 5678 CD) / Pekerja wajib & pilih minimal 1 layanan. <a href="/sales">Kembali</a>');
+        return res.status(400).send('Validasi gagal: Nama (≥2) / Plat alfanumerik 2-150 (contoh: DD 1234 ABC atau DD 1234 AB / DD 5678 CD) / Pekerja wajib & pilih minimal 1 layanan. <a href="/sales">Kembali</a>');
     }
     if (isNaN(salePrice) || salePrice < 1000) {
         if (req.file) { try { fs.unlinkSync(req.file.path); } catch(e){} }
@@ -587,16 +587,17 @@ app.post('/sales', requireAdminOrOwner, upload.single('photo'), (req, res) => {
                 return res.status(400).send('Validasi gagal: Layanan tidak valid: '+invalid.join(', ')+' <a href="/sales">Kembali</a>');
             }
 
-            // Validasi bisnis: Cek batasan paket cuci motor per transaksi (Maks 1 untuk 1 motor, Maks 2 untuk mode 2 motor)
-            const isMultiMotor = req.body.motor_count === '2' || (license_plate && (license_plate.includes('/') || license_plate.includes(',')));
-            const maxCuciAllowed = isMultiMotor ? 2 : 1;
+            // Validasi bisnis: Cek batasan paket cuci motor per transaksi (Maksimal sesuai jumlah motor)
+            const motorCount = parseInt(req.body.motor_count || '1', 10);
+            const platSlashes = (license_plate.match(/\//g) || []).length;
+            const effectiveMotorCount = Math.max(isNaN(motorCount) || motorCount < 1 ? 1 : motorCount, platSlashes + 1);
             const cuciMotorServices = serviceNames.filter(n => /cuci\s+(motor|mobil)/i.test(n));
 
-            if (cuciMotorServices.length > maxCuciAllowed) {
+            if (cuciMotorServices.length > effectiveMotorCount) {
                 if (req.file) { try { fs.unlinkSync(req.file.path); } catch(e){} }
-                const pesan = isMultiMotor 
-                    ? 'Validasi gagal: Maksimal 2 paket Cuci Motor untuk transaksi 2 Motor (Bayar Bareng). Layanan tambahan seperti Poles Helm dapat dipilih bersamaan. <a href="/sales">Kembali</a>' 
-                    : 'Validasi gagal: Hanya boleh memilih 1 jenis paket Cuci Motor per transaksi. Gunakan mode "2 Motor (Bayar Bareng)" jika ingin membayar 2 motor sekaligus. <a href="/sales">Kembali</a>';
+                const pesan = effectiveMotorCount > 1 
+                    ? `Validasi gagal: Maksimal ${effectiveMotorCount} paket Cuci Motor untuk transaksi ${effectiveMotorCount} Motor. Layanan tambahan seperti Poles Helm dapat dipilih bersamaan. <a href="/sales">Kembali</a>` 
+                    : 'Validasi gagal: Hanya boleh memilih 1 jenis paket Cuci Motor per transaksi. Gunakan mode multi-motor jika ingin membayar lebih dari 1 motor sekaligus. <a href="/sales">Kembali</a>';
                 return res.status(400).send(pesan);
             }
 
@@ -1338,7 +1339,7 @@ app.get('/komisi', requireAdminOrOwner, (req, res) => {
             const summarySql = `
                 SELECT 
                     worker_name,
-                    SUM(CASE WHEN license_plate LIKE '%/%' THEN 2 ELSE 1 END) as total_motor,
+                    SUM((LENGTH(license_plate) - LENGTH(REPLACE(license_plate, '/', ''))) + 1) as total_motor,
                     COALESCE(SUM(price), 0) as total_omzet,
                     COALESCE(SUM(commission), 0) as total_komisi
                 FROM sales 
@@ -1629,7 +1630,7 @@ app.get('/reports', requireOwner, (req, res) => {
                         // KPI for dashboard-like
                         const today=getWitaTime().toISOString().slice(0,10);
                         const firstDay=getWitaTime().toISOString().slice(0,8) + '01';
-                        db.get("SELECT COALESCE(SUM(CASE WHEN license_plate LIKE '%/%' THEN 2 ELSE 1 END), 0) as c, SUM(price) as omzet FROM sales WHERE date(date)=date('now')", (e, todayRow)=>{
+                        db.get("SELECT COALESCE(SUM((LENGTH(license_plate) - LENGTH(REPLACE(license_plate, '/', ''))) + 1), 0) as c, SUM(price) as omzet FROM sales WHERE date(date)=date('now')", (e, todayRow)=>{
                             db.get(`SELECT SUM(price) as omzetBulan FROM sales WHERE date(date) >= date(?)`, [firstDay], (e, bulanRow)=>{
                                 db.all("SELECT date(date) as tgl, COUNT(*) as trx, SUM(price) as omzet FROM sales WHERE date(date) >= date('now','-6 days') GROUP BY date(date) ORDER BY tgl ASC", (e, tren)=>{
                                     db.all("SELECT * FROM accounts ORDER BY type, name ASC", (e, accounts)=>{
