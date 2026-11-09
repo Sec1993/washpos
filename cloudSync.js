@@ -17,11 +17,12 @@ let debounceTimer = null;
 async function downloadDb() {
     try {
         console.log('[CloudSync] Memeriksa & mengunduh database pos.db dari Supabase Storage...');
-        const endpoint = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${REMOTE_PATH}`;
+        const endpoint = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${REMOTE_PATH}?t=${Date.now()}`;
         const res = await fetch(endpoint, {
             headers: {
                 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-                'apikey': SUPABASE_SERVICE_KEY
+                'apikey': SUPABASE_SERVICE_KEY,
+                'Cache-Control': 'no-cache, no-store, must-revalidate'
             }
         });
 
