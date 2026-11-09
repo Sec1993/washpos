@@ -293,14 +293,14 @@ db.serialize(() => {
         }
     });
 
-    // Seed default services (tanpa Lainnya)
+    // Seed default services (Prime Motowash standar harga)
     db.get("SELECT COUNT(*) as count FROM services", (err, row) => {
         if (row && row.count === 0) {
-            const stmt = db.prepare("INSERT INTO services (name, price, category, isActive) VALUES (?, ?, ?, 1)");
-            stmt.run('Cuci Motor Kecil', 15000, 'Motor Kecil');
-            stmt.run('Cuci Motor Sedang', 20000, 'Motor Sedang');
-            stmt.run('Cuci Motor Besar', 25000, 'Motor Besar');
-            stmt.run('Poles Helm', 10000, 'Motor Kecil');
+            const stmt = db.prepare("INSERT INTO services (name, price, category, isActive, commission) VALUES (?, ?, ?, 1, ?)");
+            stmt.run('Cuci Motor Kecil', 25000, 'Motor Kecil', 2000);
+            stmt.run('Cuci Motor Sedang', 30000, 'Motor Sedang', 2000);
+            stmt.run('Cuci Motor Besar', 35000, 'Motor Besar', 3000);
+            stmt.run('Poles Helm', 10000, 'Motor Kecil', 3000);
             stmt.finalize();
         } else {
             // Migrasi: Lainnya -> Motor Kecil (hapus kategori Lainnya)
