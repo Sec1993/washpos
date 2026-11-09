@@ -89,7 +89,7 @@
         <div class="receipt-row"><span>No. Nota:</span> <span class="bold"><%= (typeof receiptNumber !== 'undefined') ? receiptNumber : ('#' + String(sale.id).padStart(4, '0')) %></span></div>
         <hr>
         <div class="receipt-row"><span>Pelanggan:</span> <span><%= sale.customer_name %></span></div>
-        <div class="receipt-row"><span>Plat Nomor:</span> <span class="bold"><%= sale.license_plate %></span></div>
+        <div class="receipt-row"><span>Plat Nomor:</span> <span class="bold" style="white-space: normal !important; word-break: break-word !important; text-align: right !important; max-width: 65%;"><%= sale.license_plate %></span></div>
         <div class="receipt-row"><span>Pencuci:</span> <span><%= sale.worker_name %></span></div>
         <hr>
         <div style="margin-bottom:6px;">
@@ -306,7 +306,12 @@
             headerTxt += "\x1B\x61\x00"; // Left align
             headerTxt += "Waktu   : " + dateStr + "\n";
             headerTxt += "No. Nota: " + receiptNum + "\n";
-            headerTxt += "Plat    : <%= sale.license_plate %>\n";
+            const platVal = "<%= sale.license_plate %>";
+            if (platVal.length > 20) {
+                headerTxt += "Plat    :\n  " + platVal + "\n";
+            } else {
+                headerTxt += "Plat    : " + platVal + "\n";
+            }
             headerTxt += "Plgn    : <%= sale.customer_name %>\n";
             headerTxt += "Pencuci : <%= sale.worker_name %>\n";
             headerTxt += "--------------------------------\n";
