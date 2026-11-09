@@ -212,12 +212,12 @@ async function sendTelegramReport({ date, includeDb = true, senderName = 'Kasir'
                     `, (err, jRow) => {
                         db.all(`
                             SELECT 
-                                worker_name,
-                                SUM((LENGTH(license_plate) - LENGTH(REPLACE(license_plate, '/', ''))) + 1) as motor,
-                                COALESCE(SUM(commission), 0) as komisi
-                            FROM sales
-                            WHERE date(date) = date(?)
-                            GROUP BY worker_name
+                                sc.worker_name,
+                                COUNT(CASE WHEN sc.motor_index > 0 THEN 1 END) as motor,
+                                COALESCE(SUM(sc.commission), 0) as komisi
+                            FROM sale_commissions sc
+                            WHERE date(sc.date) = date(?)
+                            GROUP BY sc.worker_name
                             ORDER BY motor DESC
                         `, [targetDate], (err, wRows) => {
                             resolve({

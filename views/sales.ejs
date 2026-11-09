@@ -57,13 +57,18 @@
                     <div id="multiMotorWrap" class="mb-3 p-2 bg-light border border-success rounded" style="display:none;">
                         <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom">
                             <span class="fw-bold text-success small">👥 Rombongan Motor (Bayar 1 Struk)</span>
-                            <span class="badge bg-success" id="multiMotorBadge">2 Motor</span>
+                            <div class="d-flex align-items-center gap-1">
+                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 fw-bold" onclick="copyWorkerToAll()" style="font-size:11px;" title="Terapkan pencuci Motor #1 ke semua motor">
+                                    ⚡ Samakan Pencuci
+                                </button>
+                                <span class="badge bg-success" id="multiMotorBadge">2 Motor</span>
+                            </div>
                         </div>
                         <div id="motorSlotsContainer">
                             <!-- Slot kartu motor akan diisi secara dinamis oleh JavaScript -->
                         </div>
                         <div class="d-flex justify-content-between align-items-center mt-2 pt-1 border-top">
-                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="addMotorSlot()">
+                            <button type="button" class="btn btn-sm btn-outline-primary fw-bold" onclick="addMotorSlot()">
                                 ➕ Tambah Motor Lagi
                             </button>
                             <small class="text-muted" style="font-size: 11px;">Struk: <strong id="platPreviewStr" class="text-dark">-</strong></small>
@@ -138,9 +143,9 @@
                         <input type="text" name="price" id="price" class="form-control rupiah" required placeholder="Otomatis jumlah layanan (15.000)">
                         <small class="text-muted">Otomatis sum layanan, bisa edit manual (≥1.000).</small>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Pekerja (Pencuci)</label>
-                        <select name="worker_name" class="form-select" required>
+                    <div class="mb-3" id="singleWorkerWrap">
+                        <label class="form-label">Pekerja (Pencuci) <span class="text-danger">*</span></label>
+                        <select name="worker_name" id="singleWorkerSelect" class="form-select" required>
                             <option value="">-- Pilih Pekerja --</option>
                             <% workers.forEach(w => { %>
                                 <option value="<%= w.name %>"><%= w.name %></option>
@@ -461,12 +466,13 @@ function captureFotoQris(){
     }, 'image/jpeg', 0.85);
 }
 
-// Data Layanan Cuci Motor (dari backend)
+// Data Layanan Cuci Motor & Karyawan (dari backend)
 const CUCI_SERVICES = <%- JSON.stringify(cuciServices || []) %>;
+const ALL_WORKERS = <%- JSON.stringify(workers || []) %>;
 
 let currentMotorCount = 1;
 let motorSlotsData = [
-    { plat: '', service: CUCI_SERVICES[0] ? CUCI_SERVICES[0].name : 'Cuci Motor Besar' }
+    { plat: '', service: CUCI_SERVICES[0] ? CUCI_SERVICES[0].name : 'Cuci Motor Besar', worker: '' }
 ];
 
 function setMotorCount(count) {
@@ -498,6 +504,8 @@ function setMotorCount(count) {
     const subtitleBadge = document.getElementById('layananSubtitleBadge');
     const helpNote = document.getElementById('layananHelpNote');
     const cuciChecks = document.querySelectorAll('.layanan-cuci');
+    const singleWorkerWrap = document.getElementById('singleWorkerWrap');
+    const singleWorkerSelect = document.getElementById('singleWorkerSelect');
 
     if (count > 1) {
         if (badge) {
@@ -510,6 +518,8 @@ function setMotorCount(count) {
         if (cuci1MotorWrap) cuci1MotorWrap.style.display = 'none';
         if (cuciMultiInfoWrap) cuciMultiInfoWrap.style.display = 'block';
         if (subtitleBadge) subtitleBadge.textContent = `${count} Cuci Motor + Tambahan`;
+        if (singleWorkerWrap) singleWorkerWrap.style.display = 'none';
+        if (singleWorkerSelect) singleWorkerSelect.removeAttribute('required');
 
         // Nonaktifkan checkbox cuci 1 motor
         cuciChecks.forEach(c => {
@@ -521,7 +531,8 @@ function setMotorCount(count) {
         saveSlotsFromDom();
         while (motorSlotsData.length < count) {
             const defaultSvc = CUCI_SERVICES[0] ? CUCI_SERVICES[0].name : 'Cuci Motor Besar';
-            motorSlotsData.push({ plat: '', service: defaultSvc });
+            const firstWorker = motorSlotsData[0] ? motorSlotsData[0].worker : '';
+            motorSlotsData.push({ plat: '', service: defaultSvc, worker: firstWorker });
         }
         if (motorSlotsData.length > count) {
             motorSlotsData = motorSlotsData.slice(0, count);
@@ -529,7 +540,7 @@ function setMotorCount(count) {
 
         renderMotorSlots();
         if (helpNote) {
-            helpNote.innerHTML = `Mode Rombongan: ${count} paket cuci motor aktif. Tambahan seperti Poles Helm dapat diceklis. Total dipilih <span id="layananCount">${count}</span> layanan.`;
+            helpNote.innerHTML = `Mode Rombongan: ${count} paket cuci motor aktif. Tetapkan pencuci masing-masing motor. Total dipilih <span id="layananCount">${count}</span> layanan.`;
         }
     } else {
         if (badge) {
@@ -541,6 +552,8 @@ function setMotorCount(count) {
         if (cuci1MotorWrap) cuci1MotorWrap.style.display = 'block';
         if (cuciMultiInfoWrap) cuciMultiInfoWrap.style.display = 'none';
         if (subtitleBadge) subtitleBadge.textContent = '1 Cuci Motor + Tambahan';
+        if (singleWorkerWrap) singleWorkerWrap.style.display = 'block';
+        if (singleWorkerSelect) singleWorkerSelect.setAttribute('required', 'required');
 
         // Aktifkan kembali checkbox cuci 1 motor
         cuciChecks.forEach(c => {
@@ -548,7 +561,7 @@ function setMotorCount(count) {
         });
 
         motorSlotsData = [
-            { plat: '', service: CUCI_SERVICES[0] ? CUCI_SERVICES[0].name : 'Cuci Motor Besar' }
+            { plat: '', service: CUCI_SERVICES[0] ? CUCI_SERVICES[0].name : 'Cuci Motor Besar', worker: '' }
         ];
         renderMotorSlots();
 
@@ -580,8 +593,10 @@ function saveSlotsFromDom() {
     for (let i = 0; i < motorSlotsData.length; i++) {
         const platEl = document.getElementById(`platSlot_${i + 1}`);
         const svcEl = document.getElementById(`svcSlot_${i + 1}`);
+        const workerEl = document.getElementById(`workerSlot_${i + 1}`);
         if (platEl) motorSlotsData[i].plat = platEl.value.trim();
         if (svcEl) motorSlotsData[i].service = svcEl.value;
+        if (workerEl) motorSlotsData[i].worker = workerEl.value;
     }
 }
 
@@ -603,6 +618,12 @@ function renderMotorSlots() {
             optionsHtml += `<option value="${s.name}" data-price="${s.price}" data-commission="${s.commission || 0}" ${isSel}>${s.name} — Rp ${Number(s.price).toLocaleString('id-ID')}</option>`;
         });
 
+        let optionsWorkerHtml = '<option value="">-- Pilih Pencuci --</option>';
+        ALL_WORKERS.forEach(w => {
+            const isSel = w.name === slot.worker ? 'selected' : '';
+            optionsWorkerHtml += `<option value="${w.name}" ${isSel}>${w.name}</option>`;
+        });
+
         html += `
         <div class="card mb-2 border-success shadow-none motor-slot-card" id="slotCard_${idx}">
             <div class="card-header bg-white py-1 px-2 d-flex justify-content-between align-items-center">
@@ -611,14 +632,20 @@ function renderMotorSlots() {
             </div>
             <div class="card-body p-2 bg-light">
                 <div class="row g-2">
-                    <div class="col-sm-5 col-12">
+                    <div class="col-md-4 col-12">
                         <label class="form-label small mb-1 fw-bold">Plat Motor #${idx} <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control form-control-sm text-uppercase motor-plat-input" id="platSlot_${idx}" placeholder="DD 1234 AB" maxlength="15" value="${slot.plat || ''}" oninput="onSlotPlatChange(${idx}, this.value)">
+                        <input type="text" class="form-control form-control-sm text-uppercase motor-plat-input" id="platSlot_${idx}" name="motor_plats" placeholder="DD 1234 AB" maxlength="15" value="${slot.plat || ''}" oninput="onSlotPlatChange(${idx}, this.value)" required>
                     </div>
-                    <div class="col-sm-7 col-12">
-                        <label class="form-label small mb-1 fw-bold">Paket Cuci Motor #${idx} <span class="text-danger">*</span></label>
+                    <div class="col-md-4 col-12">
+                        <label class="form-label small mb-1 fw-bold">Paket Cuci #${idx} <span class="text-danger">*</span></label>
                         <select class="form-select form-select-sm motor-svc-select" id="svcSlot_${idx}" name="service_names" onchange="onSlotSvcChange(${idx}, this.value)">
                             ${optionsHtml}
+                        </select>
+                    </div>
+                    <div class="col-md-4 col-12">
+                        <label class="form-label small mb-1 fw-bold">Pencuci #${idx} <span class="text-danger">*</span></label>
+                        <select class="form-select form-select-sm motor-worker-select" id="workerSlot_${idx}" name="motor_workers" onchange="onSlotWorkerChange(${idx}, this.value)" required>
+                            ${optionsWorkerHtml}
                         </select>
                     </div>
                 </div>
@@ -628,6 +655,30 @@ function renderMotorSlots() {
     });
 
     container.innerHTML = html;
+}
+
+function onSlotWorkerChange(idx, val) {
+    if (motorSlotsData[idx - 1]) {
+        motorSlotsData[idx - 1].worker = val;
+    }
+}
+
+function copyWorkerToAll() {
+    saveSlotsFromDom();
+    if (!motorSlotsData[0] || !motorSlotsData[0].worker) {
+        alert('Silakan pilih Pencuci untuk Motor #1 terlebih dahulu.');
+        const firstEl = document.getElementById('workerSlot_1');
+        if (firstEl) firstEl.focus();
+        return;
+    }
+    const targetWorker = motorSlotsData[0].worker;
+    for (let i = 1; i < motorSlotsData.length; i++) {
+        motorSlotsData[i].worker = targetWorker;
+    }
+    renderMotorSlots();
+    if (typeof showToast === 'function') {
+        showToast(`Pencuci semua motor disamakan: ${targetWorker}`);
+    }
 }
 
 function onSlotPlatChange(idx, val) {
@@ -725,8 +776,29 @@ function validatePenjualan(form){
                 if (inputEl) inputEl.focus();
                 return false;
             }
+            const w = (motorSlotsData[i].worker || '').trim();
+            if (!w) {
+                alert(`Validasi gagal: Harap pilih Pencuci untuk Motor #${i + 1}!`);
+                const wEl = document.getElementById(`workerSlot_${i + 1}`);
+                if (wEl) wEl.focus();
+                return false;
+            }
         }
         hiddenPlat.value = motorSlotsData.map(s => s.plat.trim().toUpperCase()).join(' / ');
+
+        // Simpan daftar pencuci unik ke singleWorkerSelect agar worker_name terkirim
+        const uniqueWorkers = [...new Set(motorSlotsData.map(s => s.worker).filter(Boolean))];
+        const sw = document.getElementById('singleWorkerSelect');
+        if (sw) {
+            const combinedVal = uniqueWorkers.join(', ');
+            let opt = sw.querySelector(`option[value="${combinedVal}"]`);
+            if (!opt) {
+                opt = document.createElement('option');
+                opt.value = combinedVal;
+                sw.appendChild(opt);
+            }
+            sw.value = combinedVal;
+        }
     } else {
         const ps = document.getElementById('platSingleInput').value.trim();
         if (!ps || ps.length < 2) {

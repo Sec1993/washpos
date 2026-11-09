@@ -431,7 +431,7 @@ app.get('/', requireLogin, async (req, res) => {
                 new Promise(r => db.all("SELECT date(date) as tgl, COALESCE(SUM(amount),0) as exp FROM expenses WHERE date(date) >= date(?) GROUP BY date(date) ORDER BY tgl ASC", [dateFilter], (e, rows) => r(rows || []))),
                 new Promise(r => db.all("SELECT strftime('%H', date) as jam, COUNT(*) as count FROM sales WHERE date(date) >= date(?) GROUP BY jam ORDER BY jam ASC", [dateFilter], (e, rows) => r(rows || []))),
                 new Promise(r => db.all("SELECT COALESCE(akun_kas, 'Kas Kecil') as akun, COUNT(*) as count, COALESCE(SUM(price), 0) as total FROM sales WHERE date(date) >= date(?) GROUP BY akun", [dateFilter], (e, rows) => r(rows || []))),
-                new Promise(r => db.all("SELECT worker_name, SUM((LENGTH(license_plate) - LENGTH(REPLACE(license_plate, '/', ''))) + 1) as motor, COALESCE(SUM(price), 0) as omzet, COALESCE(SUM(commission), 0) as komisi FROM sales WHERE date(date) >= date(?) GROUP BY worker_name ORDER BY motor DESC", [dateFilter], (e, rows) => r(rows || []))),
+                new Promise(r => db.all("SELECT sc.worker_name, COUNT(CASE WHEN sc.motor_index > 0 THEN 1 END) as motor, COALESCE(SUM(sc.price), 0) as omzet, COALESCE(SUM(sc.commission), 0) as komisi FROM sale_commissions sc WHERE date(sc.date) >= date(?) GROUP BY sc.worker_name ORDER BY motor DESC", [dateFilter], (e, rows) => r(rows || []))),
                 new Promise(r => db.all("SELECT service_name, price FROM sales WHERE date(date) >= date(?)", [dateFilter], (e, rows) => r(rows || [])))
             ]);
 
@@ -630,17 +630,75 @@ app.post('/sales', requireAdminOrOwner, upload.single('photo'), (req, res) => {
                 if (cloudUrl) photoUrl = cloudUrl;
             }
 
+            // Ambil rincian pencuci per motor jika dikirim (Mode Multi-Motor)
+            let motorWorkers = req.body.motor_workers;
+            if (typeof motorWorkers === 'string') motorWorkers = [motorWorkers];
+            else if (!Array.isArray(motorWorkers)) motorWorkers = [];
+
+            let motorPlats = req.body.motor_plats;
+            if (typeof motorPlats === 'string') motorPlats = [motorPlats];
+            else if (!Array.isArray(motorPlats)) motorPlats = [];
+
+            let finalWorkerName = worker_name;
+            if (motorWorkers.length > 0) {
+                const uniqueWorkers = [...new Set(motorWorkers.map(w => (w || '').trim()).filter(Boolean))];
+                if (uniqueWorkers.length > 0) {
+                    finalWorkerName = uniqueWorkers.join(', ');
+                }
+            }
+
             db.serialize(() => {
                 const phoneNum = String(req.body.phone || '').trim();
                 db.run(`INSERT INTO sales (customer_name, license_plate, service_name, price, worker_name, admin_name, phone, akun_kas, photo, commission) 
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, 
-                        [customer_name, license_plate, service_name, salePrice, worker_name, admin_name, phoneNum, kasAkun, photoUrl, totalKomisi], function(err) {
+                        [customer_name, license_plate, service_name, salePrice, finalWorkerName, admin_name, phoneNum, kasAkun, photoUrl, totalKomisi], function(err) {
                     if (err) {
                         console.error(err);
                         if (req.file && !photoUrl.startsWith('http')) { try { fs.unlinkSync(req.file.path); } catch(e){} }
                         return res.status(500).send('Gagal simpan penjualan: '+err.message+' <a href="/sales">Kembali</a>');
                     }
                     const saleId = this.lastID;
+
+                    // Rekam komisi per motor ke sale_commissions
+                    if (motorWorkers.length > 0) {
+                        const platTokens = license_plate.split('/').map(p => p.trim());
+                        motorWorkers.forEach((w, idx) => {
+                            const workerNameForSlot = (w || worker_name).trim();
+                            const svcNameForSlot = cuciMotorServices[idx] || serviceNames[idx] || serviceNames[0];
+                            const platForSlot = (motorPlats[idx] || platTokens[idx] || license_plate).trim();
+                            const svcObj = serviceMap.get(svcNameForSlot);
+                            const commVal = svcObj && typeof svcObj.commission === 'number' ? svcObj.commission : 0;
+                            const priceVal = svcObj && typeof svcObj.price === 'number' ? svcObj.price : 0;
+
+                            db.run(
+                                `INSERT INTO sale_commissions (sale_id, motor_index, license_plate, service_name, worker_name, commission, price, date)
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+                                [saleId, idx + 1, platForSlot, svcNameForSlot, workerNameForSlot, commVal, priceVal]
+                            );
+                        });
+
+                        // Rekam layanan tambahan (seperti Poles Helm) jika ada
+                        const addonServices = serviceNames.filter(n => !/cuci\s+(motor|mobil)/i.test(n));
+                        const fallbackAddonWorker = (req.body.addon_worker || motorWorkers[0] || worker_name).trim();
+                        addonServices.forEach(addonName => {
+                            const svcObj = serviceMap.get(addonName);
+                            const commVal = svcObj && typeof svcObj.commission === 'number' ? svcObj.commission : 0;
+                            const priceVal = svcObj && typeof svcObj.price === 'number' ? svcObj.price : 0;
+                            db.run(
+                                `INSERT INTO sale_commissions (sale_id, motor_index, license_plate, service_name, worker_name, commission, price, date)
+                                 VALUES (?, 0, '(Tambahan)', ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+                                [saleId, addonName, fallbackAddonWorker, commVal, priceVal]
+                            );
+                        });
+                    } else {
+                        // Mode 1 Motor Biasa
+                        db.run(
+                            `INSERT INTO sale_commissions (sale_id, motor_index, license_plate, service_name, worker_name, commission, price, date)
+                             VALUES (?, 1, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+                            [saleId, license_plate, service_name, worker_name, totalKomisi, salePrice]
+                        );
+                    }
+
                     const layananDesc = serviceNames.length>1 ? `(${serviceNames.join(' + ')})` : serviceNames[0];
                     db.run(`INSERT INTO journals (description, debit, credit, account_type) VALUES (?, ?, ?, ?)`,
                         [`Pendapatan Jasa Cuci - Plat: ${license_plate} ${layananDesc} → ${kasAkun}`, salePrice, 0, kasAkun]);
@@ -659,39 +717,42 @@ app.get('/receipt/:id', requireAdminOrOwner, (req, res) => {
     db.get("SELECT * FROM sales WHERE id = ?", [saleId], (err, sale) => {
         if (err || !sale) return res.send('Transaksi tidak ditemukan.');
         
-        // Ambil rincian harga per layanan dari database services
-        db.all("SELECT name, price FROM services", (errSvc, services) => {
-            const svcPriceMap = {};
-            (services || []).forEach(s => {
-                if (s.name) svcPriceMap[s.name.trim().toLowerCase()] = s.price;
-            });
+        db.all("SELECT * FROM sale_commissions WHERE sale_id = ? ORDER BY motor_index ASC, id ASC", [saleId], (errComm, commRows) => {
+            // Ambil rincian harga per layanan dari database services
+            db.all("SELECT name, price FROM services", (errSvc, services) => {
+                const svcPriceMap = {};
+                (services || []).forEach(s => {
+                    if (s.name) svcPriceMap[s.name.trim().toLowerCase()] = s.price;
+                });
 
-            const rawItems = (sale.service_name || '').split(',').map(s => s.trim()).filter(Boolean);
-            const serviceItems = rawItems.map(item => {
-                const lower = item.toLowerCase();
-                const itemPrice = svcPriceMap[lower] || (rawItems.length === 1 ? sale.price : 0);
-                return { name: item, price: itemPrice };
-            });
+                const rawItems = (sale.service_name || '').split(',').map(s => s.trim()).filter(Boolean);
+                const serviceItems = rawItems.map(item => {
+                    const lower = item.toLowerCase();
+                    const itemPrice = svcPriceMap[lower] || (rawItems.length === 1 ? sale.price : 0);
+                    return { name: item, price: itemPrice };
+                });
 
-            // Hitung nomor urutan transaksi pada tanggal tersebut (reset harian)
-            db.get(
-                "SELECT COUNT(*) as daily_seq FROM sales WHERE date(date) = date(?) AND id <= ?",
-                [sale.date, sale.id],
-                (err2, seqRow) => {
-                    const dailySeq = (seqRow && seqRow.daily_seq) ? seqRow.daily_seq : 1;
-                    const format = cachedShopSettings.receipt_number_format || 'daily';
-                    const receiptNumber = formatReceiptNumber(sale, dailySeq, format);
-                    res.render('receipt', { 
-                        sale, 
-                        serviceItems,
-                        dailySeq, 
-                        receiptNumber, 
-                        shopSettings: cachedShopSettings, 
-                        isPreview: false,
-                        layout: false 
-                    });
-                }
-            );
+                // Hitung nomor urutan transaksi pada tanggal tersebut (reset harian)
+                db.get(
+                    "SELECT COUNT(*) as daily_seq FROM sales WHERE date(date) = date(?) AND id <= ?",
+                    [sale.date, sale.id],
+                    (err2, seqRow) => {
+                        const dailySeq = (seqRow && seqRow.daily_seq) ? seqRow.daily_seq : 1;
+                        const format = cachedShopSettings.receipt_number_format || 'daily';
+                        const receiptNumber = formatReceiptNumber(sale, dailySeq, format);
+                        res.render('receipt', { 
+                            sale, 
+                            serviceItems,
+                            workerItems: commRows || [],
+                            dailySeq, 
+                            receiptNumber, 
+                            shopSettings: cachedShopSettings, 
+                            isPreview: false,
+                            layout: false 
+                        });
+                    }
+                );
+            });
         });
     });
 });
@@ -719,6 +780,7 @@ app.get('/receipt-preview', requireOwner, (req, res) => {
     res.render('receipt', { 
         sale: dummySale, 
         serviceItems: dummyItems,
+        workerItems: [],
         dailySeq: 1, 
         receiptNumber, 
         shopSettings: cachedShopSettings, 
@@ -1353,19 +1415,27 @@ app.get('/komisi', requireAdminOrOwner, (req, res) => {
                 }
             });
 
-            // 2. Hitung Komisi & Unit Motor dari Sales per Karyawan
+            // 2. Hitung Komisi & Unit Motor dari Sales per Karyawan (Query sale_commissions)
+            let whereComm = ["date(sc.date) >= date(?)", "date(sc.date) <= date(?)"];
+            let paramsComm = [from, to];
+            if (worker && worker.trim() && worker !== 'all') {
+                whereComm.push("LOWER(TRIM(sc.worker_name)) = LOWER(TRIM(?))");
+                paramsComm.push(worker.trim());
+            }
+            const whereClauseComm = "WHERE " + whereComm.join(" AND ");
+
             const summarySql = `
                 SELECT 
-                    worker_name,
-                    SUM((LENGTH(license_plate) - LENGTH(REPLACE(license_plate, '/', ''))) + 1) as total_motor,
-                    COALESCE(SUM(price), 0) as total_omzet,
-                    COALESCE(SUM(commission), 0) as total_komisi
-                FROM sales 
-                ${whereClause}
-                GROUP BY worker_name
+                    sc.worker_name,
+                    COUNT(CASE WHEN sc.motor_index > 0 THEN 1 END) as total_motor,
+                    COALESCE(SUM(sc.price), 0) as total_omzet,
+                    COALESCE(SUM(sc.commission), 0) as total_komisi
+                FROM sale_commissions sc
+                ${whereClauseComm}
+                GROUP BY sc.worker_name
                 ORDER BY total_komisi DESC, total_motor DESC
             `;
-            db.all(summarySql, params, (errSum, workerSummary) => {
+            db.all(summarySql, paramsComm, (errSum, workerSummary) => {
                 const salesMap = {};
                 let grandTotalMotor = 0;
                 let grandTotalOmzet = 0;
@@ -1430,14 +1500,18 @@ app.get('/komisi', requireAdminOrOwner, (req, res) => {
                             ? accounts.map(a => a.name) 
                             : ['Kas Kecil (Outlet)', 'Kas Besar', 'Bank'];
 
-                        // 6. Ambil rincian transaksi cuci untuk tab detail
+                        // 6. Ambil rincian transaksi cuci untuk tab detail (dari sale_commissions)
                         const detailSql = `
-                            SELECT id, date, customer_name, license_plate, service_name, price, worker_name, admin_name, akun_kas, commission
-                            FROM sales
-                            ${whereClause}
-                            ORDER BY date DESC, id DESC
+                            SELECT sc.id, sc.date, COALESCE(s.customer_name, 'Pelanggan') as customer_name, 
+                                   sc.license_plate, sc.service_name, sc.price, sc.worker_name, 
+                                   COALESCE(s.admin_name, 'Kasir') as admin_name, 
+                                   COALESCE(s.akun_kas, 'Kas Kecil') as akun_kas, sc.commission
+                            FROM sale_commissions sc
+                            LEFT JOIN sales s ON sc.sale_id = s.id
+                            ${whereClauseComm}
+                            ORDER BY sc.date DESC, sc.id DESC
                         `;
-                        db.all(detailSql, params, (errDet, trxDetails) => {
+                        db.all(detailSql, paramsComm, (errDet, trxDetails) => {
                             res.render('komisi', {
                                 workers: workerList,
                                 payrollSummary,
@@ -1546,12 +1620,14 @@ app.get('/komisi/slip/:workerName', requireAdminOrOwner, (req, res) => {
                 const daysPresent = attRow ? attRow.days_present : 0;
                 const totalDailySalary = daysPresent * dailyRate;
 
-                // Ambil rincian pengerjaan motor
+                // Ambil rincian pengerjaan motor (dari sale_commissions)
                 const sql = `
-                    SELECT id, date, customer_name, license_plate, service_name, price, commission
-                    FROM sales
-                    WHERE worker_name = ? AND date(date) >= date(?) AND date(date) <= date(?)
-                    ORDER BY date ASC, id ASC
+                    SELECT sc.sale_id as id, sc.date, COALESCE(s.customer_name, 'Pelanggan') as customer_name, 
+                           sc.license_plate, sc.service_name, sc.price, sc.commission
+                    FROM sale_commissions sc
+                    LEFT JOIN sales s ON sc.sale_id = s.id
+                    WHERE sc.worker_name = ? AND date(sc.date) >= date(?) AND date(sc.date) <= date(?)
+                    ORDER BY sc.date ASC, sc.id ASC
                 `;
                 db.all(sql, [workerName, from, to], (err, rows) => {
                     let totalKomisi = 0;

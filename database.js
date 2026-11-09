@@ -265,6 +265,30 @@ db.serialize(() => {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
 
+    // 13. Rincian Komisi Pencuci Per Motor / Layanan (Mendukung Multi-Worker dalam 1 Nota)
+    db.run(`CREATE TABLE IF NOT EXISTS sale_commissions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sale_id INTEGER NOT NULL,
+        motor_index INTEGER DEFAULT 1,
+        license_plate TEXT,
+        service_name TEXT,
+        worker_name TEXT NOT NULL,
+        commission REAL DEFAULT 0,
+        price REAL DEFAULT 0,
+        date DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_sale_comm_sale ON sale_commissions(sale_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_sale_comm_worker ON sale_commissions(worker_name)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_sale_comm_date ON sale_commissions(date)`);
+
+    // Migrasi Backfill: Pastikan transaksi lama di sales tercatat di sale_commissions
+    db.run(`
+        INSERT INTO sale_commissions (sale_id, motor_index, license_plate, service_name, worker_name, commission, price, date)
+        SELECT s.id, 1, s.license_plate, s.service_name, s.worker_name, COALESCE(s.commission, 0), COALESCE(s.price, 0), s.date
+        FROM sales s
+        WHERE s.id NOT IN (SELECT DISTINCT sale_id FROM sale_commissions) AND s.worker_name IS NOT NULL AND s.worker_name != ''
+    `);
+
     // Seed default owner account if no users exist
     db.get("SELECT COUNT(*) as count FROM users", (err, row) => {
         if (row && row.count === 0) {

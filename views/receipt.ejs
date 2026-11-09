@@ -91,6 +91,13 @@
         <div class="receipt-row"><span>Pelanggan:</span> <span><%= sale.customer_name %></span></div>
         <div class="receipt-row"><span>Plat Nomor:</span> <span class="bold" style="white-space: normal !important; word-break: break-word !important; text-align: right !important; max-width: 65%;"><%= sale.license_plate %></span></div>
         <div class="receipt-row"><span>Pencuci:</span> <span><%= sale.worker_name %></span></div>
+        <% if (typeof workerItems !== 'undefined' && workerItems && workerItems.length > 1) { %>
+            <div style="font-size: 10px; color: #333; margin-top: 1px; border-left: 2px solid #0d6efd; padding-left: 6px; margin-bottom: 3px;">
+                <% workerItems.forEach((wi) => { %>
+                    <div><%= wi.motor_index > 0 ? ('#' + wi.motor_index + ' ' + wi.license_plate) : wi.service_name %>: <strong><%= wi.worker_name %></strong></div>
+                <% }) %>
+            </div>
+        <% } %>
         <hr>
         <div style="margin-bottom:6px;">
             <div style="display:flex; justify-content:space-between; font-weight:bold; border-bottom:1px solid #000; padding-bottom:3px; margin-bottom:4px;">
@@ -317,7 +324,14 @@
                 headerTxt += "Plat    : " + platVal + "\n";
             }
             headerTxt += "Plgn    : <%= sale.customer_name %>\n";
-            headerTxt += "Pencuci : <%= sale.worker_name %>\n";
+            <% if (typeof workerItems !== 'undefined' && workerItems && workerItems.length > 1) { %>
+                headerTxt += "Pencuci per Motor:\n";
+                <% workerItems.forEach((wi) => { %>
+                    headerTxt += " - <%= wi.motor_index > 0 ? (wi.license_plate + ': ') : (wi.service_name + ': ') %><%= wi.worker_name %>\n";
+                <% }) %>
+            <% } else { %>
+                headerTxt += "Pencuci : <%= sale.worker_name %>\n";
+            <% } %>
             headerTxt += "--------------------------------\n";
             headerTxt += "Layanan:\n";
             <% if (typeof serviceItems !== 'undefined' && serviceItems && serviceItems.length > 0) { %>
