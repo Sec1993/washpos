@@ -208,11 +208,32 @@ function refreshShopSettings() {
 }
 refreshShopSettings();
 
-// Pass user + loginTime + shopSettings to all views
+// Helper parsing tanggal SQLite (UTC) ke Waktu Indonesia Tengah (WITA - Asia/Makassar)
+function formatWitaDateTime(dateVal, includeSeconds = false) {
+    if (!dateVal) return '-';
+    let str = String(dateVal).trim();
+    if (!str.includes('Z') && !str.includes('+')) {
+        str = str.replace(' ', 'T') + 'Z';
+    }
+    const d = new Date(str);
+    if (isNaN(d.getTime())) return String(dateVal);
+    return d.toLocaleString('id-ID', {
+        timeZone: 'Asia/Makassar',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        ...(includeSeconds ? { second: '2-digit' } : {})
+    });
+}
+
+// Pass user + loginTime + shopSettings + formatWitaDate to all views
 app.use((req, res, next) => {
     res.locals.user = req.session.user;
     res.locals.loginTime = req.session.loginTime || null;
     res.locals.shopSettings = cachedShopSettings;
+    res.locals.formatWitaDate = formatWitaDateTime;
     next();
 });
 

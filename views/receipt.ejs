@@ -1,3 +1,23 @@
+<%
+    function formatWitaLocal(d) {
+        if (typeof formatWitaDate === 'function') return formatWitaDate(d);
+        if (!d) return '-';
+        let str = String(d).trim();
+        if (!str.includes('Z') && !str.includes('+')) {
+            str = str.replace(' ', 'T') + 'Z';
+        }
+        const dt = new Date(str);
+        if (isNaN(dt.getTime())) return String(d);
+        return dt.toLocaleString('id-ID', {
+            timeZone: 'Asia/Makassar',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+%>
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -65,7 +85,7 @@
         <% } %>
         <p style="margin: 6px 0 2px 0; font-size: 11px; font-weight: bold; letter-spacing: 1px;">STRUK BUKTI PEMBAYARAN</p>
         <hr>
-        <div class="receipt-row"><span>Waktu:</span> <span><%= new Date(sale.date).toLocaleString('id-ID', { timeZone: 'Asia/Makassar', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) %></span></div>
+        <div class="receipt-row"><span>Waktu:</span> <span><%= formatWitaLocal(sale.date) %></span></div>
         <div class="receipt-row"><span>No. Nota:</span> <span class="bold"><%= (typeof receiptNumber !== 'undefined') ? receiptNumber : ('#' + String(sale.id).padStart(4, '0')) %></span></div>
         <hr>
         <div class="receipt-row"><span>Pelanggan:</span> <span><%= sale.customer_name %></span></div>
@@ -271,7 +291,7 @@
             const shopName = "<%= (typeof shopSettings !== 'undefined' && shopSettings.shop_name) ? shopSettings.shop_name : 'Prime Motowash' %>";
             const shopAddress = "<%= (typeof shopSettings !== 'undefined' && shopSettings.shop_address) ? shopSettings.shop_address : '' %>";
             const shopPhone = "<%= (typeof shopSettings !== 'undefined' && shopSettings.shop_phone) ? shopSettings.shop_phone : '' %>";
-            const dateStr = "<%= new Date(sale.date).toLocaleString('id-ID', { timeZone: 'Asia/Makassar', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) %>";
+            const dateStr = "<%= formatWitaLocal(sale.date) %>";
             const footer = "<%= ((typeof shopSettings !== 'undefined' && shopSettings.receipt_footer) ? shopSettings.receipt_footer : 'Terima kasih atas kunjungan Anda').replace(/!+$/, '').trim() %>";
             const feedback = "<%= (typeof shopSettings !== 'undefined' && shopSettings.receipt_feedback) ? shopSettings.receipt_feedback : 'Jika ada saran dan kritik silahkan hubungi 082187777080' %>";
             const receiptNum = "<%= (typeof receiptNumber !== 'undefined') ? receiptNumber : ('#' + String(sale.id).padStart(4, '0')) %>";

@@ -59,7 +59,7 @@
                     <% if(journals.length===0){ %><tr><td colspan="5" class="text-center text-muted py-3">Tidak ada jurnal sesuai filter.</td></tr><% } %>
                     <% journals.forEach(j=>{ %>
                     <tr>
-                        <td><small><%= new Date(j.date).toLocaleString('id-ID') %></small></td>
+                        <td><small><%= typeof formatWitaDate === 'function' ? formatWitaDate(j.date, true) : new Date(j.date).toLocaleString('id-ID') %></small></td>
                         <td><small><%= j.description %></small></td>
                         <td><span class="badge <%= j.account_type==='Kas Besar'?'bg-primary': j.account_type==='Kas Kecil'?'bg-info text-dark': j.account_type==='Kas'?'bg-dark': j.account_type==='Pendapatan'?'bg-success':'bg-danger' %>"><%= j.account_type %></span></td>
                         <td class="text-end"><%= j.debit>0?'Rp '+j.debit.toLocaleString('id-ID'):'-' %></td>
@@ -99,7 +99,7 @@
                     <tbody>
                         <% ledger[akun].forEach(l=>{ %>
                         <tr>
-                            <td><small><%= new Date(l.date).toLocaleString('id-ID') %></small></td>
+                            <td><small><%= typeof formatWitaDate === 'function' ? formatWitaDate(l.date, true) : new Date(l.date).toLocaleString('id-ID') %></small></td>
                             <td><small><%= l.description %></small></td>
                             <td class="text-end"><%= l.debit>0?l.debit.toLocaleString('id-ID'):'-' %></td>
                             <td class="text-end"><%= l.credit>0?l.credit.toLocaleString('id-ID'):'-' %></td>

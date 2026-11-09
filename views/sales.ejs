@@ -180,7 +180,7 @@
                             <% } %>
                             <% recentSales.forEach(s => { %>
                             <tr>
-                                <td><small><%= new Date(s.date).toLocaleString('id-ID') %></small></td>
+                                <td><small><%= typeof formatWitaDate === 'function' ? formatWitaDate(s.date, true) : new Date(s.date).toLocaleString('id-ID') %></small></td>
                                 <td><%= s.license_plate %><br><small class="text-muted"><%= s.customer_name %></small><br><small class="badge bg-light text-dark"><%= s.worker_name %></small></td>
                                 <td>
                                     <% (s.service_name||'').split(',').forEach((lay,idx)=>{ %>
