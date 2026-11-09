@@ -19,6 +19,17 @@ const expressLayouts = require('express-ejs-layouts');
 // Setup Middleware
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+
+// Anti-cache header agar browser kasir/admin selalu memuat tampilan terbaru (tidak tertahan cache lama)
+app.use((req, res, next) => {
+    if (req.method === 'GET' && !req.path.startsWith('/uploads')) {
+        res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.set('Pragma', 'no-cache');
+        res.set('Expires', '0');
+    }
+    next();
+});
+
 const uploadStaticDir = path.join(__dirname, 'data', 'uploads');
 app.use('/uploads', express.static(uploadStaticDir));
 app.use(express.static(path.join(__dirname, 'public')));
