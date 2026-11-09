@@ -566,6 +566,13 @@ app.post('/sales', requireAdminOrOwner, upload.single('photo'), (req, res) => {
                 return res.status(400).send('Validasi gagal: Layanan tidak valid: '+invalid.join(', ')+' <a href="/sales">Kembali</a>');
             }
 
+            // Validasi bisnis: Maksimal 1 jenis paket cuci motor utama per transaksi
+            const cuciMotorServices = serviceNames.filter(n => /cuci\s+(motor|mobil)/i.test(n));
+            if (cuciMotorServices.length > 1) {
+                if (req.file) { try { fs.unlinkSync(req.file.path); } catch(e){} }
+                return res.status(400).send('Validasi gagal: Hanya boleh memilih 1 jenis paket Cuci Motor per transaksi (tidak bisa memilih 2 cuci motor bersamaan). Layanan tambahan seperti Poles Helm dapat dipilih bersamaan. <a href="/sales">Kembali</a>');
+            }
+
             // Hitung total komisi pencuci
             let totalKomisi = 0;
             const serviceMap = new Map((rows||[]).map(r=>[r.name, r]));

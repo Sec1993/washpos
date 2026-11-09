@@ -28,22 +28,51 @@
                         <input type="text" name="license_plate" class="form-control" required minlength="2" maxlength="20" placeholder="B 1234 ABC">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Jenis Layanan <small class="text-muted">(bisa pilih beberapa)</small></label>
-                        <div class="border rounded p-2" style="max-height:180px; overflow-y:auto; background:#fff;">
+                        <label class="form-label fw-bold">Jenis Layanan <small class="text-muted fw-normal">(Pilih 1 Cuci Motor + Tambahan)</small></label>
+                        <div class="border rounded p-2" style="max-height:220px; overflow-y:auto; background:#fff;">
+                            <% 
+                                const isCuciUtama = (name) => /cuci\s+(motor|mobil)/i.test(name || '');
+                                const cuciServices = (services || []).filter(s => isCuciUtama(s.name));
+                                const addonServices = (services || []).filter(s => !isCuciUtama(s.name));
+                            %>
+
                             <% if (services.length===0) { %>
                                 <small class="text-muted">Belum ada layanan. Tambah di Master.</small>
                             <% } %>
-                            <% services.forEach(s => { %>
-                                <div class="form-check">
-                                    <input class="form-check-input layanan-check" type="checkbox" name="service_names" value="<%= s.name %>" data-price="<%= s.price %>" data-commission="<%= s.commission || 0 %>" id="svc_<%= s.id %>" onchange="updatePriceMulti()">
-                                    <label class="form-check-label d-flex justify-content-between w-100" for="svc_<%= s.id %>">
-                                        <span><%= s.name %></span>
-                                        <small class="text-muted">Rp <%= s.price.toLocaleString('id-ID') %></small>
-                                    </label>
+
+                            <% if (cuciServices.length > 0) { %>
+                                <div class="d-flex justify-content-between align-items-center mb-1 pb-1 border-bottom">
+                                    <span class="badge bg-primary" style="font-size: 11px;">🏍️ Paket Cuci Motor (Pilih Maks 1)</span>
+                                    <small class="text-muted" style="font-size: 10px;">Otomatis ganti jika klik yang lain</small>
                                 </div>
-                            <% }) %>
+                                <% cuciServices.forEach(s => { %>
+                                    <div class="form-check py-1">
+                                        <input class="form-check-input layanan-check layanan-cuci" type="checkbox" name="service_names" value="<%= s.name %>" data-price="<%= s.price %>" data-commission="<%= s.commission || 0 %>" data-group="cuci" id="svc_<%= s.id %>" onchange="handleLayananChange(this)">
+                                        <label class="form-check-label d-flex justify-content-between w-100" for="svc_<%= s.id %>">
+                                            <span><%= s.name %></span>
+                                            <span class="fw-bold text-dark">Rp <%= s.price.toLocaleString('id-ID') %></span>
+                                        </label>
+                                    </div>
+                                <% }) %>
+                            <% } %>
+
+                            <% if (addonServices.length > 0) { %>
+                                <div class="d-flex justify-content-between align-items-center mt-2 mb-1 pt-2 pb-1 border-top border-bottom">
+                                    <span class="badge bg-secondary" style="font-size: 11px;">✨ Layanan Tambahan / Poles (Bisa Tambah)</span>
+                                    <small class="text-muted" style="font-size: 10px;">Bisa dipilih bersamaan</small>
+                                </div>
+                                <% addonServices.forEach(s => { %>
+                                    <div class="form-check py-1">
+                                        <input class="form-check-input layanan-check layanan-addon" type="checkbox" name="service_names" value="<%= s.name %>" data-price="<%= s.price %>" data-commission="<%= s.commission || 0 %>" data-group="addon" id="svc_<%= s.id %>" onchange="handleLayananChange(this)">
+                                        <label class="form-check-label d-flex justify-content-between w-100" for="svc_<%= s.id %>">
+                                            <span><%= s.name %></span>
+                                            <span class="fw-bold text-dark">Rp <%= s.price.toLocaleString('id-ID') %></span>
+                                        </label>
+                                    </div>
+                                <% }) %>
+                            <% } %>
                         </div>
-                        <small class="text-muted">Centang 1 atau lebih (misal Cuci + Poles). Kelola di <a href="/master">Master</a>. Dipilih <span id="layananCount">0</span> layanan.</small>
+                        <small class="text-muted">Maksimal 1 paket cuci motor. Layanan tambahan (seperti Poles Helm) bisa dipilih bersamaan. Dipilih <span id="layananCount">0</span> layanan.</small>
                         <div class="invalid-feedback d-block" id="layananError" style="display:none !important;">Pilih minimal 1 layanan.</div>
                     </div>
                     <div class="mb-3">
@@ -374,13 +403,26 @@ function captureFotoQris(){
     }, 'image/jpeg', 0.85);
 }
 
+function handleLayananChange(el){
+    // Jika kasir memilih satu jenis paket cuci motor, otomatis uncheck paket cuci motor lainnya
+    if (el && el.checked && el.dataset.group === 'cuci') {
+        const cuciChecks = document.querySelectorAll('.layanan-cuci');
+        cuciChecks.forEach(c => {
+            if (c !== el) {
+                c.checked = false;
+            }
+        });
+    }
+    updatePriceMulti();
+}
+
 function updatePriceMulti(){
     const checks=document.querySelectorAll('.layanan-check:checked');
     let sum=0;
     checks.forEach(c=> sum+= parseInt(c.dataset.price||0,10));
     document.getElementById('layananCount').textContent=checks.length;
     const priceEl=document.getElementById('price');
-    if(sum>0) priceEl.value=formatRupiah(sum);
+    if(priceEl) priceEl.value = sum > 0 ? formatRupiah(sum) : '';
 }
 
 function validatePenjualan(form){
@@ -391,6 +433,13 @@ function validatePenjualan(form){
         alert('Validasi gagal: Pilih minimal 1 layanan.');
         return false;
     } else if(errEl) errEl.style.display='none';
+
+    // Validasi maksimal 1 paket cuci motor utama
+    const cuciChecked = document.querySelectorAll('.layanan-cuci:checked');
+    if (cuciChecked.length > 1) {
+        alert('Validasi gagal: Hanya boleh memilih 1 paket cuci motor per transaksi (misal: Cuci Motor Besar saja atau Cuci Motor Besar + Poles Helm)!');
+        return false;
+    }
 
     // Validasi Wajib Foto Bukti untuk QRIS
     const sel = form.akun_kas;
