@@ -79,7 +79,10 @@ db.serialize(() => {
         phone TEXT,
         akun_kas TEXT,
         photo TEXT,
-        commission REAL DEFAULT 0
+        commission REAL DEFAULT 0,
+        discount REAL DEFAULT 0,
+        promo_name TEXT,
+        promo_photo TEXT
     )`, () => {
         db.run("ALTER TABLE sales ADD COLUMN phone TEXT", (e) => {
             if (!e) console.log("Added phone column to sales");
@@ -100,6 +103,15 @@ db.serialize(() => {
                 WHEN service_name LIKE '%Cuci Motor Kecil%' THEN 5000
                 ELSE ROUND(price * 0.3)
             END WHERE commission IS NULL`);
+        });
+        db.run("ALTER TABLE sales ADD COLUMN discount REAL DEFAULT 0", (e) => {
+            if (!e) console.log("Added discount column to sales");
+        });
+        db.run("ALTER TABLE sales ADD COLUMN promo_name TEXT", (e) => {
+            if (!e) console.log("Added promo_name column to sales");
+        });
+        db.run("ALTER TABLE sales ADD COLUMN promo_photo TEXT", (e) => {
+            if (!e) console.log("Added promo_photo column to sales");
         });
     });
 

@@ -116,6 +116,12 @@
                 <% }) %>
             <% } %>
         </div>
+        <% if (sale.discount && sale.discount > 0) { %>
+            <div class="receipt-row" style="color: #198754; font-weight: bold;">
+                <span>Diskon (<%= sale.promo_name || 'Promo Grab' %>):</span>
+                <span>-Rp <%= Number(sale.discount).toLocaleString('id-ID') %></span>
+            </div>
+        <% } %>
         <hr>
         <div class="receipt-row bold" style="font-size: 14px;"><span>Total Tagihan:</span> <span>Rp <%= sale.price.toLocaleString('id-ID') %></span></div>
         <div class="receipt-row"><span>Metode Bayar:</span> <span><%= sale.akun_kas || 'Kas Kecil (Tunai)' %></span></div>
@@ -175,7 +181,8 @@
         <% if (sale.phone && sale.phone.length > 5) { 
             let waNum = sale.phone.replace(/^0/, '62').replace(/[^0-9]/g, '');
             let brand = (typeof shopSettings !== 'undefined' && shopSettings.shop_name) ? shopSettings.shop_name : 'Prime Motowash';
-            let waText = encodeURIComponent(`Halo ${sale.customer_name},\n\nKendaraan plat *${sale.license_plate}* Anda sudah selesai dicuci di *${brand}*.\nTotal tagihan: Rp ${sale.price.toLocaleString('id-ID')}.\n\nTerima kasih atas kunjungan Anda!`);
+            let promoWaStr = (sale.discount && sale.discount > 0) ? `\nDiskon (${sale.promo_name || 'Promo Grab'}): -Rp ${Number(sale.discount).toLocaleString('id-ID')}` : '';
+            let waText = encodeURIComponent(`Halo ${sale.customer_name},\n\nKendaraan plat *${sale.license_plate}* Anda sudah selesai dicuci di *${brand}*.${promoWaStr}\nTotal tagihan: Rp ${sale.price.toLocaleString('id-ID')}.\n\nTerima kasih atas kunjungan Anda!`);
         %>
             <a href="https://wa.me/<%= waNum %>?text=<%= waText %>" target="_blank" class="btn-action btn-wa">
                 💬 Kirim Notif WhatsApp
@@ -351,6 +358,9 @@
                 <% (sale.service_name||'').split(',').forEach(lay => { %>
                     headerTxt += " - <%= lay.trim() %>\n";
                 <% }) %>
+            <% } %>
+            <% if (sale.discount && sale.discount > 0) { %>
+                headerTxt += "Diskon (<%= sale.promo_name || 'Grab' %>) : -Rp <%= Number(sale.discount).toLocaleString('id-ID') %>\n";
             <% } %>
             headerTxt += "--------------------------------\n";
             headerTxt += "\x1B\x21\x08Total   : Rp <%= sale.price.toLocaleString('id-ID') %>\x1B\x21\x00\n"; // Bold

@@ -138,10 +138,61 @@
                         <small class="text-muted" id="layananHelpNote">Maksimal 1 paket cuci motor. Layanan tambahan (seperti Poles Helm) bisa dipilih bersamaan. Dipilih <span id="layananCount">0</span> layanan.</small>
                         <div class="invalid-feedback d-block" id="layananError" style="display:none !important;">Pilih minimal 1 layanan.</div>
                     </div>
+                    <!-- PROMO DRIVER GRAB (Diskon Rp 5.000 / Motor) -->
+                    <div class="card border-success mb-3 shadow-sm" style="background: #f0fff4; border-left: 4px solid #198754 !important;">
+                        <div class="card-body py-2 px-3">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <label class="form-check-label fw-bold text-success d-flex align-items-center gap-2 mb-0" for="promoGrabToggle" style="cursor:pointer; font-size:13px;">
+                                    <span>🛵 Promo Driver Grab</span>
+                                    <span class="badge bg-success text-white">Diskon Rp 5.000/motor</span>
+                                </label>
+                                <div class="form-check form-switch m-0 p-0">
+                                    <input class="form-check-input ms-2" type="checkbox" id="promoGrabToggle" name="is_promo_grab" value="1" onchange="handlePromoGrabChange()" style="cursor:pointer; width: 42px; height: 22px;">
+                                </div>
+                            </div>
+                            <input type="hidden" name="discount" id="discountInput" value="0">
+                            <input type="hidden" name="promo_name" id="promoNameInput" value="">
+
+                            <!-- Detail & Foto Bukti Grab (Muncul jika toggle aktif) -->
+                            <div id="promoGrabDetails" style="display:none; margin-top: 8px; border-top: 1px dashed #28a745; padding-top: 8px;">
+                                <div class="d-flex justify-content-between align-items-center small mb-2">
+                                    <span class="text-muted">Potongan Diskon Grab:</span>
+                                    <strong class="text-danger fw-bold" id="promoGrabDiscountText">-Rp 5.000</strong>
+                                </div>
+
+                                <div class="p-2 border border-success rounded bg-white">
+                                    <label class="form-label fw-bold text-dark d-flex justify-content-between align-items-center mb-1" style="font-size:11px;">
+                                        <span>📸 Foto Bukti Driver Grab <span class="text-danger">*Wajib</span></span>
+                                        <small class="text-muted">(Maks 4MB)</small>
+                                    </label>
+                                    <small class="text-muted d-block mb-2" style="font-size:11px;">Wajib: Foto akun aplikasi Grab Driver aktif / Helm & Jaket bersama motor.</small>
+
+                                    <div class="d-flex gap-2 mb-2">
+                                        <label class="btn btn-outline-success btn-sm flex-fill mb-0" style="font-size:11px;">
+                                            <span>📁 Galeri</span>
+                                            <input type="file" name="promo_photo" id="promoPhotoInput" class="d-none" accept="image/*" onchange="previewPromoGrab(this)">
+                                        </label>
+                                        <button type="button" class="btn btn-success btn-sm flex-fill" style="font-size:11px;" onclick="openKameraPromo()">
+                                            <span>📷 Kamera</span>
+                                        </button>
+                                    </div>
+                                    <input type="file" id="fallbackKameraPromo" class="d-none" accept="image/*" capture="environment" onchange="previewPromoGrab(this)">
+
+                                    <div id="previewPromoDisplay" class="mt-2 text-center" style="display:none;">
+                                        <img id="previewPromoImg" src="" alt="Bukti Grab" style="max-width:100%; max-height:160px; border:1px solid #198754; border-radius:6px; object-fit:contain;">
+                                        <div class="d-flex justify-content-center gap-2 mt-2">
+                                            <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:11px;" onclick="hapusFotoPromo()">Hapus / Ganti</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="mb-3">
                         <label class="form-label">Harga Penjualan (Rp)</label>
                         <input type="text" name="price" id="price" class="form-control rupiah" required placeholder="Otomatis jumlah layanan (15.000)">
-                        <small class="text-muted">Otomatis sum layanan, bisa edit manual (≥1.000).</small>
+                        <small class="text-muted" id="priceNote">Otomatis sum layanan, bisa edit manual (≥1.000).</small>
                     </div>
                     <div class="mb-3" id="singleWorkerWrap">
                         <label class="form-label">Pekerja (Pencuci) <span class="text-danger">*</span></label>
@@ -249,6 +300,9 @@
                                     <% (s.service_name||'').split(',').forEach((lay,idx)=>{ %>
                                         <span class="badge bg-success mb-1"><%= lay.trim() %></span><% if(idx < (s.service_name.split(',').length-1)) { %><br><% } %>
                                     <% }) %>
+                                    <% if (s.discount && s.discount > 0) { %>
+                                        <div><span class="badge bg-success mt-1" style="font-size:10px;">🛵 <%= s.promo_name || 'Grab' %> (-Rp <%= Number(s.discount).toLocaleString('id-ID') %>)</span></div>
+                                    <% } %>
                                 </td>
                                 <td>
                                     <strong>Rp <%= s.price.toLocaleString('id-ID') %></strong><br>
@@ -261,6 +315,13 @@
                                         <div class="mt-1">
                                             <a href="<%= s.photo %>" target="_blank" class="btn btn-xs btn-outline-primary py-0 px-1" style="font-size:11px;" title="Lihat Foto Bukti QRIS">
                                                 📷 Bukti QRIS
+                                            </a>
+                                        </div>
+                                    <% } %>
+                                    <% if (s.promo_photo) { %>
+                                        <div class="mt-1">
+                                            <a href="<%= s.promo_photo %>" target="_blank" class="btn btn-xs btn-outline-success py-0 px-1" style="font-size:11px;" title="Lihat Foto Bukti Driver Grab">
+                                                📸 Bukti Grab
                                             </a>
                                         </div>
                                     <% } %>
@@ -309,7 +370,7 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header bg-success text-white">
-                <h6 class="modal-title">Ambil Foto Bukti QRIS</h6>
+                <h6 class="modal-title" id="modalKameraTitle">Ambil Foto Bukti</h6>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body text-center p-2">
@@ -329,6 +390,69 @@
 </div>
 
 <script>
+let activeCameraMode = 'qris'; // 'qris' atau 'promo'
+
+function handlePromoGrabChange() {
+    updatePriceMulti();
+}
+
+function previewPromoGrab(input){
+    const wrap = document.getElementById('previewPromoDisplay');
+    const img = document.getElementById('previewPromoImg');
+    if(input.files && input.files[0]){
+        const f = input.files[0];
+        if(f.size > 4*1024*1024){
+            alert('Ukuran foto maksimal 4MB');
+            input.value = '';
+            wrap.style.display = 'none';
+            return;
+        }
+        if(!f.type.startsWith('image/')){
+            alert('Hanya file gambar yang diperbolehkan');
+            input.value = '';
+            wrap.style.display = 'none';
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = e => {
+            img.src = e.target.result;
+            wrap.style.display = 'block';
+        };
+        reader.readAsDataURL(f);
+    } else {
+        wrap.style.display = 'none';
+    }
+}
+
+function hapusFotoPromo(){
+    const inp = document.getElementById('promoPhotoInput');
+    if(inp) inp.value = '';
+    const fb = document.getElementById('fallbackKameraPromo');
+    if(fb) fb.value = '';
+    const wrap = document.getElementById('previewPromoDisplay');
+    if(wrap) wrap.style.display = 'none';
+    const img = document.getElementById('previewPromoImg');
+    if(img) img.src = '';
+}
+
+function openKameraPromo(){
+    activeCameraMode = 'promo';
+    const title = document.getElementById('modalKameraTitle');
+    if(title) title.textContent = 'Ambil Foto Bukti Driver Grab';
+
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+        const fb = document.getElementById('fallbackKameraPromo');
+        if(fb) fb.click();
+        else alert('Kamera tidak didukung pada browser ini.');
+        return;
+    }
+    const modalEl = document.getElementById('modalKameraQris');
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+    currentFacingModeQris = 'environment';
+    startKameraQris(currentFacingModeQris);
+}
+
 function toggleQrisProof(){
     const sel = document.getElementById('akunKasSelect');
     const wrap = document.getElementById('qrisProofWrap');
@@ -425,6 +549,10 @@ function switchKameraQris(){
 }
 
 function openKameraQris(){
+    activeCameraMode = 'qris';
+    const title = document.getElementById('modalKameraTitle');
+    if(title) title.textContent = 'Ambil Foto Bukti QRIS';
+
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
         const fb = document.getElementById('fallbackKameraQris');
         if(fb) fb.click();
@@ -441,9 +569,6 @@ function openKameraQris(){
 function captureFotoQris(){
     const video = document.getElementById('videoKameraQris');
     const canvas = document.getElementById('canvasCaptureQris');
-    const previewWrap = document.getElementById('previewQrisDisplay');
-    const previewImg = document.getElementById('previewQrisImg');
-    const fileInput = document.getElementById('photoQris');
     if(!video.videoWidth || video.videoWidth < 10) return alert('Kamera belum siap, tunggu video tampil lalu coba lagi');
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -451,12 +576,29 @@ function captureFotoQris(){
     canvas.toBlob(blob => {
         if(!blob) return alert('Gagal memproses gambar');
         if(blob.size > 4*1024*1024) return alert('Foto melebihi 4MB');
-        const file = new File([blob], 'qris_kamera_' + Date.now() + '.jpg', { type: 'image/jpeg' });
-        const dt = new DataTransfer();
-        dt.items.add(file);
-        fileInput.files = dt.files;
-        previewImg.src = URL.createObjectURL(blob);
-        previewWrap.style.display = 'block';
+
+        if (activeCameraMode === 'promo') {
+            const promoInput = document.getElementById('promoPhotoInput');
+            const promoWrap = document.getElementById('previewPromoDisplay');
+            const promoImg = document.getElementById('previewPromoImg');
+            const file = new File([blob], 'grab_kamera_' + Date.now() + '.jpg', { type: 'image/jpeg' });
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            if (promoInput) promoInput.files = dt.files;
+            if (promoImg) promoImg.src = URL.createObjectURL(blob);
+            if (promoWrap) promoWrap.style.display = 'block';
+        } else {
+            const file = new File([blob], 'qris_kamera_' + Date.now() + '.jpg', { type: 'image/jpeg' });
+            const fileInput = document.getElementById('photoQris');
+            const previewWrap = document.getElementById('previewQrisDisplay');
+            const previewImg = document.getElementById('previewQrisImg');
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            if (fileInput) fileInput.files = dt.files;
+            if (previewImg) previewImg.src = URL.createObjectURL(blob);
+            if (previewWrap) previewWrap.style.display = 'block';
+        }
+
         bootstrap.Modal.getInstance(document.getElementById('modalKameraQris')).hide();
         if(streamKameraQris){
             streamKameraQris.getTracks().forEach(t => t.stop());
@@ -756,8 +898,34 @@ function updatePriceMulti(){
     const countEl = document.getElementById('layananCount');
     if (countEl) countEl.textContent = count;
 
+    // Perhitungan Promo Driver Grab (Diskon Rp 5.000 / Motor)
+    const promoToggle = document.getElementById('promoGrabToggle');
+    const isPromo = promoToggle && promoToggle.checked;
+    const motorCount = currentMotorCount > 1 ? (motorSlotsData ? motorSlotsData.length : currentMotorCount) : 1;
+    const discount = isPromo ? (5000 * motorCount) : 0;
+
+    const discountInput = document.getElementById('discountInput');
+    if (discountInput) discountInput.value = discount;
+    const promoNameInput = document.getElementById('promoNameInput');
+    if (promoNameInput) promoNameInput.value = isPromo ? 'Promo Driver Grab' : '';
+
+    const promoDetails = document.getElementById('promoGrabDetails');
+    const promoText = document.getElementById('promoGrabDiscountText');
+    if (promoDetails) promoDetails.style.display = isPromo ? 'block' : 'none';
+    if (promoText) promoText.textContent = `-Rp ${formatRupiah(discount)} (${motorCount} Motor)`;
+
+    const finalPrice = Math.max(0, sum - discount);
     const priceEl = document.getElementById('price');
-    if (priceEl) priceEl.value = sum > 0 ? formatRupiah(sum) : '';
+    if (priceEl) priceEl.value = finalPrice > 0 ? formatRupiah(finalPrice) : '';
+
+    const priceNote = document.getElementById('priceNote');
+    if (priceNote) {
+        if (isPromo && sum > 0) {
+            priceNote.innerHTML = `<span class="text-success fw-bold">🛵 Diskon Grab Aktif:</span> Rp ${formatRupiah(sum)} - Rp ${formatRupiah(discount)} = <strong>Rp ${formatRupiah(finalPrice)}</strong>`;
+        } else {
+            priceNote.innerHTML = 'Otomatis sum layanan, bisa edit manual (≥1.000).';
+        }
+    }
 }
 
 function validatePenjualan(form){
@@ -820,6 +988,16 @@ function validatePenjualan(form){
             return false;
         } else if (errEl) {
             errEl.style.display = 'none';
+        }
+    }
+
+    // Validasi Wajib Foto Bukti untuk Promo Driver Grab
+    const promoToggle = document.getElementById('promoGrabToggle');
+    if (promoToggle && promoToggle.checked) {
+        const promoInput = document.getElementById('promoPhotoInput');
+        if (!promoInput || !promoInput.files || promoInput.files.length === 0) {
+            alert('Validasi gagal: Transaksi Promo Driver Grab WAJIB melampirkan foto bukti (layar aplikasi Grab Driver aktif / motor bersama atribut Grab)!');
+            return false;
         }
     }
 

@@ -112,8 +112,12 @@ const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, uploadDir),
     filename: (req, file, cb) => {
         const ext = path.extname(file.originalname).toLowerCase();
-        const isSales = (req.originalUrl && req.originalUrl.includes('/sales')) || file.fieldname === 'payment_proof';
-        const prefix = isSales ? 'qris_' : 'nota_';
+        let prefix = 'nota_';
+        if (file.fieldname === 'promo_photo') {
+            prefix = 'grab_';
+        } else if (file.fieldname === 'photo' || file.fieldname === 'payment_proof' || (req.originalUrl && req.originalUrl.includes('/sales'))) {
+            prefix = 'qris_';
+        }
         const name = prefix + Date.now() + '_' + Math.round(Math.random()*1e6) + ext;
         cb(null, name);
     }
@@ -559,7 +563,7 @@ app.get('/sales', requireAdminOrOwner, (req, res) => {
     });
 });
 
-app.post('/sales', requireAdminOrOwner, upload.single('photo'), (req, res) => {
+app.post('/sales', requireAdminOrOwner, upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'promo_photo', maxCount: 1 }]), (req, res) => {
     const { customer_name, license_plate, price, worker_name, akun_kas } = req.body;
     // dukung multi layanan: service_names bisa array, atau service_name single (backward compat)
     let serviceNames = req.body.service_names || req.body.service_name;
@@ -571,14 +575,30 @@ app.post('/sales', requireAdminOrOwner, upload.single('photo'), (req, res) => {
     const salePrice = parseRupiah(price);
     let kasAkun = akun_kas && String(akun_kas).trim() ? String(akun_kas).trim() : 'Kas Kecil';
 
+    const qrisFile = (req.files && req.files['photo'] && req.files['photo'][0]) || req.file || null;
+    const promoFile = (req.files && req.files['promo_photo'] && req.files['promo_photo'][0]) || null;
+
+    function cleanupFiles() {
+        if (qrisFile && qrisFile.path) { try { fs.unlinkSync(qrisFile.path); } catch(e){} }
+        if (promoFile && promoFile.path) { try { fs.unlinkSync(promoFile.path); } catch(e){} }
+    }
+
     if (!isValidName(customer_name,2) || !isValidPlat(license_plate) || serviceNames.length===0 || !worker_name) {
-        if (req.file) { try { fs.unlinkSync(req.file.path); } catch(e){} }
+        cleanupFiles();
         return res.status(400).send('Validasi gagal: Nama (≥2) / Plat alfanumerik 2-150 (contoh: DD 1234 ABC atau DD 1234 AB / DD 5678 CD) / Pekerja wajib & pilih minimal 1 layanan. <a href="/sales">Kembali</a>');
     }
     if (isNaN(salePrice) || salePrice < 1000) {
-        if (req.file) { try { fs.unlinkSync(req.file.path); } catch(e){} }
+        cleanupFiles();
         return res.status(400).send('Validasi gagal: Harga harus angka ≥ 1000 (boleh format 15.000). <a href="/sales">Kembali</a>');
     }
+
+    // Validasi Promo Driver Grab
+    const isPromoGrab = req.body.is_promo_grab === '1' || req.body.is_promo_grab === 'true' || req.body.promo_name === 'Promo Driver Grab';
+    if (isPromoGrab && !promoFile) {
+        cleanupFiles();
+        return res.status(400).send('Validasi gagal: Transaksi Promo Driver Grab WAJIB melampirkan foto bukti (layar aplikasi Grab Driver aktif / helm/jaket atribut Grab)! <a href="/sales">Kembali</a>');
+    }
+
     // validasi akun kas: penjualan hanya Kas Kecil & QRIS
     db.all("SELECT name, type FROM accounts WHERE name='Kas Kecil' OR type='QRIS'", (e, accRows)=>{
         const accMap = new Map((accRows||[]).map(r=>[r.name, r.type]));
@@ -586,7 +606,8 @@ app.post('/sales', requireAdminOrOwner, upload.single('photo'), (req, res) => {
 
         // Validasi wajib foto bukti jika QRIS
         const isQris = accMap.get(kasAkun) === 'QRIS' || kasAkun.toLowerCase().includes('qris');
-        if (isQris && !req.file) {
+        if (isQris && !qrisFile) {
+            cleanupFiles();
             return res.status(400).send('Validasi gagal: Transaksi QRIS WAJIB melampirkan foto bukti pembayaran! <a href="/sales">Kembali</a>');
         }
 
@@ -594,7 +615,7 @@ app.post('/sales', requireAdminOrOwner, upload.single('photo'), (req, res) => {
             const validNames = new Set((rows||[]).map(r=>r.name));
             const invalid = serviceNames.filter(n=>!validNames.has(n));
             if (invalid.length>0) {
-                if (req.file) { try { fs.unlinkSync(req.file.path); } catch(e){} }
+                cleanupFiles();
                 return res.status(400).send('Validasi gagal: Layanan tidak valid: '+invalid.join(', ')+' <a href="/sales">Kembali</a>');
             }
 
@@ -605,14 +626,14 @@ app.post('/sales', requireAdminOrOwner, upload.single('photo'), (req, res) => {
             const cuciMotorServices = serviceNames.filter(n => /cuci\s+(motor|mobil)/i.test(n));
 
             if (cuciMotorServices.length > effectiveMotorCount) {
-                if (req.file) { try { fs.unlinkSync(req.file.path); } catch(e){} }
+                cleanupFiles();
                 const pesan = effectiveMotorCount > 1 
                     ? `Validasi gagal: Maksimal ${effectiveMotorCount} paket Cuci Motor untuk transaksi ${effectiveMotorCount} Motor. Layanan tambahan seperti Poles Helm dapat dipilih bersamaan. <a href="/sales">Kembali</a>` 
                     : 'Validasi gagal: Hanya boleh memilih 1 jenis paket Cuci Motor per transaksi. Gunakan mode multi-motor jika ingin membayar lebih dari 1 motor sekaligus. <a href="/sales">Kembali</a>';
                 return res.status(400).send(pesan);
             }
 
-            // Hitung total komisi pencuci
+            // Hitung total komisi pencuci (utuh, tidak terpotong promo)
             let totalKomisi = 0;
             const serviceMap = new Map((rows||[]).map(r=>[r.name, r]));
             serviceNames.forEach(name => {
@@ -622,12 +643,24 @@ app.post('/sales', requireAdminOrOwner, upload.single('photo'), (req, res) => {
                 }
             });
 
+            // Hitung diskon promo jika ada
+            const discount = isPromoGrab ? (5000 * effectiveMotorCount) : 0;
+            const promoName = isPromoGrab ? 'Promo Driver Grab' : null;
+
             let photoUrl = null;
-            if (req.file) {
-                photoUrl = '/uploads/' + req.file.filename;
-                const remoteName = 'qris/' + req.file.filename;
-                const cloudUrl = await uploadToSupabase(req.file.path, remoteName, req.file.mimetype);
+            if (qrisFile) {
+                photoUrl = '/uploads/' + qrisFile.filename;
+                const remoteName = 'qris/' + qrisFile.filename;
+                const cloudUrl = await uploadToSupabase(qrisFile.path, remoteName, qrisFile.mimetype);
                 if (cloudUrl) photoUrl = cloudUrl;
+            }
+
+            let promoPhotoUrl = null;
+            if (promoFile) {
+                promoPhotoUrl = '/uploads/' + promoFile.filename;
+                const remoteName = 'promo/' + promoFile.filename;
+                const cloudUrl = await uploadToSupabase(promoFile.path, remoteName, promoFile.mimetype);
+                if (cloudUrl) promoPhotoUrl = cloudUrl;
             }
 
             // Ambil rincian pencuci per motor jika dikirim (Mode Multi-Motor)
@@ -649,12 +682,12 @@ app.post('/sales', requireAdminOrOwner, upload.single('photo'), (req, res) => {
 
             db.serialize(() => {
                 const phoneNum = String(req.body.phone || '').trim();
-                db.run(`INSERT INTO sales (customer_name, license_plate, service_name, price, worker_name, admin_name, phone, akun_kas, photo, commission) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, 
-                        [customer_name, license_plate, service_name, salePrice, finalWorkerName, admin_name, phoneNum, kasAkun, photoUrl, totalKomisi], function(err) {
+                db.run(`INSERT INTO sales (customer_name, license_plate, service_name, price, worker_name, admin_name, phone, akun_kas, photo, commission, discount, promo_name, promo_photo) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, 
+                        [customer_name, license_plate, service_name, salePrice, finalWorkerName, admin_name, phoneNum, kasAkun, photoUrl, totalKomisi, discount, promoName, promoPhotoUrl], function(err) {
                     if (err) {
                         console.error(err);
-                        if (req.file && !photoUrl.startsWith('http')) { try { fs.unlinkSync(req.file.path); } catch(e){} }
+                        cleanupFiles();
                         return res.status(500).send('Gagal simpan penjualan: '+err.message+' <a href="/sales">Kembali</a>');
                     }
                     const saleId = this.lastID;
@@ -700,10 +733,11 @@ app.post('/sales', requireAdminOrOwner, upload.single('photo'), (req, res) => {
                     }
 
                     const layananDesc = serviceNames.length>1 ? `(${serviceNames.join(' + ')})` : serviceNames[0];
+                    const promoDesc = discount > 0 ? ` [${promoName} -Rp ${discount.toLocaleString('id-ID')}]` : '';
                     db.run(`INSERT INTO journals (description, debit, credit, account_type) VALUES (?, ?, ?, ?)`,
-                        [`Pendapatan Jasa Cuci - Plat: ${license_plate} ${layananDesc} → ${kasAkun}`, salePrice, 0, kasAkun]);
+                        [`Pendapatan Jasa Cuci - Plat: ${license_plate} ${layananDesc}${promoDesc} → ${kasAkun}`, salePrice, 0, kasAkun]);
                     db.run(`INSERT INTO journals (description, debit, credit, account_type) VALUES (?, ?, ?, ?)`,
-                        [`Pendapatan Jasa Cuci - Plat: ${license_plate} ${layananDesc} → ${kasAkun}`, 0, salePrice, 'Pendapatan']);
+                        [`Pendapatan Jasa Cuci - Plat: ${license_plate} ${layananDesc}${promoDesc} → ${kasAkun}`, 0, salePrice, 'Pendapatan']);
                     res.redirect('/receipt/' + saleId);
                 });
             });

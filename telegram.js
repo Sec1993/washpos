@@ -187,7 +187,9 @@ async function sendTelegramReport({ date, includeDb = true, senderName = 'Kasir'
             SELECT 
                 COALESCE(SUM((LENGTH(license_plate) - LENGTH(REPLACE(license_plate, '/', ''))) + 1), 0) as total_motor,
                 COALESCE(SUM(price), 0) as total_omzet,
-                COALESCE(SUM(commission), 0) as total_komisi
+                COALESCE(SUM(commission), 0) as total_komisi,
+                COALESCE(SUM(discount), 0) as total_diskon,
+                COUNT(CASE WHEN discount > 0 THEN 1 END) as total_promo_trx
             FROM sales 
             WHERE date(date) = date(?)
         `, [targetDate], (err, sSummary) => {
@@ -224,6 +226,8 @@ async function sendTelegramReport({ date, includeDb = true, senderName = 'Kasir'
                                 totalMotor: sSummary ? sSummary.total_motor : 0,
                                 totalOmzet: sSummary ? sSummary.total_omzet : 0,
                                 totalKomisi: sSummary ? sSummary.total_komisi : 0,
+                                totalDiskon: sSummary ? sSummary.total_diskon : 0,
+                                totalPromoTrx: sSummary ? sSummary.total_promo_trx : 0,
                                 paymentBreakdown: sPayRows || [],
                                 totalExpense: eSummary ? eSummary.total_expense : 0,
                                 saldoKasKecil: jRow ? jRow.saldo_kas_kecil : 0,
@@ -261,10 +265,16 @@ async function sendTelegramReport({ date, includeDb = true, senderName = 'Kasir'
         workerStr = '  <i>Tidak ada pengerjaan</i>';
     }
 
+    let promoStr = '';
+    if (reportData.totalDiskon > 0) {
+        promoStr = `🎁 <b>Promo Driver Grab</b>: ${reportData.totalPromoTrx} trx (Diskon: -Rp ${reportData.totalDiskon.toLocaleString('id-ID')})\n`;
+    }
+
     let reportMsg = `📊 <b>LAPORAN KASIR HARIAN — ${targetDate}</b>\n` +
         `<i>Penutupan kasir outlet ${escapeHtml(brandName)} per tanggal ${targetDate}</i>\n\n` +
         `🛵 <b>Total Motor Dicuci</b>: <b>${totalMotor} unit</b>\n` +
-        `💰 <b>Total Omset</b>: <b>Rp ${totalOmzet.toLocaleString('id-ID')}</b>\n\n` +
+        `💰 <b>Total Omset</b>: <b>Rp ${totalOmzet.toLocaleString('id-ID')}</b>\n` +
+        (promoStr ? promoStr + '\n' : '\n') +
         `💳 <b>Rincian Pembayaran</b>:\n${payDetailStr}\n\n` +
         `💸 <b>Pengeluaran Kasir</b>: Rp ${totalExpense.toLocaleString('id-ID')}\n` +
         `🤝 <b>Komisi Pencuci</b>: Rp ${totalKomisi.toLocaleString('id-ID')}\n` +
