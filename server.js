@@ -39,6 +39,7 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
 // Session config — allow cross-site via tunnel (https) & http local
+app.set('trust proxy', 1);
 app.use(session({
     secret: process.env.SESSION_SECRET || 'pos_cuci_motor_secret',
     resave: false,
@@ -46,11 +47,33 @@ app.use(session({
     cookie: {
         httpOnly: true,
         sameSite: 'lax',
-        secure: false, // false agar http 192.168 juga bisa, true hanya https (tunnel akan tetap kirim karena lax)
+        secure: 'auto', // otomatis secure di HTTPS (Render/tunnel), fleksibel di HTTP lokal
         maxAge: 24*60*60*1000
     }
 }));
-app.set('trust proxy', 1);
+
+// Request Logger Middleware (aktif di atas sebelum route)
+app.use((req, res, next) => {
+    if (!req.path.startsWith('/uploads') && !req.path.startsWith('/favicon') && !req.path.startsWith('/img')) {
+        console.log(`[REQ] ${req.method} ${req.url} - IP: ${req.ip}`);
+    }
+    next();
+});
+
+// Proteksi brute-force login
+const loginAttempts = {}; // ip -> { count, blockedUntil }
+function loginRateLimiter(req, res, next) {
+    const ip = req.ip || req.connection.remoteAddress || 'unknown';
+    const now = Date.now();
+    const record = loginAttempts[ip];
+    if (record && record.blockedUntil && now < record.blockedUntil) {
+        const remainingSec = Math.ceil((record.blockedUntil - now) / 1000);
+        return res.status(429).render('login', {
+            error: `Terlalu banyak percobaan login gagal. Silakan tunggu ${remainingSec} detik lagi.`
+        });
+    }
+    next();
+}
 
 // Track karyawan login aktif
 const activeLogins = {}; // sessionID -> {id, username, role, loginTime, lastSeen, ip}
@@ -262,11 +285,17 @@ app.get('/login', (req, res) => {
     res.render('login', { error: null });
 });
 
-app.post('/login', (req, res) => {
+app.post('/login', loginRateLimiter, (req, res) => {
     const { username, password } = req.body;
+    const ip = req.ip || req.connection.remoteAddress || 'unknown';
+    const now = Date.now();
+
     db.get('SELECT * FROM users WHERE username = ?', [username], (err, row) => {
         if (err) { console.error(err); return res.status(500).send('DB error login <a href="/login">Kembali</a>'); }
         if (row && bcrypt.compareSync(password, row.password)) {
+            // Berhasil login: hapus rekaman percobaan gagal
+            delete loginAttempts[ip];
+
             req.session.user = { id: row.id, username: row.username, role: row.role };
             req.session.loginTime = new Date().toISOString();
             activeLogins[req.sessionID] = { id: row.id, username: row.username, role: row.role, loginTime: req.session.loginTime, lastSeen: new Date().toISOString(), ip: req.ip, userAgent: req.headers['user-agent']||'' };
@@ -278,6 +307,15 @@ app.post('/login', (req, res) => {
                 res.redirect('/absen');
             }
         } else {
+            // Gagal login: catat upaya gagal
+            if (!loginAttempts[ip]) loginAttempts[ip] = { count: 1, firstAttempt: now };
+            else loginAttempts[ip].count++;
+
+            if (loginAttempts[ip].count >= 5) {
+                loginAttempts[ip].blockedUntil = now + (5 * 60 * 1000); // blokir 5 menit
+                loginAttempts[ip].count = 0;
+                return res.status(429).render('login', { error: 'Terlalu banyak percobaan login salah (5x). Demi keamanan, akses diblokir selama 5 menit.' });
+            }
             res.render('login', { error: 'Username atau password salah!' });
         }
     });
@@ -793,33 +831,44 @@ app.get('/receipt/:id', requireAdminOrOwner, (req, res) => {
 
 // Route - Receipt Preview (Mode Pratinjau Desain Struk untuk Owner)
 app.get('/receipt-preview', requireOwner, (req, res) => {
-    const dummySale = {
-        id: 101,
-        date: new Date().toISOString(),
-        customer_name: 'Budi Santoso',
-        license_plate: 'DD 1234 AB',
-        worker_name: 'Agus',
-        service_name: 'Cuci Motor Besar, Poles Helm',
-        price: 35000,
-        akun_kas: 'Kas Kecil (Tunai)',
-        admin_name: req.session.user ? req.session.user.username : 'owner',
-        phone: '081234567890'
-    };
-    const dummyItems = [
-        { name: 'Cuci Motor Besar', price: 25000 },
-        { name: 'Poles Helm', price: 10000 }
-    ];
-    const format = cachedShopSettings.receipt_number_format || 'daily';
-    const receiptNumber = formatReceiptNumber(dummySale, 1, format);
-    res.render('receipt', { 
-        sale: dummySale, 
-        serviceItems: dummyItems,
-        workerItems: [],
-        dailySeq: 1, 
-        receiptNumber, 
-        shopSettings: cachedShopSettings, 
-        isPreview: true,
-        layout: false 
+    db.all("SELECT name, price FROM services WHERE isActive = 1 ORDER BY id ASC LIMIT 2", (errSvc, services) => {
+        let dummyItems = [];
+        let totalPrice = 0;
+        let serviceNames = [];
+        if (services && services.length > 0) {
+            dummyItems = services.map(s => ({ name: s.name, price: s.price }));
+            totalPrice = dummyItems.reduce((acc, curr) => acc + curr.price, 0);
+            serviceNames = dummyItems.map(s => s.name).join(', ');
+        } else {
+            dummyItems = [{ name: 'Cuci Motor Kecil', price: 25000 }];
+            totalPrice = 25000;
+            serviceNames = 'Cuci Motor Kecil';
+        }
+
+        const dummySale = {
+            id: 101,
+            date: new Date().toISOString(),
+            customer_name: 'Budi Santoso',
+            license_plate: 'DD 1234 AB',
+            worker_name: 'Agus',
+            service_name: serviceNames,
+            price: totalPrice,
+            akun_kas: 'Kas Kecil (Tunai)',
+            admin_name: req.session.user ? req.session.user.username : 'owner',
+            phone: '081234567890'
+        };
+        const format = cachedShopSettings.receipt_number_format || 'daily';
+        const receiptNumber = formatReceiptNumber(dummySale, 1, format);
+        res.render('receipt', { 
+            sale: dummySale, 
+            serviceItems: dummyItems,
+            workerItems: [],
+            dailySeq: 1, 
+            receiptNumber, 
+            shopSettings: cachedShopSettings, 
+            isPreview: true,
+            layout: false 
+        });
     });
 });
 
@@ -1573,7 +1622,7 @@ app.get('/komisi', requireAdminOrOwner, (req, res) => {
     });
 });
 
-// Route - Bayar Gaji Karyawan (Simpan ke payroll_records & Catat ke expenses kategori Gaji)
+// Route - Bayar Gaji Karyawan (Simpan ke payroll_records, catat ke expenses, dan catat jurnal kas keluar)
 app.post('/payroll/pay', requireOwner, (req, res) => {
     const { 
         worker_name, 
@@ -1591,6 +1640,10 @@ app.post('/payroll/pay', requireOwner, (req, res) => {
         notes 
     } = req.body;
 
+    if (!worker_name || !worker_name.trim()) {
+        return res.status(400).send('Validasi gagal: Nama karyawan wajib. <a href="/komisi">Kembali</a>');
+    }
+
     const numBonus = parseRupiah(bonus || 0);
     const numKasbon = parseRupiah(kasbon || 0);
     const numTotalPaid = parseRupiah(total_paid || 0);
@@ -1599,36 +1652,83 @@ app.post('/payroll/pay', requireOwner, (req, res) => {
     const numDays = parseInt(days_present, 10) || 0;
     const numRate = parseRupiah(daily_rate || 0);
     const numTotalMotor = parseInt(total_motor, 10) || 0;
-    const account = akun_kas || 'Kas Kecil (Outlet)';
-    const currentUser = req.session.user.username;
+    let account = (akun_kas && String(akun_kas).trim()) ? String(akun_kas).trim() : 'Kas Kecil';
+    const currentUser = req.session.user ? req.session.user.username : 'owner';
     const nowWita = getWitaTime();
     const nowStr = nowWita.toISOString().slice(0, 19).replace('T', ' ');
 
-    const desc = `Gaji & Komisi: ${worker_name} (${numDays} hari hadir, ${numTotalMotor} motor) - Periode ${period_from} s/d ${period_to}`;
+    // Validasi akun kas valid
+    db.all("SELECT name FROM accounts", (errAcc, accRows) => {
+        const validAccNames = new Set((accRows || []).map(a => a.name));
+        if (!validAccNames.has(account)) account = 'Kas Kecil';
 
-    // 1. Simpan ke expenses kategori 'Gaji'
-    db.run("INSERT INTO expenses (category, amount, description, akun_kas, created_by) VALUES (?, ?, ?, ?, ?)",
-        ['Gaji', numTotalPaid, desc, account, currentUser],
-        function(errExp) {
-            const expenseId = this ? this.lastID : null;
+        // Cek saldo kas cukup sebelum membayar gaji
+        db.get("SELECT COALESCE(SUM(debit - credit), 0) as saldo FROM journals WHERE account_type = ?", [account], (errSaldo, rowSaldo) => {
+            let currentSaldo = rowSaldo ? rowSaldo.saldo : 0;
 
-            // 2. Simpan ke payroll_records
-            db.run(`INSERT INTO payroll_records (
-                worker_name, period_from, period_to, days_present, daily_rate, 
-                total_daily_salary, total_motor, total_commission, bonus, kasbon, 
-                total_paid, status, paid_at, paid_by, akun_kas, expense_id, notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'paid', ?, ?, ?, ?, ?)`,
-                [
-                    worker_name, period_from, period_to, numDays, numRate, 
-                    numDailySalary, numTotalMotor, numCommission, numBonus, numKasbon, 
-                    numTotalPaid, nowStr, currentUser, account, expenseId, notes || ''
-                ],
-                (errPay) => {
-                    res.redirect(`/komisi?from=${period_from}&to=${period_to}&tab=payroll&paid=1`);
+            const executePayment = () => {
+                const desc = `Gaji & Komisi: ${worker_name.trim()} (${numDays} hari hadir, ${numTotalMotor} motor) - Periode ${period_from} s/d ${period_to}`;
+
+                db.serialize(() => {
+                    // 1. Catat ke tabel expenses (kategori 'Gaji')
+                    db.run("INSERT INTO expenses (category, amount, description, photo, admin_name) VALUES (?, ?, ?, ?, ?)",
+                        ['Gaji', numTotalPaid, desc, null, currentUser],
+                        function(errExp) {
+                            if (errExp) {
+                                console.error('[Payroll Error expenses]', errExp);
+                                return res.status(500).send('Gagal mencatat pengeluaran gaji: ' + errExp.message + ' <a href="/komisi">Kembali</a>');
+                            }
+                            const expenseId = this ? this.lastID : null;
+
+                            // 2. Catat ke pembukuan jurnal umum (double-entry bookkeeping) jika nominal > 0
+                            if (numTotalPaid > 0) {
+                                db.run("INSERT INTO journals (description, debit, credit, account_type) VALUES (?, ?, ?, ?)",
+                                    [`Beban Gaji & Komisi: ${worker_name.trim()} ← ${account}`, numTotalPaid, 0, 'Biaya']);
+                                db.run("INSERT INTO journals (description, debit, credit, account_type) VALUES (?, ?, ?, ?)",
+                                    [`Beban Gaji & Komisi: ${worker_name.trim()} ← ${account}`, 0, numTotalPaid, account]);
+                            }
+
+                            // 3. Simpan ke payroll_records
+                            db.run(`INSERT INTO payroll_records (
+                                worker_name, period_from, period_to, days_present, daily_rate, 
+                                total_daily_salary, total_motor, total_commission, bonus, kasbon, 
+                                total_paid, status, paid_at, paid_by, akun_kas, expense_id, notes
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'paid', ?, ?, ?, ?, ?)`,
+                                [
+                                    worker_name.trim(), period_from, period_to, numDays, numRate, 
+                                    numDailySalary, numTotalMotor, numCommission, numBonus, numKasbon, 
+                                    numTotalPaid, nowStr, currentUser, account, expenseId, notes || ''
+                                ],
+                                (errPay) => {
+                                    if (errPay) {
+                                        console.error('[Payroll Error payroll_records]', errPay);
+                                        return res.status(500).send('Gagal menyimpan slip payroll: ' + errPay.message + ' <a href="/komisi">Kembali</a>');
+                                    }
+                                    res.redirect(`/komisi?from=${period_from}&to=${period_to}&tab=payroll&paid=1`);
+                                }
+                            );
+                        }
+                    );
+                });
+            };
+
+            // Jika Kas Kecil, gabungkan dengan saldo lama 'Kas'
+            if (account === 'Kas Kecil') {
+                db.get("SELECT COALESCE(SUM(debit - credit), 0) as s FROM journals WHERE account_type = 'Kas'", (e2, r2) => {
+                    currentSaldo += (r2 ? r2.s : 0);
+                    if (numTotalPaid > 0 && currentSaldo < numTotalPaid) {
+                        return res.status(400).send(`Validasi gagal: Saldo ${account} tidak mencukupi (Saldo: Rp ${currentSaldo.toLocaleString('id-ID')}, Dibutuhkan: Rp ${numTotalPaid.toLocaleString('id-ID')}). Silakan transfer kas terlebih dahulu di menu Laporan / Akun. <a href="/komisi">Kembali</a>`);
+                    }
+                    executePayment();
+                });
+            } else {
+                if (numTotalPaid > 0 && currentSaldo < numTotalPaid) {
+                    return res.status(400).send(`Validasi gagal: Saldo ${account} tidak mencukupi (Saldo: Rp ${currentSaldo.toLocaleString('id-ID')}, Dibutuhkan: Rp ${numTotalPaid.toLocaleString('id-ID')}). Silakan transfer kas terlebih dahulu di menu Laporan / Akun. <a href="/komisi">Kembali</a>`);
                 }
-            );
-        }
-    );
+                executePayment();
+            }
+        });
+    });
 });
 
 // Route - Print Slip Gaji & Komisi Karyawan (Terintegrasi Absen & Cuci Motor)
@@ -1860,19 +1960,15 @@ app.get('/api/service-price', requireAdminOrOwner, (req, res) => {
 
 // Error handler untuk upload foto (multer)
 app.use((err, req, res, next) => {
+    const backUrl = req.headers.referer || req.originalUrl || '/';
     if (err instanceof multer.MulterError) {
-        if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).send('Validasi gagal: Foto max 3MB. <a href="/expenses">Kembali</a>');
-        return res.status(400).send('Upload gagal: '+err.message+' <a href="/expenses">Kembali</a>');
+        if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).send(`Validasi gagal: Ukuran berkas foto melebihi batas (maksimal 4MB). <a href="${backUrl}">Kembali</a>`);
+        return res.status(400).send(`Upload foto gagal: ${err.message}. <a href="${backUrl}">Kembali</a>`);
     }
-    if (err && err.message && err.message.includes('Hanya file gambar')) {
-        return res.status(400).send('Validasi gagal: '+err.message+' <a href="/expenses">Kembali</a>');
+    if (err && err.message && (err.message.includes('Hanya') || err.message.includes('gambar'))) {
+        return res.status(400).send(`Validasi gagal: ${err.message}. <a href="${backUrl}">Kembali</a>`);
     }
     next(err);
-});
-
-app.use((req, res, next) => {
-    console.log(`[REQ] ${req.method} ${req.url} - Host: ${req.headers.host}`);
-    next();
 });
 
 // Graceful shutdown untuk Render / Docker
