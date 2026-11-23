@@ -164,6 +164,11 @@
                                 <td class="text-muted"><%= idx + 1 %></td>
                                 <td>
                                     <strong><%= p.name %></strong>
+                                    <% if (p.role === 'Admin') { %>
+                                        <span class="badge bg-info text-dark ms-1" style="font-size: 10px;">Admin / Kasir</span>
+                                    <% } else { %>
+                                        <span class="badge bg-secondary ms-1" style="font-size: 10px;">Pencuci</span>
+                                    <% } %>
                                     <% if (p.phone) { %>
                                         <br><small class="text-muted">📱 <%= p.phone %></small>
                                     <% } %>
@@ -184,10 +189,19 @@
                                     Rp <%= p.total_daily_salary.toLocaleString('id-ID') %>
                                 </td>
                                 <td class="text-center">
-                                    <span class="badge bg-dark fs-6"><%= p.total_motor %> unit</span>
+                                    <% if (p.role === 'Admin') { %>
+                                        <span class="badge bg-light text-muted border">-</span>
+                                        <br><small class="text-muted" style="font-size:10px;">Kasir</small>
+                                    <% } else { %>
+                                        <span class="badge bg-dark fs-6"><%= p.total_motor %> unit</span>
+                                    <% } %>
                                 </td>
                                 <td class="text-end fw-bold text-success">
-                                    Rp <%= p.total_komisi.toLocaleString('id-ID') %>
+                                    <% if (p.role === 'Admin') { %>
+                                        <span class="text-muted">-</span>
+                                    <% } else { %>
+                                        Rp <%= p.total_komisi.toLocaleString('id-ID') %>
+                                    <% } %>
                                 </td>
                                 <td class="text-end">
                                     <span class="badge bg-success fs-6 px-2 py-1">
@@ -547,12 +561,17 @@ function kirimWaGaji(p, fromDate, toDate) {
     const cleanPhone = (p.phone || '').replace(/[^0-9]/g, '');
     const waNumber = cleanPhone.startsWith('0') ? '62' + cleanPhone.slice(1) : cleanPhone;
     
+    const komisiText = p.role === 'Admin'
+        ? `💼 *Tugas:* Operasional Kasir & Administrasi\n`
+        : `🏍 *Komisi Cuci Motor:* ${p.total_motor} Unit = *Rp ${p.total_komisi.toLocaleString('id-ID')}*\n`;
+
     const text = encodeURIComponent(
         `Halo ${p.name},\n\n` +
-        `Berikut rincian Rekap Gaji & Komisi Anda di *Prime Motowash*:\n` +
-        `🗓 *Periode:* ${fromDate} s/d ${toDate}\n\n` +
+        `Berikut rincian Rekap Gaji Anda di *Prime Motowash*:\n` +
+        `🗓 *Periode:* ${fromDate} s/d ${toDate}\n` +
+        `👤 *Jabatan:* ${p.role === 'Admin' ? 'Admin / Kasir' : 'Pencuci Motor'}\n\n` +
         `📌 *Rincian Kehadiran:* ${p.days_present} Hari Masuk × Rp ${p.daily_rate.toLocaleString('id-ID')} = *Rp ${p.total_daily_salary.toLocaleString('id-ID')}*\n` +
-        `🏍 *Komisi Cuci Motor:* ${p.total_motor} Unit = *Rp ${p.total_komisi.toLocaleString('id-ID')}*\n` +
+        komisiText +
         `-----------------------------------------\n` +
         `💰 *TOTAL GAJI BERSIH:* *Rp ${p.total_gaji.toLocaleString('id-ID')}*\n\n` +
         `Terima kasih atas kerja keras Anda! 🙏✨`

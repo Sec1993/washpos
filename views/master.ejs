@@ -14,16 +14,23 @@
     <div class="col-md-4">
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-                <span>Karyawan Pencuci</span>
+                <span>Karyawan & Staf (Pencuci & Admin)</span>
                 <span class="badge bg-light text-dark"><%= workers.length %> orang</span>
             </div>
             <div class="card-body">
                 <form action="/master/workers/add" method="POST" class="mb-4" onsubmit="return validateRupiahForm(this)">
-                    <label class="form-label fw-bold">Tambah Karyawan Baru</label>
+                    <label class="form-label fw-bold">Tambah Karyawan / Admin Baru</label>
                     <div class="row g-2 mb-2">
                         <div class="col-md-6 col-12">
-                            <label class="form-label small text-muted mb-1">Nama Karyawan <span class="text-danger">*</span></label>
-                            <input type="text" name="name" class="form-control form-control-sm" placeholder="Nama karyawan..." required minlength="2" maxlength="50">
+                            <label class="form-label small text-muted mb-1">Nama Karyawan / Admin <span class="text-danger">*</span></label>
+                            <input type="text" name="name" class="form-control form-control-sm" placeholder="Nama..." required minlength="2" maxlength="50">
+                        </div>
+                        <div class="col-md-6 col-12">
+                            <label class="form-label small text-muted mb-1">Posisi / Jabatan</label>
+                            <select name="role" class="form-select form-select-sm">
+                                <option value="Pencuci" selected>Pencuci Motor</option>
+                                <option value="Admin">Admin / Kasir</option>
+                            </select>
                         </div>
                         <div class="col-md-6 col-12">
                             <label class="form-label small text-muted mb-1">Tanggal Masuk</label>
@@ -37,23 +44,24 @@
                             </div>
                             <small class="text-muted" style="font-size: 11px;">Gaji pokok per hari kehadiran (absen masuk).</small>
                         </div>
-                        <div class="col-md-6 col-12">
+                        <div class="col-12">
                             <label class="form-label small text-muted mb-1">No WhatsApp (Opsional)</label>
                             <input type="text" name="phone" class="form-control form-control-sm" placeholder="08xxxxxxxxxx">
                             <small class="text-muted" style="font-size: 11px;">Untuk kirim rincian slip gaji via WA.</small>
                         </div>
                     </div>
-                    <button class="btn btn-success btn-sm w-100" type="submit">+ Tambah Karyawan</button>
-                    <small class="text-muted d-block mt-1">Owner dapat menentukan sendiri tarif gaji harian tiap karyawan.</small>
+                    <button class="btn btn-success btn-sm w-100" type="submit">+ Tambah Karyawan / Admin</button>
+                    <small class="text-muted d-block mt-1">Owner dapat menentukan sendiri tarif gaji harian tiap karyawan & staf admin.</small>
                 </form>
                 <hr>
-                <h6>Daftar Karyawan</h6>
+                <h6>Daftar Karyawan & Staf</h6>
                 <div class="table-responsive" style="max-height:300px; overflow-y:auto;">
                     <table class="table table-sm table-hover mb-0 align-middle">
                         <thead class="table-light sticky-top">
                             <tr>
                                 <th>#</th>
                                 <th>Nama</th>
+                                <th>Posisi</th>
                                 <th>Tgl Masuk</th>
                                 <th class="text-end">Tarif Harian</th>
                                 <th>No WA</th>
@@ -62,12 +70,19 @@
                         </thead>
                         <tbody>
                             <% if (workers.length === 0) { %>
-                                <tr><td colspan="6" class="text-center text-muted">Belum ada karyawan.</td></tr>
+                                <tr><td colspan="7" class="text-center text-muted">Belum ada karyawan/staf.</td></tr>
                             <% } %>
                             <% workers.forEach((w, i) => { %>
                             <tr>
                                 <td><%= i+1 %></td>
                                 <td class="fw-bold"><%= w.name %></td>
+                                <td>
+                                    <% if (w.role === 'Admin') { %>
+                                        <span class="badge bg-info text-dark">Admin</span>
+                                    <% } else { %>
+                                        <span class="badge bg-secondary">Pencuci</span>
+                                    <% } %>
+                                </td>
                                 <td><small class="badge bg-light text-dark border"><%= w.join_date || '-' %></small></td>
                                 <td class="text-end fw-bold text-success">
                                     Rp <%= (w.daily_salary || 0).toLocaleString('id-ID') %>
@@ -77,7 +92,7 @@
                                     <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2" style="font-size:12px;" onclick='openEditWorkerModal(<%= JSON.stringify(w) %>)'>
                                         ✏️ Edit
                                     </button>
-                                    <form action="/master/workers/delete" method="POST" class="d-inline" onsubmit="return confirm('Hapus karyawan <%= w.name %>? Data penjualan lama tetap tersimpan.')">
+                                    <form action="/master/workers/delete" method="POST" class="d-inline" onsubmit="return confirm('Hapus karyawan <%= w.name %>? Data lama tetap tersimpan.')">
                                         <input type="hidden" name="id" value="<%= w.id %>">
                                         <button type="submit" class="btn btn-xs btn-outline-danger py-0 px-2" style="font-size:12px;">Hapus</button>
                                     </form>
@@ -630,8 +645,15 @@ async function testTelegram() {
                 <div class="modal-body">
                     <input type="hidden" name="id" id="editWorkerId">
                     <div class="mb-3">
-                        <label class="form-label fw-bold">Nama Karyawan <span class="text-danger">*</span></label>
+                        <label class="form-label fw-bold">Nama Karyawan / Admin <span class="text-danger">*</span></label>
                         <input type="text" name="name" id="editWorkerName" class="form-control" required minlength="2">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Posisi / Jabatan</label>
+                        <select name="role" id="editWorkerRole" class="form-select">
+                            <option value="Pencuci">Pencuci Motor</option>
+                            <option value="Admin">Admin / Kasir</option>
+                        </select>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-bold">Tanggal Masuk</label>
@@ -664,6 +686,7 @@ async function testTelegram() {
 function openEditWorkerModal(worker) {
     document.getElementById('editWorkerId').value = worker.id;
     document.getElementById('editWorkerName').value = worker.name || '';
+    document.getElementById('editWorkerRole').value = worker.role || 'Pencuci';
     document.getElementById('editWorkerJoinDate').value = worker.join_date || '';
     document.getElementById('editWorkerDailySalary').value = (worker.daily_salary || 0).toLocaleString('id-ID');
     document.getElementById('editWorkerPhone').value = worker.phone || '';

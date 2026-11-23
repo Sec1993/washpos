@@ -22,7 +22,7 @@
                         <select name="worker_name" id="workerSelect" class="form-select" required>
                             <option value="">-- Pilih Nama Anda --</option>
                             <% (typeof workers !== 'undefined' ? workers : []).forEach(w => { %>
-                                <option value="<%= w.name %>"><%= w.name %></option>
+                                <option value="<%= w.name %>"><%= w.name %><%= (w.role === 'Admin') ? ' (Admin / Kasir)' : '' %></option>
                             <% }) %>
                         </select>
                         <small class="text-muted">Pilih nama Anda sesuai daftar pekerja agar hari hadir tercatat ke slip gaji.</small>
@@ -333,6 +333,19 @@ function validateAbsen(form){
     return true;
 }
 // auto ambil lokasi saat load
-window.addEventListener('load', ()=>{ setTimeout(ambilLokasi, 800); });
+window.addEventListener('load', ()=>{ 
+    setTimeout(ambilLokasi, 800); 
+    const curUser = "<%= user.username %>".toLowerCase();
+    const sel = document.getElementById('workerSelect');
+    if (sel && curUser && sel.selectedIndex <= 0) {
+        for (let i = 0; i < sel.options.length; i++) {
+            const val = sel.options[i].value.toLowerCase();
+            if (val === curUser || val.includes(curUser) || curUser.includes(val)) {
+                sel.selectedIndex = i;
+                break;
+            }
+        }
+    }
+});
 </script>
 

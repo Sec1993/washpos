@@ -54,17 +54,20 @@ db.serialize(() => {
         commission REAL DEFAULT 0
     )`);
 
-    // 3. Workers table
+    // 3. Workers table (Pencuci & Admin)
     db.run(`CREATE TABLE IF NOT EXISTS workers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE,
         join_date TEXT,
         daily_salary REAL DEFAULT 0,
-        phone TEXT
+        phone TEXT,
+        role TEXT DEFAULT 'Pencuci'
     )`);
     db.run(`ALTER TABLE workers ADD COLUMN join_date TEXT`, (err) => {});
     db.run(`ALTER TABLE workers ADD COLUMN daily_salary REAL DEFAULT 0`, (err) => {});
     db.run(`ALTER TABLE workers ADD COLUMN phone TEXT`, (err) => {});
+    db.run(`ALTER TABLE workers ADD COLUMN role TEXT DEFAULT 'Pencuci'`, (err) => {});
+    db.run(`UPDATE workers SET role = 'Pencuci' WHERE role IS NULL OR role = ''`);
 
     // 4. Sales table
     db.run(`CREATE TABLE IF NOT EXISTS sales (
@@ -358,13 +361,21 @@ db.serialize(() => {
         }
     });
 
-    // Seed default workers
+    // Seed default workers & admin
     db.get("SELECT COUNT(*) as count FROM workers", (err, row) => {
         if (row && row.count === 0) {
-            const stmt = db.prepare("INSERT INTO workers (name) VALUES (?)");
-            stmt.run('Budi');
-            stmt.run('Agus');
+            const stmt = db.prepare("INSERT INTO workers (name, role, daily_salary) VALUES (?, ?, ?)");
+            stmt.run('Budi', 'Pencuci', 0);
+            stmt.run('Agus', 'Pencuci', 0);
+            stmt.run('Admin', 'Admin', 0);
             stmt.finalize();
+        } else {
+            // Pastikan staf Admin tersedia di tabel workers agar bisa diabsen & dihitung gajinya
+            db.get("SELECT COUNT(*) as c FROM workers WHERE role = 'Admin' OR name = 'Admin'", (errA, rA) => {
+                if (rA && rA.c === 0) {
+                    db.run("INSERT OR IGNORE INTO workers (name, role, daily_salary, join_date) VALUES ('Admin', 'Admin', 0, DATE('now'))");
+                }
+            });
         }
     });
 

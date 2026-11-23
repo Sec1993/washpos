@@ -581,7 +581,7 @@ app.get('/sales', requireAdminOrOwner, (req, res) => {
     const whereClause = where.length ? "WHERE " + where.join(" AND ") : "";
 
     db.all("SELECT * FROM services WHERE isActive=1 ORDER BY name ASC", (err, services) => {
-        db.all("SELECT * FROM workers ORDER BY name ASC", (err, workers) => {
+        db.all("SELECT * FROM workers WHERE COALESCE(role, 'Pencuci') = 'Pencuci' ORDER BY name ASC", (err, workers) => {
             db.all("SELECT * FROM accounts WHERE (name='Kas Kecil' OR type='QRIS') ORDER BY type, name ASC", (e, akunBayar)=>{
                 db.all("SELECT * FROM journals WHERE account_type IN ('Kas Kecil','Kas')", (e, kasRows)=>{
                     let kasKecil=0;
@@ -1041,7 +1041,7 @@ app.post('/inventory/update', requireAdminOrOwner, (req, res) => {
 // Routes - Master Data (Owner Only) - Kelola Karyawan, Layanan, Kategori, & Akun Login Pengguna
 function renderMaster(res, error = null, success = null) {
     db.all("SELECT * FROM services ORDER BY id ASC", (err, services) => {
-        db.all("SELECT * FROM workers ORDER BY id ASC", (err, workers) => {
+        db.all("SELECT * FROM workers ORDER BY CASE WHEN role='Admin' THEN 1 ELSE 2 END, id ASC", (err, workers) => {
             db.all("SELECT * FROM expense_categories ORDER BY name ASC", (err, expense_categories) => {
                 db.all("SELECT id, username, role FROM users ORDER BY id ASC", (err, users) => {
                     db.all("SELECT key, value FROM settings", (err, setRows) => {
@@ -1171,15 +1171,16 @@ app.post('/master/services/delete', requireOwner, (req, res) => {
 });
 
 app.post('/master/workers/add', requireOwner, (req, res) => {
-    const { name, join_date, daily_salary, phone } = req.body;
+    const { name, join_date, daily_salary, phone, role } = req.body;
     if (!isValidName(name, 2)) {
         return renderMaster(res, 'Validasi gagal: Nama karyawan min 2 karakter.');
     }
     const finalJoinDate = join_date && join_date.trim() ? join_date.trim() : getWitaTime().toISOString().slice(0, 10);
     const parsedDailySalary = parseRupiah(daily_salary || 0);
     const cleanPhone = phone ? phone.trim() : '';
+    const cleanRole = (role === 'Admin' || role === 'admin') ? 'Admin' : 'Pencuci';
 
-    db.run("INSERT INTO workers (name, join_date, daily_salary, phone) VALUES (?, ?, ?, ?)", [name.trim(), finalJoinDate, parsedDailySalary, cleanPhone], (err) => {
+    db.run("INSERT INTO workers (name, join_date, daily_salary, phone, role) VALUES (?, ?, ?, ?, ?)", [name.trim(), finalJoinDate, parsedDailySalary, cleanPhone, cleanRole], (err) => {
         if (err) {
             return renderMaster(res, 'Validasi gagal: Nama karyawan sudah ada (unik).');
         }
@@ -1188,14 +1189,15 @@ app.post('/master/workers/add', requireOwner, (req, res) => {
 });
 
 app.post('/master/workers/update', requireOwner, (req, res) => {
-    const { id, name, join_date, daily_salary, phone } = req.body;
+    const { id, name, join_date, daily_salary, phone, role } = req.body;
     if (!id || !isValidName(name, 2)) {
         return renderMaster(res, 'Validasi gagal: ID atau nama karyawan tidak valid.');
     }
     const parsedDailySalary = parseRupiah(daily_salary || 0);
     const cleanPhone = phone ? phone.trim() : '';
+    const cleanRole = (role === 'Admin' || role === 'admin') ? 'Admin' : 'Pencuci';
 
-    db.run("UPDATE workers SET name = ?, join_date = ?, daily_salary = ?, phone = ? WHERE id = ?", [name.trim(), join_date, parsedDailySalary, cleanPhone, id], (err) => {
+    db.run("UPDATE workers SET name = ?, join_date = ?, daily_salary = ?, phone = ?, role = ? WHERE id = ?", [name.trim(), join_date, parsedDailySalary, cleanPhone, cleanRole, id], (err) => {
         if (err) {
             return renderMaster(res, 'Gagal memperbarui data karyawan: ' + err.message);
         }
@@ -1478,7 +1480,7 @@ app.get('/komisi', requireOwner, (req, res) => {
 
     const whereClause = "WHERE " + where.join(" AND ");
 
-    db.all("SELECT * FROM workers ORDER BY name ASC", (err, workers) => {
+    db.all("SELECT * FROM workers ORDER BY CASE WHEN role='Admin' THEN 1 ELSE 2 END, name ASC", (err, workers) => {
         const workerList = workers || [];
 
         // 1. Hitung Hari Hadir dari Absensi (tipe masuk) per Karyawan
@@ -1563,6 +1565,7 @@ app.get('/komisi', requireOwner, (req, res) => {
                         return {
                             id: w.id,
                             name: w.name,
+                            role: w.role || 'Pencuci',
                             phone: w.phone || '',
                             join_date: w.join_date || '-',
                             days_present: days,
@@ -1778,6 +1781,7 @@ app.get('/komisi/slip/:workerName', requireOwner, (req, res) => {
                     res.render('komisi-slip', {
                         layout: false,
                         workerName,
+                        workerRole: worker ? (worker.role || 'Pencuci') : 'Pencuci',
                         workerPhone,
                         from,
                         to,

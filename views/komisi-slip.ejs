@@ -45,10 +45,11 @@
 <body>
     <div class="text-center">
         <h2 style="margin: 0; font-size: 18px; letter-spacing: 1px;">PRIME MOTOWASH</h2>
-        <p style="margin: 2px 0 0 0; font-size: 12px; font-weight: bold;">SLIP GAJI & KOMISI KARYAWAN</p>
+        <p style="margin: 2px 0 0 0; font-size: 12px; font-weight: bold;">SLIP GAJI <%= (typeof workerRole !== 'undefined' && workerRole === 'Admin') ? 'ADMIN / KASIR' : 'KARYAWAN' %></p>
     </div>
     <hr>
-    <div class="row"><span>Nama Karyawan:</span> <span class="fw-bold"><%= workerName %></span></div>
+    <div class="row"><span>Nama:</span> <span class="fw-bold"><%= workerName %></span></div>
+    <div class="row"><span>Jabatan:</span> <span class="fw-bold"><%= (typeof workerRole !== 'undefined' && workerRole === 'Admin') ? 'Admin / Kasir' : 'Pencuci Motor' %></span></div>
     <div class="row"><span>Periode Gaji:</span> <span><%= from %> s/d <%= to %></span></div>
     <div class="row"><span>Tanggal Cetak:</span> <span><%= new Date(printedAt).toLocaleString('id-ID') %></span></div>
     <hr>
@@ -72,6 +73,17 @@
     </div>
     <hr>
 
+    <% if (typeof workerRole !== 'undefined' && workerRole === 'Admin') { %>
+    <!-- 2. Rincian Tugas Admin -->
+    <div class="section-title">2. RINCIAN TUGAS</div>
+    <div class="row">
+        <span>Tanggung Jawab:</span>
+        <span class="fw-bold">Kasir, Pencatatan & Administrasi</span>
+    </div>
+    <div style="font-size: 10px; font-style: italic; color: #444; margin-top: 2px;">
+        *Gaji dihitung penuh berdasarkan akumulasi hari hadir kerja.
+    </div>
+    <% } else { %>
     <!-- 2. Rincian Komisi Cuci Motor -->
     <div class="section-title">2. KOMISI HASIL CUCI MOTOR</div>
     <div class="row">
@@ -117,6 +129,7 @@
             <% } %>
         </tbody>
     </table>
+    <% } %>
     <% } %>
     <hr>
 
