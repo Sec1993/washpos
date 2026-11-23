@@ -213,7 +213,8 @@ db.serialize(() => {
             ['receipt_number_format', 'daily'],
             ['receipt_show_logo', '1'],
             ['receipt_show_qr', '1'],
-            ['shop_logo', '/img/logo.png']
+            ['shop_logo', '/img/logo.png'],
+            ['full_attendance_bonus', '150000']
         ];
         defaultSettings.forEach(([k, v]) => {
             db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)`, [k, v]);

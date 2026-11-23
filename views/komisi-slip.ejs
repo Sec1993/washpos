@@ -69,7 +69,10 @@
         <span>Rp <%= (totalDailySalary || 0).toLocaleString('id-ID') %></span>
     </div>
     <div style="font-size: 10px; font-style: italic; color: #444; margin-top: 2px;">
-        *Catatan: Off 1x seminggu tidak dihitung gaji.
+        *Catatan: Jatah off 1x seminggu (tidak dihitung gaji).
+        <% if (typeof targetWorkingDays !== 'undefined' && targetWorkingDays) { %>
+            <br>*Target kehadiran periode: <%= targetWorkingDays %> hari (<%= totalCalendarDays %> hari kalender - <%= offDays %> hari off mingguan).
+        <% } %>
     </div>
     <hr>
 
@@ -136,9 +139,14 @@
     <!-- 3. Total Akhir -->
     <% if (bonus > 0) { %>
     <div class="row">
-        <span>Bonus / Lembur:</span>
-        <span class="fw-bold">+ Rp <%= bonus.toLocaleString('id-ID') %></span>
+        <span><%= (typeof isFullAttendance !== 'undefined' && isFullAttendance) ? '🎁 Bonus Masuk Full (Rajin):' : 'Bonus / Lembur:' %></span>
+        <span class="fw-bold" style="color: #0b7285;">+ Rp <%= bonus.toLocaleString('id-ID') %></span>
     </div>
+    <% if (typeof isFullAttendance !== 'undefined' && isFullAttendance) { %>
+    <div style="font-size: 10px; font-style: italic; color: #444; margin-top: -2px; margin-bottom: 4px;">
+        *Hadir <%= daysPresent %> hari (mencapai target &ge; <%= targetWorkingDays %> hari kerja di luar <%= offDays %> hari off mingguan).
+    </div>
+    <% } %>
     <% } %>
     <% if (kasbon > 0) { %>
     <div class="row">

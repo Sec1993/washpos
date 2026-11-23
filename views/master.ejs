@@ -382,6 +382,38 @@ function openRoleModal(id, username, currentRole) {
     </div>
 </div>
 
+<!-- PENGATURAN BONUS KEHADIRAN PENUH (BONUS RAJIN) -->
+<div class="card shadow-sm mb-4 border-warning">
+    <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+        <span class="fw-bold">🎁 Pengaturan Bonus Kehadiran Penuh (Bonus Rajin)</span>
+        <span class="badge bg-dark text-white">Insentif Karyawan & Admin</span>
+    </div>
+    <div class="card-body">
+        <form action="/master/settings/payroll" method="POST" onsubmit="return validateRupiahForm(this)">
+            <div class="row align-items-center g-3">
+                <div class="col-md-5 col-12">
+                    <label class="form-label small fw-bold mb-1">Nominal Bonus Masuk Full (Rp)</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light fw-bold">Rp</span>
+                        <input type="text" name="full_attendance_bonus" class="form-control rupiah" value="<%= (typeof fullAttendanceBonus !== 'undefined') ? fullAttendanceBonus.toLocaleString('id-ID') : '150.000' %>" placeholder="150.000" required>
+                    </div>
+                    <small class="text-muted" style="font-size: 11px;">Otomatis masuk ke rekap gaji jika karyawan/admin masuk full.</small>
+                </div>
+                <div class="col-md-4 col-12">
+                    <label class="form-label small fw-bold mb-1">Aturan Libur Mingguan</label>
+                    <div class="p-2 bg-light border rounded small">
+                        <strong>Off 1x Seminggu</strong>
+                        <div class="text-muted" style="font-size: 11px;">Target masuk full = Total hari kalender periode dikurangi 1 hari off per minggu (contoh: 30 hari - 4 hari off = minimal 26 hari hadir).</div>
+                    </div>
+                </div>
+                <div class="col-md-3 col-12 d-flex align-items-end">
+                    <button type="submit" class="btn btn-warning fw-bold w-100 py-2">💾 Simpan Bonus Rajin</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- PROFIL USAHA, LOGO & KUSTOMISASI HEADER / FOOTER STRUK -->
 <div class="card shadow-sm mb-4 border-primary">
     <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">

@@ -83,7 +83,10 @@
             <span class="fs-4">💡</span>
             <div class="small">
                 <strong>Aturan Penggajian:</strong> Karyawan off 1x seminggu (hari libur/off tidak dihitung gaji).
-                Gaji pokok kehadiran murni dihitung dari <strong>Hari Hadir Absen Masuk × Tarif Gaji Harian</strong> (ditentukan Owner di menu Master). Total Gaji Bersih = Gaji Kehadiran + Komisi Cuci Motor.
+                Gaji pokok kehadiran murni dihitung dari <strong>Hari Hadir Absen Masuk × Tarif Gaji Harian</strong> (ditentukan Owner di menu Master). Total Gaji Bersih = Gaji Kehadiran + Komisi Cuci Motor + Bonus Kehadiran Penuh.
+                <% if (typeof targetWorkingDays !== 'undefined' && targetWorkingDays) { %>
+                    <br>🎯 <strong>Target Masuk Full Periode Ini:</strong> <%= targetWorkingDays %> Hari (<%= totalCalendarDays %> hari kalender - <%= offDays %> hari off mingguan). <strong>Bonus Rajin:</strong> Rp <%= (fullBonusNominal || 0).toLocaleString('id-ID') %> (otomatis ditambahkan jika hadir &ge; <%= targetWorkingDays %> hari).
+                <% } %>
             </div>
         </div>
     </div>
@@ -175,7 +178,13 @@
                                 </td>
                                 <td class="text-center">
                                     <span class="badge bg-success fs-6"><%= p.days_present %> Hari</span>
-                                    <br><small class="text-muted" style="font-size: 11px;">Absen Masuk</small>
+                                    <% if (p.is_full_attendance) { %>
+                                        <br><span class="badge bg-warning text-dark mt-1" style="font-size: 10px;">⭐ Masuk Full (+Rp <%= (p.auto_bonus || 0).toLocaleString('id-ID') %>)</span>
+                                    <% } else if (typeof targetWorkingDays !== 'undefined' && targetWorkingDays) { %>
+                                        <br><small class="text-muted" style="font-size: 11px;"><%= p.days_present %>/<%= targetWorkingDays %> hari target</small>
+                                    <% } else { %>
+                                        <br><small class="text-muted" style="font-size: 11px;">Absen Masuk</small>
+                                    <% } %>
                                 </td>
                                 <td class="text-end">
                                     <% if (p.daily_rate > 0) { %>
@@ -534,7 +543,8 @@ function openBayarGajiModal(p, fromDate, toDate) {
     document.getElementById('displayKomisiCuci').value = 'Rp ' + p.total_komisi.toLocaleString('id-ID');
 
     currentModalBaseGaji = p.total_daily_salary + p.total_komisi;
-    document.getElementById('payBonus').value = '0';
+    const autoBonus = p.auto_bonus || 0;
+    document.getElementById('payBonus').value = autoBonus > 0 ? autoBonus.toLocaleString('id-ID') : '0';
     document.getElementById('payKasbon').value = '0';
 
     hitungTotalGajiModal();
@@ -565,6 +575,10 @@ function kirimWaGaji(p, fromDate, toDate) {
         ? `💼 *Tugas:* Operasional Kasir & Administrasi\n`
         : `🏍 *Komisi Cuci Motor:* ${p.total_motor} Unit = *Rp ${p.total_komisi.toLocaleString('id-ID')}*\n`;
 
+    const bonusText = (p.auto_bonus && p.auto_bonus > 0)
+        ? `🎁 *Bonus Kehadiran Penuh (Rajin):* +Rp ${p.auto_bonus.toLocaleString('id-ID')}\n`
+        : ``;
+
     const text = encodeURIComponent(
         `Halo ${p.name},\n\n` +
         `Berikut rincian Rekap Gaji Anda di *Prime Motowash*:\n` +
@@ -572,6 +586,7 @@ function kirimWaGaji(p, fromDate, toDate) {
         `👤 *Jabatan:* ${p.role === 'Admin' ? 'Admin / Kasir' : 'Pencuci Motor'}\n\n` +
         `📌 *Rincian Kehadiran:* ${p.days_present} Hari Masuk × Rp ${p.daily_rate.toLocaleString('id-ID')} = *Rp ${p.total_daily_salary.toLocaleString('id-ID')}*\n` +
         komisiText +
+        bonusText +
         `-----------------------------------------\n` +
         `💰 *TOTAL GAJI BERSIH:* *Rp ${p.total_gaji.toLocaleString('id-ID')}*\n\n` +
         `Terima kasih atas kerja keras Anda! 🙏✨`
