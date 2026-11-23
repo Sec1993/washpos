@@ -461,11 +461,12 @@ app.post('/absen', requireLogin, absenUpload.single('photo'), async (req, res) =
         if (cloudUrl) photo = cloudUrl;
 
         db.run("INSERT INTO attendance (user_id, username, worker_name, date, time, datetime, type, photo, latitude, longitude, address) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            [uid, username, finalWorker, date, time, datetime, t, photo, finalLat, finalLng, finalAddr], (err)=>{
+            [uid, username, finalWorker, date, time, datetime, t, photo, finalLat, finalLng, finalAddr], async (err)=>{
                 if (err) { 
                     try { fs.unlinkSync(req.file.path); } catch(e){}
                     return res.status(500).send('Gagal simpan absen: '+err.message); 
                 }
+                try { await cloudSync.uploadDbNow(); } catch (e) {}
                 res.redirect('/absen');
             });
     });
@@ -1045,8 +1046,9 @@ app.post('/inventory/add', requireAdminOrOwner, (req, res) => {
     if (!unit) return res.status(400).send('Validasi gagal: Satuan wajib. <a href="/inventory">Kembali</a>');
     const minS = parseFloat(String(min_stock).replace(',', '.'));
     const minVal = isNaN(minS) || minS < 0 ? 5 : minS;
-    db.run("INSERT INTO inventory (name, unit, stock, min_stock) VALUES (?, ?, 0, ?)", [name.trim(), unit, minVal], (err) => {
+    db.run("INSERT INTO inventory (name, unit, stock, min_stock) VALUES (?, ?, 0, ?)", [name.trim(), unit, minVal], async (err) => {
         if (err) return res.status(400).send('Validasi gagal: Nama barang sudah ada (unik). <a href="/inventory">Kembali</a>');
+        try { await cloudSync.uploadDbNow(); } catch (e) {}
         res.redirect('/inventory');
     });
 });
@@ -1054,9 +1056,10 @@ app.post('/inventory/add', requireAdminOrOwner, (req, res) => {
 app.post('/inventory/delete', requireAdminOrOwner, (req, res) => {
     const { id } = req.body;
     if (!id) return res.status(400).send('Validasi gagal: ID barang wajib. <a href="/inventory">Kembali</a>');
-    db.run("DELETE FROM inventory WHERE id = ?", [id], function(err){
+    db.run("DELETE FROM inventory WHERE id = ?", [id], async function(err){
         if (err) return res.status(500).send('Gagal hapus: '+err.message+' <a href="/inventory">Kembali</a>');
         if (this.changes===0) return res.status(404).send('Barang tidak ditemukan. <a href="/inventory">Kembali</a>');
+        try { await cloudSync.uploadDbNow(); } catch (e) {}
         res.redirect('/inventory');
     });
 });
@@ -1075,7 +1078,10 @@ app.post('/inventory/update', requireAdminOrOwner, (req, res) => {
         db.run("UPDATE inventory SET stock = ? WHERE id = ?", [after, id], (err)=>{
             if (err) return res.status(500).send('Gagal update: '+err.message);
             db.run("INSERT INTO stock_history (inventory_id, item_name, type, quantity, stock_before, stock_after, admin_name) VALUES (?,?,?,?,?,?,?)",
-                [id, row.name, type, qty, before, after, admin], ()=>res.redirect('/inventory'));
+                [id, row.name, type, qty, before, after, admin], async ()=>{
+                    try { await cloudSync.uploadDbNow(); } catch (e) {}
+                    res.redirect('/inventory');
+                });
         });
     });
 });
@@ -1902,6 +1908,7 @@ app.post('/payroll/pay', requireOwner, (req, res) => {
                                         console.error('[Payroll Error payroll_records]', errPay);
                                         return res.status(500).send('Gagal menyimpan slip payroll: ' + errPay.message + ' <a href="/komisi">Kembali</a>');
                                     }
+                                    cloudSync.uploadDbNow().catch(()=>{});
                                     res.redirect(`/komisi?from=${period_from}&to=${period_to}&tab=payroll&paid=1`);
                                 }
                             );
