@@ -1569,13 +1569,43 @@ app.get('/komisi', requireOwner, (req, res) => {
                         const offDays = Math.floor(totalCalendarDays / 7);
                         const targetWorkingDays = Math.max(1, totalCalendarDays - offDays);
 
+                        // Gabungkan pekerja yang punya data komisi/absen tapi belum terdaftar di tabel workers
+                        const existingNames = new Set(workerList.map(w => (w.name || '').toLowerCase().trim()));
+                        (workerSummary || []).forEach(ws => {
+                            if (ws.worker_name && !existingNames.has(ws.worker_name.toLowerCase().trim())) {
+                                existingNames.add(ws.worker_name.toLowerCase().trim());
+                                workerList.push({
+                                    id: null,
+                                    name: ws.worker_name,
+                                    role: 'Pencuci',
+                                    phone: '',
+                                    join_date: '-',
+                                    daily_salary: 0
+                                });
+                            }
+                        });
+                        Object.keys(attMap).forEach(attKey => {
+                            if (attKey && !existingNames.has(attKey)) {
+                                existingNames.add(attKey);
+                                workerList.push({
+                                    id: null,
+                                    name: attKey.charAt(0).toUpperCase() + attKey.slice(1),
+                                    role: 'Pencuci',
+                                    phone: '',
+                                    join_date: '-',
+                                    daily_salary: 0
+                                });
+                            }
+                        });
+
                         // 4. Susun Payroll Summary Gabungan (Kehadiran Absen + Komisi Cuci Motor + Bonus Kehadiran)
                         let grandTotalGajiKehadiran = 0;
                         let grandTotalGajiBersih = 0;
                         let grandTotalHariHadir = 0;
+                        let grandTotalBonus = 0;
 
                         const payrollSummary = workerList.map(w => {
-                            const key = w.name.toLowerCase().trim();
+                            const key = (w.name || '').toLowerCase().trim();
                             const days = attMap[key] || 0;
                             const dailyRate = w.daily_salary || 0;
                             const totalDailySalary = days * dailyRate;
@@ -1589,6 +1619,7 @@ app.get('/komisi', requireOwner, (req, res) => {
 
                             grandTotalHariHadir += days;
                             grandTotalGajiKehadiran += totalDailySalary;
+                            grandTotalBonus += autoBonus;
                             grandTotalGajiBersih += totalGaji;
 
                             return {
@@ -1644,6 +1675,7 @@ app.get('/komisi', requireOwner, (req, res) => {
                                     grandTotalKomisi,
                                     grandTotalHariHadir,
                                     grandTotalGajiKehadiran,
+                                    grandTotalBonus,
                                     grandTotalGajiBersih,
                                     targetWorkingDays,
                                     totalCalendarDays,

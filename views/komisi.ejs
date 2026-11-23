@@ -98,7 +98,7 @@
                 <div class="card-body">
                     <div class="text-uppercase small fw-bold opacity-75">Total Gaji Bersih</div>
                     <h3 class="mb-0 mt-1 fw-bold">Rp <%= (grandTotalGajiBersih || 0).toLocaleString('id-ID') %></h3>
-                    <small class="opacity-75">Gaji Kehadiran + Komisi</small>
+                    <small class="opacity-75">Kehadiran + Komisi + Bonus</small>
                 </div>
             </div>
         </div>
@@ -149,6 +149,7 @@
                             <th class="text-end">Gaji Kehadiran</th>
                             <th class="text-center">Motor Dicuci</th>
                             <th class="text-end">Komisi Cuci</th>
+                            <th class="text-end">Bonus Rajin</th>
                             <th class="text-end">Total Gaji Bersih</th>
                             <th class="text-center">Status</th>
                             <th class="text-center" style="width: 220px;">Aksi</th>
@@ -157,7 +158,7 @@
                     <tbody>
                         <% if (payrollSummary.length === 0) { %>
                             <tr>
-                                <td colspan="10" class="text-center text-muted py-4">
+                                <td colspan="11" class="text-center text-muted py-4">
                                     Belum ada data karyawan. Tambahkan karyawan di menu <a href="/master">Master Karyawan</a>.
                                 </td>
                             </tr>
@@ -179,7 +180,7 @@
                                 <td class="text-center">
                                     <span class="badge bg-success fs-6"><%= p.days_present %> Hari</span>
                                     <% if (p.is_full_attendance) { %>
-                                        <br><span class="badge bg-warning text-dark mt-1" style="font-size: 10px;">⭐ Masuk Full (+Rp <%= (p.auto_bonus || 0).toLocaleString('id-ID') %>)</span>
+                                        <br><span class="badge bg-warning text-dark mt-1" style="font-size: 10px;">⭐ Masuk Full</span>
                                     <% } else if (typeof targetWorkingDays !== 'undefined' && targetWorkingDays) { %>
                                         <br><small class="text-muted" style="font-size: 11px;"><%= p.days_present %>/<%= targetWorkingDays %> hari target</small>
                                     <% } else { %>
@@ -210,6 +211,13 @@
                                         <span class="text-muted">-</span>
                                     <% } else { %>
                                         Rp <%= p.total_komisi.toLocaleString('id-ID') %>
+                                    <% } %>
+                                </td>
+                                <td class="text-end fw-bold">
+                                    <% if (p.auto_bonus > 0) { %>
+                                        <span class="badge bg-warning text-dark fs-6">+ Rp <%= p.auto_bonus.toLocaleString('id-ID') %></span>
+                                    <% } else { %>
+                                        <span class="text-muted small">-</span>
                                     <% } %>
                                 </td>
                                 <td class="text-end">
@@ -255,6 +263,7 @@
                             <td class="text-end text-primary fs-6">Rp <%= (grandTotalGajiKehadiran || 0).toLocaleString('id-ID') %></td>
                             <td class="text-center text-dark fs-6"><%= grandTotalMotor || 0 %> unit</td>
                             <td class="text-end text-success fs-6">Rp <%= (grandTotalKomisi || 0).toLocaleString('id-ID') %></td>
+                            <td class="text-end text-warning fs-6">Rp <%= (grandTotalBonus || 0).toLocaleString('id-ID') %></td>
                             <td class="text-end text-success fs-5">Rp <%= (grandTotalGajiBersih || 0).toLocaleString('id-ID') %></td>
                             <td colspan="2"></td>
                         </tr>
