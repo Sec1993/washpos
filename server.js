@@ -1456,8 +1456,8 @@ app.post('/akun/edit', requireOwner, (req, res) => {
     });
 });
 
-// Routes - Rekap Komisi Pencuci & Penggajian Terintegrasi Absen (Owner & Admin)
-app.get('/komisi', requireAdminOrOwner, (req, res) => {
+// Routes - Rekap Komisi Pencuci & Penggajian Terintegrasi Absen (Khusus Owner)
+app.get('/komisi', requireOwner, (req, res) => {
     let { from, to, worker, tab } = req.query;
     const nowWita = getWitaTime();
     const todayStr = nowWita.toISOString().slice(0, 10);
@@ -1731,8 +1731,8 @@ app.post('/payroll/pay', requireOwner, (req, res) => {
     });
 });
 
-// Route - Print Slip Gaji & Komisi Karyawan (Terintegrasi Absen & Cuci Motor)
-app.get('/komisi/slip/:workerName', requireAdminOrOwner, (req, res) => {
+// Route - Print Slip Gaji & Komisi Karyawan (Khusus Owner)
+app.get('/komisi/slip/:workerName', requireOwner, (req, res) => {
     const workerName = req.params.workerName;
     let { from, to, bonus, kasbon } = req.query;
     const nowWita = getWitaTime();
