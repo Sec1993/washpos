@@ -232,7 +232,7 @@
                                 <span>📷 Ambil Kamera</span>
                             </button>
                         </div>
-                        <input type="file" id="fallbackKameraQris" class="d-none" accept="image/*" capture="environment" onchange="previewQris(this)">
+                        <input type="file" name="photo_fallback" id="fallbackKameraQris" class="d-none" accept="image/*" capture="environment" onchange="previewQris(this)">
 
                         <div id="previewQrisDisplay" class="mt-2 text-center" style="display:none;">
                             <img id="previewQrisImg" src="" alt="Bukti QRIS" style="max-width:100%; max-height:180px; border:1px solid #28a745; border-radius:6px; object-fit:contain;">
@@ -471,6 +471,7 @@ function toggleQrisProof(){
 function previewQris(input){
     const wrap = document.getElementById('previewQrisDisplay');
     const img = document.getElementById('previewQrisImg');
+    const photoQris = document.getElementById('photoQris');
     if(input.files && input.files[0]){
         const f = input.files[0];
         if(f.size > 4*1024*1024){
@@ -484,6 +485,13 @@ function previewQris(input){
             input.value = '';
             wrap.style.display = 'none';
             return;
+        }
+        if (input.id === 'fallbackKameraQris' && photoQris && window.DataTransfer) {
+            try {
+                const dt = new DataTransfer();
+                dt.items.add(f);
+                photoQris.files = dt.files;
+            } catch(e) {}
         }
         const reader = new FileReader();
         reader.onload = e => {

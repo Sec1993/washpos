@@ -44,7 +44,7 @@
                                 <span>📷 Kamera</span>
                             </button>
                         </div>
-                        <input type="file" id="fallbackKameraExpenses" class="d-none" accept="image/*" capture="environment" onchange="previewNota(this)">
+                        <input type="file" name="photo_fallback" id="fallbackKameraExpenses" class="d-none" accept="image/*" capture="environment" onchange="previewNota(this)">
                         <div id="previewNotaWrap" class="mt-2" style="display:none">
                             <img id="previewNotaImg" src="" alt="Preview" style="max-width:100%; max-height:180px; border:1px solid #ddd; border-radius:6px;">
                             <div class="d-flex gap-2 mt-2">
@@ -181,10 +181,18 @@
 function previewNota(input){
     const wrap=document.getElementById('previewNotaWrap');
     const img=document.getElementById('previewNotaImg');
+    const photoGaleri=document.getElementById('photoGaleri');
     if(input.files && input.files[0]){
         const f=input.files[0];
         if(f.size > 4*1024*1024){ alert('Foto max 4MB'); input.value=''; wrap.style.display='none'; return; }
         if(!f.type.startsWith('image/')){ alert('Hanya file gambar yang diperbolehkan'); input.value=''; wrap.style.display='none'; return; }
+        if(input.id === 'fallbackKameraExpenses' && photoGaleri && window.DataTransfer){
+            try {
+                const dt = new DataTransfer();
+                dt.items.add(f);
+                photoGaleri.files = dt.files;
+            } catch(e){}
+        }
         const reader=new FileReader(); reader.onload=e=>{ img.src=e.target.result; wrap.style.display='block'; }; reader.readAsDataURL(f);
     } else wrap.style.display='none';
 }

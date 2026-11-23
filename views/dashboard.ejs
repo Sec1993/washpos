@@ -34,7 +34,7 @@
             <div class="card-body">
                 <div class="small opacity-75 fw-bold">Kas Besar (Pusat)</div>
                 <h4 class="mb-1 fw-bold">Rp <%= kasBesar.toLocaleString('id-ID') %></h4>
-                <small class="opacity-75">Total Kas: Rp <%= totalKas.toLocaleString('id-ID') %></small>
+                <small class="opacity-75">Total Kas & Bank: Rp <%= totalKas.toLocaleString('id-ID') %></small>
             </div>
         </div>
     </div>
@@ -274,7 +274,11 @@
     <div class="card-body small">
         <div class="d-flex justify-content-between"><span>Kas Kecil (Outlet)</span><strong>Rp <%= kasKecil.toLocaleString('id-ID') %></strong></div>
         <div class="d-flex justify-content-between"><span>Kas Besar (Pusat)</span><strong>Rp <%= kasBesar.toLocaleString('id-ID') %></strong></div>
-        <div class="d-flex justify-content-between border-top pt-2 mt-2"><span>Total Kas Terkonsolidasi</span><strong>Rp <%= totalKas.toLocaleString('id-ID') %></strong></div>
+        <div class="d-flex justify-content-between"><span>QRIS (Non-Tunai)</span><strong>Rp <%= (typeof qrisSaldo !== 'undefined' ? qrisSaldo : 0).toLocaleString('id-ID') %></strong></div>
+        <% if (typeof bankSaldo !== 'undefined' && bankSaldo !== 0) { %>
+            <div class="d-flex justify-content-between"><span>Bank Penampungan</span><strong>Rp <%= bankSaldo.toLocaleString('id-ID') %></strong></div>
+        <% } %>
+        <div class="d-flex justify-content-between border-top pt-2 mt-2"><span>Total Kas & Bank Terkonsolidasi</span><strong>Rp <%= totalKas.toLocaleString('id-ID') %></strong></div>
         <hr class="my-2">
         <div>Login: <strong><%= user.username %></strong> (<%= user.role %>) — <span class="badge bg-primary">Mulai <%= new Date(loginTime).toLocaleString('id-ID', { timeZone: 'Asia/Makassar' }) %></span> • Durasi <strong id="durasiLogin">-</strong> • <a href="/karyawan-aktif" class="btn btn-sm btn-outline-primary py-0">Karyawan Aktif</a></div>
         <div class="mt-1 text-muted">Penjualan & Pengeluaran otomatis memperbarui saldo kas. Transfer antar kas di menu <a href="/reports">Laporan</a>.</div>

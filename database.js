@@ -11,6 +11,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
         console.error('Error connecting to database:', err);
     } else {
         console.log('Connected to SQLite database.');
+        db.run("PRAGMA busy_timeout = 5000;");
     }
 });
 
@@ -368,14 +369,19 @@ db.serialize(() => {
         }
     });
 
-    // Seed akun default Kas Kecil/Besar
+    // Seed akun default Kas Kecil/Besar/QRIS/Bank
     db.get("SELECT COUNT(*) as count FROM accounts", (err, row) => {
         if (row && row.count === 0) {
             const stmt = db.prepare("INSERT INTO accounts (name, type) VALUES (?, ?)");
             stmt.run('Kas Kecil', 'Kas');
             stmt.run('Kas Besar', 'Kas');
+            stmt.run('QRIS', 'QRIS');
+            stmt.run('Bank penampungan', 'Bank');
             stmt.finalize();
-            console.log('Default akun Kas Kecil/Besar seeded');
+            console.log('Default akun Kas Kecil/Besar/QRIS/Bank seeded');
+        } else {
+            db.run("INSERT OR IGNORE INTO accounts (name, type) VALUES ('QRIS', 'QRIS')");
+            db.run("INSERT OR IGNORE INTO accounts (name, type) VALUES ('Bank penampungan', 'Bank')");
         }
     });
 });

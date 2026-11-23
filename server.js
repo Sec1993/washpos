@@ -415,61 +415,66 @@ app.get('/absen', requireLogin, (req, res) => {
 });
 
 app.post('/absen', requireLogin, absenUpload.single('photo'), async (req, res) => {
-    const { type, latitude, longitude, address, worker_name } = req.body;
-    const t = (type==='keluar' ? 'keluar' : 'masuk');
-    if (!req.file) return res.status(400).send('Validasi gagal: Foto selfie wajib diambil dari kamera aplikasi. <a href="/absen">Kembali</a>');
-    const finalWorker = (worker_name && worker_name.trim()) ? worker_name.trim() : req.session.user.username;
-    const lat = latitude ? parseFloat(latitude) : null;
-    const lng = longitude ? parseFloat(longitude) : null;
+    try {
+        const { type, latitude, longitude, address, worker_name } = req.body;
+        const t = (type==='keluar' ? 'keluar' : 'masuk');
+        if (!req.file) return res.status(400).send('Validasi gagal: Foto selfie wajib diambil dari kamera aplikasi. <a href="/absen">Kembali</a>');
+        const finalWorker = (worker_name && worker_name.trim()) ? worker_name.trim() : req.session.user.username;
+        const lat = latitude ? parseFloat(latitude) : null;
+        const lng = longitude ? parseFloat(longitude) : null;
 
-    // Verifikasi radius geofence area cuci motor
-    const outletLat = parseFloat(cachedShopSettings.outlet_latitude || '-5.149285');
-    const outletLng = parseFloat(cachedShopSettings.outlet_longitude || '119.429529');
-    const maxRadius = parseInt(cachedShopSettings.outlet_radius_meters || '100', 10);
+        // Verifikasi radius geofence area cuci motor
+        const outletLat = parseFloat(cachedShopSettings.outlet_latitude || '-5.149285');
+        const outletLng = parseFloat(cachedShopSettings.outlet_longitude || '119.429529');
+        const maxRadius = parseInt(cachedShopSettings.outlet_radius_meters || '100', 10);
 
-    if (!isNaN(outletLat) && !isNaN(outletLng) && outletLat !== 0 && outletLng !== 0) {
-        if (!lat || !lng || isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) {
-            try { fs.unlinkSync(req.file.path); } catch(e){}
-            return res.status(400).send('Validasi gagal: Lokasi GPS wajib aktif dan diizinkan pada perangkat Anda untuk absen. <a href="/absen">Kembali</a>');
+        if (!isNaN(outletLat) && !isNaN(outletLng) && outletLat !== 0 && outletLng !== 0) {
+            if (!lat || !lng || isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) {
+                try { fs.unlinkSync(req.file.path); } catch(e){}
+                return res.status(400).send('Validasi gagal: Lokasi GPS wajib aktif dan diizinkan pada perangkat Anda untuk absen. <a href="/absen">Kembali</a>');
+            }
+            const distance = calculateHaversineDistance(lat, lng, outletLat, outletLng);
+            if (distance > maxRadius) {
+                try { fs.unlinkSync(req.file.path); } catch(e){}
+                return res.status(400).send(`Validasi gagal: Anda berada di luar area cuci motor! Jarak Anda saat ini ${Math.round(distance)} meter dari outlet (Batas toleransi maksimal: ${maxRadius} meter). Harap absen saat sudah berada di lokasi outlet cuci motor. <a href="/absen">Kembali</a>`);
+            }
         }
-        const distance = calculateHaversineDistance(lat, lng, outletLat, outletLng);
-        if (distance > maxRadius) {
-            try { fs.unlinkSync(req.file.path); } catch(e){}
-            return res.status(400).send(`Validasi gagal: Anda berada di luar area cuci motor! Jarak Anda saat ini ${Math.round(distance)} meter dari outlet (Batas toleransi maksimal: ${maxRadius} meter). Harap absen saat sudah berada di lokasi outlet cuci motor. <a href="/absen">Kembali</a>`);
-        }
+        // lokasi opsional — jika tidak ada, tetap simpan dengan 0,0
+        const finalLat = lat || 0;
+        const finalLng = lng || 0;
+        const finalAddr = address || (lat ? `${lat}, ${lng}` : 'Lokasi tidak tersedia');
+        const wita = getWitaTime();
+        const date = wita.toISOString().slice(0,10);
+        const time = wita.toISOString().slice(11,19);
+        const datetime = wita.toISOString();
+        const uid = req.session.user.id;
+        const username = req.session.user.username;
+
+        // Cek double absen untuk worker yang sama di tanggal & tipe yang sama
+        db.get("SELECT * FROM attendance WHERE (worker_name=? OR (worker_name IS NULL AND user_id=?)) AND date=? AND type=?", [finalWorker, uid, date, t], async (e,row)=>{
+            if (row) {
+                try { fs.unlinkSync(req.file.path); } catch(e){}
+                return res.status(400).send(`Karyawan "${finalWorker}" sudah absen ${t} hari ini jam ${row.time}. <a href="/absen">Kembali</a>`);
+            }
+            let photo = '/uploads/absen/' + path.basename(req.file.path);
+            const remoteName = 'absen/' + path.basename(req.file.path);
+            const cloudUrl = await uploadToSupabase(req.file.path, remoteName, req.file.mimetype);
+            if (cloudUrl) photo = cloudUrl;
+
+            db.run("INSERT INTO attendance (user_id, username, worker_name, date, time, datetime, type, photo, latitude, longitude, address) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                [uid, username, finalWorker, date, time, datetime, t, photo, finalLat, finalLng, finalAddr], async (err)=>{
+                    if (err) { 
+                        try { fs.unlinkSync(req.file.path); } catch(e){}
+                        return res.status(500).send('Gagal simpan absen: '+err.message); 
+                    }
+                    try { await cloudSync.uploadDbNow(); } catch (e) {}
+                    res.redirect('/absen');
+                });
+        });
+    } catch (err) {
+        if (req.file && req.file.path) { try { fs.unlinkSync(req.file.path); } catch(e){} }
+        return res.status(500).send('Terjadi kesalahan saat memproses absensi: ' + err.message + ' <a href="/absen">Kembali</a>');
     }
-    // lokasi opsional — jika tidak ada, tetap simpan dengan 0,0
-    const finalLat = lat || 0;
-    const finalLng = lng || 0;
-    const finalAddr = address || (lat ? `${lat}, ${lng}` : 'Lokasi tidak tersedia');
-    const wita = getWitaTime();
-    const date = wita.toISOString().slice(0,10);
-    const time = wita.toISOString().slice(11,19);
-    const datetime = wita.toISOString();
-    const uid = req.session.user.id;
-    const username = req.session.user.username;
-
-    // Cek double absen untuk worker yang sama di tanggal & tipe yang sama
-    db.get("SELECT * FROM attendance WHERE (worker_name=? OR (worker_name IS NULL AND user_id=?)) AND date=? AND type=?", [finalWorker, uid, date, t], async (e,row)=>{
-        if (row) {
-            try { fs.unlinkSync(req.file.path); } catch(e){}
-            return res.status(400).send(`Karyawan "${finalWorker}" sudah absen ${t} hari ini jam ${row.time}. <a href="/absen">Kembali</a>`);
-        }
-        let photo = '/uploads/absen/' + path.basename(req.file.path);
-        const remoteName = 'absen/' + path.basename(req.file.path);
-        const cloudUrl = await uploadToSupabase(req.file.path, remoteName, req.file.mimetype);
-        if (cloudUrl) photo = cloudUrl;
-
-        db.run("INSERT INTO attendance (user_id, username, worker_name, date, time, datetime, type, photo, latitude, longitude, address) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            [uid, username, finalWorker, date, time, datetime, t, photo, finalLat, finalLng, finalAddr], async (err)=>{
-                if (err) { 
-                    try { fs.unlinkSync(req.file.path); } catch(e){}
-                    return res.status(500).send('Gagal simpan absen: '+err.message); 
-                }
-                try { await cloudSync.uploadDbNow(); } catch (e) {}
-                res.redirect('/absen');
-            });
-    });
 });
 
 // Route - Dashboard / Default (Executive Analytics + Low Stock + KPI + Kas)
@@ -506,9 +511,9 @@ app.get('/', requireLogin, async (req, res) => {
             ] = await Promise.all([
                 new Promise(r => db.all("SELECT * FROM inventory WHERE stock <= COALESCE(min_stock,5) ORDER BY stock ASC", (e, rows) => r(rows || []))),
                 new Promise(r => db.all("SELECT * FROM journals", (e, rows) => r(rows || []))),
-                new Promise(r => db.get("SELECT COALESCE(SUM((LENGTH(license_plate) - LENGTH(REPLACE(license_plate, '/', ''))) + 1), 0) as c, COALESCE(SUM(price),0) as omzet FROM sales WHERE date(date)=date('now')", (e, row) => r(row || { c: 0, omzet: 0 }))),
+                new Promise(r => db.get("SELECT COALESCE(SUM((LENGTH(license_plate) - LENGTH(REPLACE(license_plate, '/', ''))) + 1), 0) as c, COALESCE(SUM(price),0) as omzet FROM sales WHERE date(date)=date(?)", [today], (e, row) => r(row || { c: 0, omzet: 0 }))),
                 new Promise(r => db.get("SELECT COALESCE(SUM(price),0) as omzet FROM sales WHERE date(date) >= date(?)", [firstDay], (e, row) => r(row ? row.omzet : 0))),
-                new Promise(r => db.get("SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE date(date)=date('now')", (e, row) => r(row ? row.total : 0))),
+                new Promise(r => db.get("SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE date(date)=date(?)", [today], (e, row) => r(row ? row.total : 0))),
                 new Promise(r => db.get("SELECT COUNT(*) as c FROM sales", (e, row) => r(row ? row.c : 0))),
                 new Promise(r => db.get("SELECT COUNT(*) as c FROM expenses", (e, row) => r(row ? row.c : 0))),
                 new Promise(r => db.get("SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE date(date) >= date(?)", [firstDay], (e, row) => r(row ? row.total : 0))),
@@ -520,12 +525,15 @@ app.get('/', requireLogin, async (req, res) => {
                 new Promise(r => db.all("SELECT service_name, price FROM sales WHERE date(date) >= date(?)", [dateFilter], (e, rows) => r(rows || [])))
             ]);
 
-            // Hitung saldo Kas
-            let kasBesar = 0, kasKecil = 0;
+            // Hitung saldo Kas, QRIS, & Bank
+            let kasBesar = 0, kasKecil = 0, qrisSaldo = 0, bankSaldo = 0;
             journals.forEach(j => {
                 if (j.account_type === 'Kas Besar') kasBesar += j.debit - j.credit;
                 else if (j.account_type === 'Kas Kecil' || j.account_type === 'Kas') kasKecil += j.debit - j.credit;
+                else if (j.account_type === 'QRIS') qrisSaldo += j.debit - j.credit;
+                else if (j.account_type !== 'Pendapatan' && j.account_type !== 'Biaya') bankSaldo += j.debit - j.credit;
             });
+            const totalDana = kasBesar + kasKecil + qrisSaldo + bankSaldo;
 
             const labaHari = (todaySales ? todaySales.omzet : 0) - todayExp;
             const labaBulan = bulanSales - bulanExp;
@@ -578,7 +586,9 @@ app.get('/', requireLogin, async (req, res) => {
                 labaBulan,
                 kasBesar,
                 kasKecil,
-                totalKas: kasBesar + kasKecil,
+                qrisSaldo,
+                bankSaldo,
+                totalKas: totalDana,
                 tren: dailyTrends,
                 // Data Analitik & Grafik
                 range,
@@ -648,7 +658,7 @@ app.get('/sales', requireAdminOrOwner, (req, res) => {
     });
 });
 
-app.post('/sales', requireAdminOrOwner, upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'promo_photo', maxCount: 1 }]), (req, res) => {
+app.post('/sales', requireAdminOrOwner, upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'photo_fallback', maxCount: 1 }, { name: 'promo_photo', maxCount: 1 }]), (req, res) => {
     const { customer_name, license_plate, price, worker_name, akun_kas } = req.body;
     // dukung multi layanan: service_names bisa array, atau service_name single (backward compat)
     let serviceNames = req.body.service_names || req.body.service_name;
@@ -660,7 +670,7 @@ app.post('/sales', requireAdminOrOwner, upload.fields([{ name: 'photo', maxCount
     const salePrice = parseRupiah(price);
     let kasAkun = akun_kas && String(akun_kas).trim() ? String(akun_kas).trim() : 'Kas Kecil';
 
-    const qrisFile = (req.files && req.files['photo'] && req.files['photo'][0]) || req.file || null;
+    const qrisFile = (req.files && ((req.files['photo'] && req.files['photo'][0]) || (req.files['photo_fallback'] && req.files['photo_fallback'][0]))) || req.file || null;
     const promoFile = (req.files && req.files['promo_photo'] && req.files['promo_photo'][0]) || null;
 
     function cleanupFiles() {
@@ -822,8 +832,10 @@ app.post('/sales', requireAdminOrOwner, upload.fields([{ name: 'photo', maxCount
                     db.run(`INSERT INTO journals (description, debit, credit, account_type) VALUES (?, ?, ?, ?)`,
                         [`Pendapatan Jasa Cuci - Plat: ${license_plate} ${layananDesc}${promoDesc} → ${kasAkun}`, salePrice, 0, kasAkun]);
                     db.run(`INSERT INTO journals (description, debit, credit, account_type) VALUES (?, ?, ?, ?)`,
-                        [`Pendapatan Jasa Cuci - Plat: ${license_plate} ${layananDesc}${promoDesc} → ${kasAkun}`, 0, salePrice, 'Pendapatan']);
-                    res.redirect('/receipt/' + saleId);
+                        [`Pendapatan Jasa Cuci - Plat: ${license_plate} ${layananDesc}${promoDesc} → ${kasAkun}`, 0, salePrice, 'Pendapatan'], async () => {
+                            try { await cloudSync.uploadDbNow(); } catch (e) {}
+                            res.redirect('/receipt/' + saleId);
+                        });
                 });
             });
         });
@@ -951,21 +963,22 @@ app.get('/expenses', requireAdminOrOwner, (req, res) => {
     });
 });
 
-app.post('/expenses', requireAdminOrOwner, upload.single('photo'), (req, res) => {
+app.post('/expenses', requireAdminOrOwner, upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'photo_fallback', maxCount: 1 }]), (req, res) => {
     const { category, amount, description, stock_item_id, stock_qty, akun_kas } = req.body;
+    const uploadedFile = (req.files && ((req.files['photo'] && req.files['photo'][0]) || (req.files['photo_fallback'] && req.files['photo_fallback'][0]))) || req.file || null;
     const expenseAmount = parseRupiah(amount);
     let kasAkun = akun_kas && String(akun_kas).trim() ? String(akun_kas).trim() : 'Kas Kecil';
     if (req.session.user.role !== 'owner' && kasAkun !== 'Kas Kecil') kasAkun = 'Kas Kecil';
     if (!category) {
-        if (req.file) fs.unlinkSync(req.file.path);
+        if (uploadedFile) { try { fs.unlinkSync(uploadedFile.path); } catch(e){} }
         return res.status(400).send('Validasi gagal: Kategori wajib dipilih. <a href="/expenses">Kembali</a>');
     }
     if (isNaN(expenseAmount) || expenseAmount < 1000) {
-        if (req.file) fs.unlinkSync(req.file.path);
+        if (uploadedFile) { try { fs.unlinkSync(uploadedFile.path); } catch(e){} }
         return res.status(400).send('Validasi gagal: Nominal harus ≥ 1000 (boleh 50.000). <a href="/expenses">Kembali</a>');
     }
     const admin_name = req.session.user.username;
-    const photo = req.file ? '/uploads/' + req.file.filename : null;
+    const photo = uploadedFile ? '/uploads/' + uploadedFile.filename : null;
     // 5.4 integrasi stok: jika ada stock_item_id & stock_qty, update stok IN
     const needStock = stock_item_id && String(stock_item_id).trim() && stock_qty && String(stock_qty).trim();
     let stockQty = null;
@@ -1009,7 +1022,7 @@ app.post('/expenses', requireAdminOrOwner, upload.single('photo'), (req, res) =>
                 }
                 db.serialize(()=>{
                     db.run(`INSERT INTO expenses (category, amount, description, photo, admin_name) VALUES (?, ?, ?, ?, ?)`,
-                        [category, expenseAmount, description, finalPhoto, admin_name], function(err){
+                        [category, expenseAmount, description, finalPhoto, admin_name], async function(err){
                         if(err){
                             if(req.file) fs.unlinkSync(req.file.path);
                             return res.status(500).send('Gagal simpan pengeluaran: '+err.message+' <a href="/expenses">Kembali</a>');
@@ -1024,10 +1037,16 @@ app.post('/expenses', requireAdminOrOwner, upload.single('photo'), (req, res) =>
                                 const before=row.stock; const after=before+stockQty;
                                 db.run("UPDATE inventory SET stock=? WHERE id=?", [after, stock_item_id], ()=>{
                                     db.run("INSERT INTO stock_history (inventory_id, item_name, type, quantity, stock_before, stock_after, admin_name) VALUES (?,?,?,?,?,?,?)",
-                                        [stock_item_id, row.name, 'in', stockQty, before, after, admin_name], ()=> res.redirect('/expenses'));
+                                        [stock_item_id, row.name, 'in', stockQty, before, after, admin_name], async ()=> {
+                                            try { await cloudSync.uploadDbNow(); } catch (e) {}
+                                            res.redirect('/expenses');
+                                        });
                                 });
                             });
-                        } else res.redirect('/expenses');
+                        } else {
+                            try { await cloudSync.uploadDbNow(); } catch (e) {}
+                            res.redirect('/expenses');
+                        }
                     });
                 });
             }
@@ -2097,9 +2116,9 @@ app.get('/reports', requireOwner, (req, res) => {
                         // KPI for dashboard-like
                         const today=getWitaTime().toISOString().slice(0,10);
                         const firstDay=getWitaTime().toISOString().slice(0,8) + '01';
-                        db.get("SELECT COALESCE(SUM((LENGTH(license_plate) - LENGTH(REPLACE(license_plate, '/', ''))) + 1), 0) as c, SUM(price) as omzet FROM sales WHERE date(date)=date('now')", (e, todayRow)=>{
+                        db.get("SELECT COALESCE(SUM((LENGTH(license_plate) - LENGTH(REPLACE(license_plate, '/', ''))) + 1), 0) as c, SUM(price) as omzet FROM sales WHERE date(date)=date(?)", [today], (e, todayRow)=>{
                             db.get(`SELECT SUM(price) as omzetBulan FROM sales WHERE date(date) >= date(?)`, [firstDay], (e, bulanRow)=>{
-                                db.all("SELECT date(date) as tgl, COUNT(*) as trx, SUM(price) as omzet FROM sales WHERE date(date) >= date('now','-6 days') GROUP BY date(date) ORDER BY tgl ASC", (e, tren)=>{
+                                db.all("SELECT date(date) as tgl, COUNT(*) as trx, SUM(price) as omzet FROM sales WHERE date(date) >= date(?, '-6 days') GROUP BY date(date) ORDER BY tgl ASC", [today], (e, tren)=>{
                                     db.all("SELECT * FROM accounts ORDER BY type, name ASC", (e, accounts)=>{
                         db.all("SELECT account_type, SUM(debit - credit) as saldo FROM journals GROUP BY account_type", (e, saldoRows)=>{
                             const saldoMap={};

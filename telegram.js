@@ -212,26 +212,33 @@ async function sendTelegramReport({ date, includeDb = true, senderName = 'Kasir'
                         FROM journals
                         WHERE account_type IN ('Kas Kecil', 'Kas')
                     `, (err, jRow) => {
-                        db.all(`
-                            SELECT 
-                                sc.worker_name,
-                                COUNT(CASE WHEN sc.motor_index > 0 THEN 1 END) as motor,
-                                COALESCE(SUM(sc.commission), 0) as komisi
-                            FROM sale_commissions sc
-                            WHERE date(sc.date) = date(?)
-                            GROUP BY sc.worker_name
-                            ORDER BY motor DESC
-                        `, [targetDate], (err, wRows) => {
-                            resolve({
-                                totalMotor: sSummary ? sSummary.total_motor : 0,
-                                totalOmzet: sSummary ? sSummary.total_omzet : 0,
-                                totalKomisi: sSummary ? sSummary.total_komisi : 0,
-                                totalDiskon: sSummary ? sSummary.total_diskon : 0,
-                                totalPromoTrx: sSummary ? sSummary.total_promo_trx : 0,
-                                paymentBreakdown: sPayRows || [],
-                                totalExpense: eSummary ? eSummary.total_expense : 0,
-                                saldoKasKecil: jRow ? jRow.saldo_kas_kecil : 0,
-                                workerList: wRows || []
+                        db.get(`
+                            SELECT COALESCE(SUM(debit - credit), 0) as saldo_qris
+                            FROM journals
+                            WHERE account_type = 'QRIS'
+                        `, (errQ, qRow) => {
+                            db.all(`
+                                SELECT 
+                                    sc.worker_name,
+                                    COUNT(CASE WHEN sc.motor_index > 0 THEN 1 END) as motor,
+                                    COALESCE(SUM(sc.commission), 0) as komisi
+                                FROM sale_commissions sc
+                                WHERE date(sc.date) = date(?)
+                                GROUP BY sc.worker_name
+                                ORDER BY motor DESC
+                            `, [targetDate], (err, wRows) => {
+                                resolve({
+                                    totalMotor: sSummary ? sSummary.total_motor : 0,
+                                    totalOmzet: sSummary ? sSummary.total_omzet : 0,
+                                    totalKomisi: sSummary ? sSummary.total_komisi : 0,
+                                    totalDiskon: sSummary ? sSummary.total_diskon : 0,
+                                    totalPromoTrx: sSummary ? sSummary.total_promo_trx : 0,
+                                    paymentBreakdown: sPayRows || [],
+                                    totalExpense: eSummary ? eSummary.total_expense : 0,
+                                    saldoKasKecil: jRow ? jRow.saldo_kas_kecil : 0,
+                                    saldoQris: qRow ? qRow.saldo_qris : 0,
+                                    workerList: wRows || []
+                                });
                             });
                         });
                     });
@@ -279,7 +286,8 @@ async function sendTelegramReport({ date, includeDb = true, senderName = 'Kasir'
         `💸 <b>Pengeluaran Kasir</b>: Rp ${totalExpense.toLocaleString('id-ID')}\n` +
         `🤝 <b>Komisi Pencuci</b>: Rp ${totalKomisi.toLocaleString('id-ID')}\n` +
         `🏢 <b>Porsi Bersih Toko</b>: <b>Rp ${netOutlet.toLocaleString('id-ID')}</b>\n` +
-        `💵 <b>Saldo Fisik Kasir (Kas Kecil)</b>: <b>Rp ${saldoKasKecil.toLocaleString('id-ID')}</b>\n\n` +
+        `💵 <b>Saldo Fisik Kasir (Kas Kecil)</b>: <b>Rp ${saldoKasKecil.toLocaleString('id-ID')}</b>\n` +
+        `📱 <b>Saldo Terkumpul QRIS</b>: <b>Rp ${(reportData.saldoQris || 0).toLocaleString('id-ID')}</b>\n\n` +
         `👥 <b>Pengerjaan Pencuci</b>:\n${workerStr}\n\n` +
         `<i>${escapeHtml(brandName)} Cloud System • Pengirim: ${escapeHtml(senderName)}</i>`;
 
