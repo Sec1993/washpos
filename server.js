@@ -622,7 +622,7 @@ app.get('/sales', requireAdminOrOwner, (req, res) => {
     }
     const whereClause = where.length ? "WHERE " + where.join(" AND ") : "";
 
-    db.all("SELECT * FROM services WHERE isActive=1 ORDER BY name ASC", (err, services) => {
+    db.all("SELECT * FROM services WHERE isActive=1 ORDER BY price ASC, name ASC", (err, services) => {
         db.all("SELECT * FROM workers WHERE COALESCE(role, 'Pencuci') = 'Pencuci' ORDER BY name ASC", (err, workers) => {
             db.all("SELECT * FROM accounts WHERE (name='Kas Kecil' OR type='QRIS') ORDER BY type, name ASC", (e, akunBayar)=>{
                 db.all("SELECT * FROM journals WHERE account_type IN ('Kas Kecil','Kas')", (e, kasRows)=>{
@@ -1082,7 +1082,7 @@ app.post('/inventory/update', requireAdminOrOwner, (req, res) => {
 
 // Routes - Master Data (Owner Only) - Kelola Karyawan, Layanan, Kategori, & Akun Login Pengguna
 function renderMaster(res, error = null, success = null) {
-    db.all("SELECT * FROM services ORDER BY isActive DESC, id ASC", (err, services) => {
+    db.all("SELECT * FROM services ORDER BY isActive DESC, price ASC, name ASC", (err, services) => {
         db.all("SELECT * FROM workers ORDER BY CASE WHEN role='Admin' THEN 1 ELSE 2 END, id ASC", (err, workers) => {
             db.all("SELECT * FROM expense_categories ORDER BY name ASC", (err, expense_categories) => {
                 db.all("SELECT id, username, role FROM users ORDER BY id ASC", (err, users) => {

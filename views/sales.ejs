@@ -86,8 +86,8 @@
                         <div class="border rounded p-2" style="max-height:260px; overflow-y:auto; background:#fff;">
                             <% 
                                 const isCuciUtama = (name) => /cuci\s+(motor|mobil)/i.test(name || '');
-                                const cuciServices = (services || []).filter(s => isCuciUtama(s.name));
-                                const addonServices = (services || []).filter(s => !isCuciUtama(s.name));
+                                const cuciServices = (services || []).filter(s => isCuciUtama(s.name)).sort((a,b) => (a.price || 0) - (b.price || 0));
+                                const addonServices = (services || []).filter(s => !isCuciUtama(s.name)).sort((a,b) => (a.price || 0) - (b.price || 0));
                             %>
 
                             <% if (services.length===0) { %>
@@ -614,7 +614,7 @@ const ALL_WORKERS = <%- JSON.stringify(workers || []) %>;
 
 let currentMotorCount = 1;
 let motorSlotsData = [
-    { plat: '', service: CUCI_SERVICES[0] ? CUCI_SERVICES[0].name : 'Cuci Motor Besar', worker: '' }
+    { plat: '', service: CUCI_SERVICES[0] ? CUCI_SERVICES[0].name : 'Cuci Motor Kecil', worker: '' }
 ];
 
 function setMotorCount(count) {
@@ -672,7 +672,7 @@ function setMotorCount(count) {
         // Sesuaikan jumlah elemen di motorSlotsData
         saveSlotsFromDom();
         while (motorSlotsData.length < count) {
-            const defaultSvc = CUCI_SERVICES[0] ? CUCI_SERVICES[0].name : 'Cuci Motor Besar';
+            const defaultSvc = CUCI_SERVICES[0] ? CUCI_SERVICES[0].name : 'Cuci Motor Kecil';
             const firstWorker = motorSlotsData[0] ? motorSlotsData[0].worker : '';
             motorSlotsData.push({ plat: '', service: defaultSvc, worker: firstWorker });
         }
@@ -703,7 +703,7 @@ function setMotorCount(count) {
         });
 
         motorSlotsData = [
-            { plat: '', service: CUCI_SERVICES[0] ? CUCI_SERVICES[0].name : 'Cuci Motor Besar', worker: '' }
+            { plat: '', service: CUCI_SERVICES[0] ? CUCI_SERVICES[0].name : 'Cuci Motor Kecil', worker: '' }
         ];
         renderMotorSlots();
 
