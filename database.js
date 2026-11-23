@@ -216,7 +216,11 @@ db.serialize(() => {
             ['receipt_show_logo', '1'],
             ['receipt_show_qr', '1'],
             ['shop_logo', '/img/logo.png'],
-            ['full_attendance_bonus', '150000']
+            ['full_attendance_bonus', '150000'],
+            ['outlet_latitude', '-5.149285'],
+            ['outlet_longitude', '119.429529'],
+            ['outlet_radius_meters', '100'],
+            ['outlet_address', 'Jalan Monginsidi Baru, Green City, Rappocini, Makassar']
         ];
         defaultSettings.forEach(([k, v]) => {
             db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)`, [k, v]);

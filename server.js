@@ -197,7 +197,7 @@ async function uploadToSupabase(filePath, remoteFileName, mimeType) {
 // Healthcheck untuk Railway
 app.get('/health', (req, res) => res.status(200).send('OK'));
 
-// Cached Shop Settings (Header, Footer, Logo, Slogan)
+// Cached Shop Settings (Header, Footer, Logo, Slogan, Outlet Geofence)
 const cachedShopSettings = {
     shop_name: 'Prime Motowash',
     shop_slogan: '',
@@ -208,8 +208,24 @@ const cachedShopSettings = {
     receipt_number_format: 'daily',
     receipt_show_logo: '1',
     receipt_show_qr: '1',
-    shop_logo: '/img/logo.png'
+    shop_logo: '/img/logo.png',
+    outlet_latitude: '-5.149285',
+    outlet_longitude: '119.429529',
+    outlet_radius_meters: '100',
+    outlet_address: 'Jalan Monginsidi Baru, Green City, Rappocini, Makassar'
 };
+
+// Helper: Hitung Jarak GPS Akurat Menggunakan Formula Haversine (dalam satuan Meter)
+function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371000; // Radius bumi dalam meter
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
 
 // Helper: Format Nomor Nota Kasir (Daily Reset, Date+Seq, or Global ID)
 function formatReceiptNumber(sale, dailySeq, format = 'daily') {
@@ -229,7 +245,7 @@ function formatReceiptNumber(sale, dailySeq, format = 'daily') {
 }
 
 function refreshShopSettings() {
-    db.all("SELECT key, value FROM settings WHERE key LIKE 'shop_%' OR key LIKE 'receipt_%'", (err, rows) => {
+    db.all("SELECT key, value FROM settings WHERE key LIKE 'shop_%' OR key LIKE 'receipt_%' OR key LIKE 'outlet_%'", (err, rows) => {
         if (!err && rows) {
             rows.forEach(r => {
                 let val = r.value;
@@ -368,6 +384,11 @@ app.get('/absen', requireLogin, (req, res) => {
     const today = getWitaTime().toISOString().slice(0,10);
     const uid = req.session.user.id;
     const isOwner = req.session.user.role === 'owner' || req.session.user.role === 'admin';
+    const outletLat = cachedShopSettings.outlet_latitude || '-5.149285';
+    const outletLng = cachedShopSettings.outlet_longitude || '119.429529';
+    const outletRadius = parseInt(cachedShopSettings.outlet_radius_meters || '100', 10);
+    const outletAddress = cachedShopSettings.outlet_address || 'Jalan Monginsidi Baru, Green City, Rappocini, Makassar';
+
     db.all("SELECT * FROM workers ORDER BY name ASC", (errW, workers) => {
         // ambil absen hari ini untuk user ini / semua jika owner
         const whereToday = isOwner ? "WHERE date=?" : "WHERE (user_id=? OR worker_name=?) AND date=?";
@@ -382,7 +403,11 @@ app.get('/absen', requireLogin, (req, res) => {
                     history: recent||[], 
                     workers: workers||[], 
                     isOwner, 
-                    today 
+                    today,
+                    outletLat,
+                    outletLng,
+                    outletRadius,
+                    outletAddress
                 });
             });
         });
@@ -392,10 +417,27 @@ app.get('/absen', requireLogin, (req, res) => {
 app.post('/absen', requireLogin, absenUpload.single('photo'), async (req, res) => {
     const { type, latitude, longitude, address, worker_name } = req.body;
     const t = (type==='keluar' ? 'keluar' : 'masuk');
-    if (!req.file) return res.status(400).send('Validasi gagal: Foto wajib. <a href="/absen">Kembali</a>');
+    if (!req.file) return res.status(400).send('Validasi gagal: Foto selfie wajib diambil dari kamera aplikasi. <a href="/absen">Kembali</a>');
     const finalWorker = (worker_name && worker_name.trim()) ? worker_name.trim() : req.session.user.username;
     const lat = latitude ? parseFloat(latitude) : null;
     const lng = longitude ? parseFloat(longitude) : null;
+
+    // Verifikasi radius geofence area cuci motor
+    const outletLat = parseFloat(cachedShopSettings.outlet_latitude || '-5.149285');
+    const outletLng = parseFloat(cachedShopSettings.outlet_longitude || '119.429529');
+    const maxRadius = parseInt(cachedShopSettings.outlet_radius_meters || '100', 10);
+
+    if (!isNaN(outletLat) && !isNaN(outletLng) && outletLat !== 0 && outletLng !== 0) {
+        if (!lat || !lng || isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) {
+            try { fs.unlinkSync(req.file.path); } catch(e){}
+            return res.status(400).send('Validasi gagal: Lokasi GPS wajib aktif dan diizinkan pada perangkat Anda untuk absen. <a href="/absen">Kembali</a>');
+        }
+        const distance = calculateHaversineDistance(lat, lng, outletLat, outletLng);
+        if (distance > maxRadius) {
+            try { fs.unlinkSync(req.file.path); } catch(e){}
+            return res.status(400).send(`Validasi gagal: Anda berada di luar area cuci motor! Jarak Anda saat ini ${Math.round(distance)} meter dari outlet (Batas toleransi maksimal: ${maxRadius} meter). Harap absen saat sudah berada di lokasi outlet cuci motor. <a href="/absen">Kembali</a>`);
+        }
+    }
     // lokasi opsional — jika tidak ada, tetap simpan dengan 0,0
     const finalLat = lat || 0;
     const finalLng = lng || 0;
@@ -1068,6 +1110,10 @@ function renderMaster(res, error = null, success = null) {
                         const telegramTimezone = settingsMap.telegram_timezone || 'Asia/Makassar';
                         const telegramLastReportDate = settingsMap.telegram_last_auto_report_date || '';
                         const fullAttendanceBonus = parseInt(settingsMap.full_attendance_bonus || '150000', 10);
+                        const outletLatitude = settingsMap.outlet_latitude || '-5.149285';
+                        const outletLongitude = settingsMap.outlet_longitude || '119.429529';
+                        const outletRadiusMeters = parseInt(settingsMap.outlet_radius_meters || '100', 10);
+                        const outletAddress = settingsMap.outlet_address || 'Jalan Monginsidi Baru, Green City, Rappocini, Makassar';
 
                         let dbSizeStr = '94 KB';
                         const dbPath = path.resolve(__dirname, 'data', 'pos.db');
@@ -1098,6 +1144,10 @@ function renderMaster(res, error = null, success = null) {
                             telegramTimezone,
                             telegramLastReportDate,
                             fullAttendanceBonus,
+                            outletLatitude,
+                            outletLongitude,
+                            outletRadiusMeters,
+                            outletAddress,
                             dbSizeStr,
                             error,
                             success
@@ -1368,6 +1418,10 @@ app.post('/master/settings/shop', requireOwner, (req, res) => {
     const receiptShowLogo = (req.body.receipt_show_logo === '1' || req.body.receipt_show_logo === 'on') ? '1' : '0';
     const receiptShowQr = (req.body.receipt_show_qr === '1' || req.body.receipt_show_qr === 'on') ? '1' : '0';
     const shopLogo = (req.body.shop_logo || '/img/logo.png').trim();
+    const outletLatitude = (req.body.outlet_latitude || '-5.149285').trim();
+    const outletLongitude = (req.body.outlet_longitude || '119.429529').trim();
+    const outletRadiusMeters = (req.body.outlet_radius_meters || '100').trim();
+    const outletAddress = (req.body.outlet_address || '').trim();
 
     db.serialize(() => {
         db.run("INSERT INTO settings (key, value) VALUES ('shop_name', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [shopName]);
@@ -1379,10 +1433,15 @@ app.post('/master/settings/shop', requireOwner, (req, res) => {
         db.run("INSERT INTO settings (key, value) VALUES ('receipt_number_format', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [receiptNumberFormat]);
         db.run("INSERT INTO settings (key, value) VALUES ('receipt_show_logo', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [receiptShowLogo]);
         db.run("INSERT INTO settings (key, value) VALUES ('receipt_show_qr', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [receiptShowQr]);
-        db.run("INSERT INTO settings (key, value) VALUES ('shop_logo', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [shopLogo], (err) => {
+        db.run("INSERT INTO settings (key, value) VALUES ('outlet_latitude', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [outletLatitude]);
+        db.run("INSERT INTO settings (key, value) VALUES ('outlet_longitude', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [outletLongitude]);
+        db.run("INSERT INTO settings (key, value) VALUES ('outlet_radius_meters', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [outletRadiusMeters]);
+        db.run("INSERT INTO settings (key, value) VALUES ('outlet_address', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [outletAddress]);
+        db.run("INSERT INTO settings (key, value) VALUES ('shop_logo', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [shopLogo], async (err) => {
             if (err) return renderMaster(res, 'Gagal menyimpan profil usaha: ' + err.message);
             refreshShopSettings();
-            renderMaster(res, null, 'Profil Usaha & Pengaturan Header/Footer Struk berhasil disimpan!');
+            try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Master] uploadDbNow error:', e.message); }
+            renderMaster(res, null, 'Profil Usaha & Titik Lokasi GPS Absensi berhasil disimpan!');
         });
     });
 });

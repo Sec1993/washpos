@@ -519,6 +519,45 @@ function openRoleModal(id, username, currentRole) {
                         </div>
                     </div>
 
+                    <hr class="my-3">
+                    <h6 class="fw-bold text-primary mb-2">📍 Titik Lokasi GPS Cuci Motor & Batas Radius Absensi</h6>
+                    <p class="small text-muted mb-2">
+                        Karyawan hanya dapat melakukan absen jika posisi GPS mereka berada di dalam radius area cuci motor ini.
+                    </p>
+
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-4 col-12">
+                            <label class="form-label small fw-bold">Latitude Outlet</label>
+                            <input type="text" name="outlet_latitude" id="masterOutletLat" class="form-control form-control-sm" value="<%= typeof outletLatitude !== 'undefined' ? outletLatitude : '-5.149285' %>" placeholder="-5.149285" required>
+                        </div>
+                        <div class="col-md-4 col-12">
+                            <label class="form-label small fw-bold">Longitude Outlet</label>
+                            <input type="text" name="outlet_longitude" id="masterOutletLng" class="form-control form-control-sm" value="<%= typeof outletLongitude !== 'undefined' ? outletLongitude : '119.429529' %>" placeholder="119.429529" required>
+                        </div>
+                        <div class="col-md-4 col-12">
+                            <label class="form-label small fw-bold">Radius Toleransi Absen</label>
+                            <div class="input-group input-group-sm">
+                                <input type="number" name="outlet_radius_meters" class="form-control" value="<%= typeof outletRadiusMeters !== 'undefined' ? outletRadiusMeters : 100 %>" min="20" max="1000" placeholder="100" required>
+                                <span class="input-group-text">Meter</span>
+                            </div>
+                            <small class="text-muted" style="font-size:10px;">Rekomendasi: 50 – 150 meter</small>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Nama Jalan / Detail Lokasi Outlet</label>
+                        <input type="text" name="outlet_address" id="masterOutletAddr" class="form-control form-control-sm" value="<%= typeof outletAddress !== 'undefined' ? outletAddress : 'Jalan Monginsidi Baru, Green City, Rappocini, Makassar' %>" placeholder="Nama jalan detail outlet">
+                        <div class="d-flex flex-wrap gap-2 mt-2">
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="setOutletCurrentLocation()">
+                                📍 Ambil Titik Lokasi dari Posisi Saya Saat Ini
+                            </button>
+                            <a id="btnMapsOutlet" href="https://www.google.com/maps?q=<%= typeof outletLatitude !== 'undefined' ? outletLatitude : '-5.149285' %>,<%= typeof outletLongitude !== 'undefined' ? outletLongitude : '119.429529' %>" target="_blank" class="btn btn-sm btn-outline-secondary">
+                                🗺️ Buka di Google Maps
+                            </a>
+                        </div>
+                    </div>
+                    <hr class="my-3">
+
                     <div class="mb-3">
                         <label class="form-label small fw-bold">Catatan Kaki Struk (Footer Thermal) <span class="text-danger">*</span></label>
                         <input type="text" name="receipt_footer" class="form-control form-control-sm" value="<%= typeof receiptFooter !== 'undefined' ? receiptFooter : 'Terima kasih atas kunjungan Anda!' %>" required placeholder="Contoh: Terima kasih atas kunjungan Anda!">
@@ -825,6 +864,57 @@ function openEditWorkerModal(worker) {
 
 function openResetTransactionsModal() {
     new bootstrap.Modal(document.getElementById('modalResetTransactions')).show();
+}
+
+function setOutletCurrentLocation() {
+    if (!navigator.geolocation) return alert('Geolocation tidak didukung browser ini');
+    const btn = event.target;
+    const oldText = btn.textContent;
+    btn.textContent = 'Mencari Lokasi GPS...';
+    btn.disabled = true;
+    navigator.geolocation.getCurrentPosition(async pos => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        document.getElementById('masterOutletLat').value = lat.toFixed(6);
+        document.getElementById('masterOutletLng').value = lng.toFixed(6);
+        document.getElementById('btnMapsOutlet').href = `https://www.google.com/maps?q=${lat},${lng}`;
+
+        btn.textContent = 'Mencari nama jalan detail...';
+        try {
+            let street = '';
+            let district = '';
+            let city = '';
+            try {
+                const p = await (await fetch(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}`)).json();
+                if (p.features && p.features[0]) {
+                    const pr = p.features[0].properties || {};
+                    street = pr.street || pr.name || '';
+                    district = pr.district || '';
+                    city = pr.city || '';
+                }
+            } catch(e) {}
+            try {
+                const n = await (await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`, { headers: { 'User-Agent': 'WashPOS/1.0' } })).json();
+                const a = n.address || {};
+                const nomStreet = a.road || a.pedestrian || '';
+                if (nomStreet) street = nomStreet;
+                const res = a.residential || a.neighbourhood || '';
+                const dist = a.suburb || a.city_district || district;
+                const c = a.city || city;
+                const parts = [street, res, dist, c].filter(Boolean).filter((v,i,arr)=>arr.indexOf(v)===i);
+                if (parts.length > 0) {
+                    document.getElementById('masterOutletAddr').value = parts.join(', ');
+                }
+            } catch(e) {}
+        } catch(e) {}
+        btn.textContent = oldText;
+        btn.disabled = false;
+        alert('Titik lokasi berhasil didapat: ' + lat.toFixed(6) + ', ' + lng.toFixed(6) + '\n\nSilakan klik tombol "Simpan Profil Usaha" di bawah untuk menyimpan perubahan.');
+    }, err => {
+        btn.textContent = oldText;
+        btn.disabled = false;
+        alert('Gagal mengambil lokasi GPS: ' + err.message);
+    }, { enableHighAccuracy: true, timeout: 10000 });
 }
 </script>
 

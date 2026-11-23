@@ -38,14 +38,15 @@
                     </div>
 
                     <div class="mb-2">
-                        <label class="form-label">Lokasi <small class="text-muted" id="lokasiStatus">— belum ambil</small></label>
+                        <label class="form-label fw-bold">Lokasi GPS & Radius Outlet <small class="text-muted" id="lokasiStatus">— belum ambil</small></label>
                         <div class="d-flex gap-2">
-                            <button type="button" class="btn btn-sm btn-outline-primary flex-fill" onclick="ambilLokasi()">📍 Ambil Lokasi</button>
+                            <button type="button" class="btn btn-sm btn-outline-primary flex-fill" onclick="ambilLokasi()">📍 Ambil / Segarkan Lokasi</button>
                             <small class="text-muted align-self-center" id="koordinatText">-</small>
                         </div>
                         <input type="hidden" name="latitude" id="latitude" required>
                         <input type="hidden" name="longitude" id="longitude" required>
                         <input type="hidden" name="address" id="address">
+                        <div id="rangeStatusBadge" class="mt-2"></div>
                         <div id="alamatPreview" class="small text-muted mt-1"></div>
                     </div>
 
@@ -72,7 +73,7 @@
                         <small class="text-muted">Jam diambil server saat submit + overlay di foto (<span id="jamOverlayPreview">-</span>).</small>
                     </div>
 
-                    <button type="submit" class="btn btn-primary w-100">Kirim Absen</button>
+                    <button type="submit" id="btnSubmitAbsen" class="btn btn-primary w-100">Kirim Absen</button>
                 </form>
                 <small class="text-muted d-block mt-2">Foto tersimpan di <code>public/uploads/absen</code>. Lokasi & jam tertampil di dalam foto (overlay).</small>
             </div>
@@ -167,38 +168,134 @@ function updateJam(){
 }
 setInterval(updateJam,1000); updateJam();
 
+function getDistanceFromOutlet(lat, lng) {
+    const outletLat = parseFloat("<%= typeof outletLat !== 'undefined' ? outletLat : '-5.149285' %>");
+    const outletLng = parseFloat("<%= typeof outletLng !== 'undefined' ? outletLng : '119.429529' %>");
+    if (isNaN(outletLat) || isNaN(outletLng) || outletLat === 0) return 0;
+    
+    const R = 6371000;
+    const dLat = (outletLat - lat) * Math.PI / 180;
+    const dLon = (outletLng - lng) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat * Math.PI / 180) * Math.cos(outletLat * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+const MAX_OUTLET_RADIUS = <%= typeof outletRadius !== 'undefined' ? outletRadius : 100 %>;
+let isWithinRange = true;
+
 function ambilLokasi(){
-    const status=document.getElementById('lokasiStatus');
-    const koor=document.getElementById('koordinatText');
-    const alamat=document.getElementById('alamatPreview');
-    const latIn=document.getElementById('latitude');
-    const lngIn=document.getElementById('longitude');
-    const addrIn=document.getElementById('address');
-    status.textContent='Mengambil...';
-    if(!navigator.geolocation){ status.textContent='Geolocation tidak didukung'; return; }
-    navigator.geolocation.getCurrentPosition(pos=>{
-        const lat=pos.coords.latitude; const lng=pos.coords.longitude;
-        lokasiData.lat=lat; lokasiData.lng=lng;
-        latIn.value=lat; lngIn.value=lng;
-        koor.textContent=lat.toFixed(6)+', '+lng.toFixed(6);
-        status.textContent='✓ Lokasi didapat';
-        alamat.textContent='Mencari alamat...';
-        // reverse geocode via OSM Nominatim
-        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16`)
-            .then(r=>r.json()).then(d=>{
-                const addr=d.display_name||`${lat}, ${lng}`;
-                lokasiData.addr=addr;
-                addrIn.value=addr;
-                alamat.textContent=addr;
-                document.getElementById('lokasiKameraPreview').textContent=addr;
-            }).catch(()=>{
-                addrIn.value=lat+', '+lng;
-                alamat.textContent=lat+', '+lng;
+    const status = document.getElementById('lokasiStatus');
+    const koor = document.getElementById('koordinatText');
+    const alamat = document.getElementById('alamatPreview');
+    const latIn = document.getElementById('latitude');
+    const lngIn = document.getElementById('longitude');
+    const addrIn = document.getElementById('address');
+    const rangeBadge = document.getElementById('rangeStatusBadge');
+    const btnSubmit = document.getElementById('btnSubmitAbsen');
+    
+    status.textContent = 'Mendeteksi GPS...';
+    if (!navigator.geolocation) {
+        status.textContent = 'Geolocation tidak didukung';
+        return;
+    }
+    
+    navigator.geolocation.getCurrentPosition(async pos => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        lokasiData.lat = lat;
+        lokasiData.lng = lng;
+        latIn.value = lat;
+        lngIn.value = lng;
+        koor.textContent = lat.toFixed(6) + ', ' + lng.toFixed(6);
+        status.textContent = '✓ Lokasi didapat';
+        
+        // 1. Verifikasi Jarak ke Area Cuci Motor
+        const distance = getDistanceFromOutlet(lat, lng);
+        if (distance <= MAX_OUTLET_RADIUS) {
+            isWithinRange = true;
+            if (rangeBadge) {
+                rangeBadge.innerHTML = `
+                    <div class="alert alert-success py-1 px-2 mb-1 small d-flex align-items-center justify-content-between">
+                        <span><i class="bi bi-geo-alt-fill"></i> <strong>Dalam Area Cuci Motor</strong> (${Math.round(distance)} m dari outlet)</span>
+                        <span class="badge bg-success">Valid</span>
+                    </div>`;
+            }
+            if (btnSubmit) btnSubmit.disabled = false;
+        } else {
+            isWithinRange = false;
+            if (rangeBadge) {
+                rangeBadge.innerHTML = `
+                    <div class="alert alert-danger py-1 px-2 mb-1 small">
+                        <strong><i class="bi bi-x-circle-fill"></i> Di Luar Area Cuci Motor!</strong><br>
+                        Jarak Anda saat ini: <strong>${Math.round(distance)} meter</strong> dari outlet (Batas maksimal: ${MAX_OUTLET_RADIUS} meter).<br>
+                        <span class="text-danger fw-bold">Anda harus berada di area outlet cuci motor untuk dapat absen.</span>
+                    </div>`;
+            }
+            if (btnSubmit) btnSubmit.disabled = true;
+        }
+
+        alamat.textContent = 'Mencari detail nama jalan...';
+
+        // 2. Reverse Geocode Akurat (Nama Jalan Detail via Photon + Nominatim)
+        let streetName = '';
+        let districtName = '';
+        let cityName = '';
+        
+        try {
+            const pRes = await fetch(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}`);
+            if (pRes.ok) {
+                const pData = await pRes.json();
+                if (pData.features && pData.features.length > 0) {
+                    const props = pData.features[0].properties || {};
+                    streetName = props.street || props.name || '';
+                    districtName = props.district || props.locality || '';
+                    cityName = props.city || '';
+                }
+            }
+        } catch (e) {}
+
+        try {
+            const nRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`, {
+                headers: { 'User-Agent': 'WashPOS/1.0' }
             });
-    }, err=>{
-        status.textContent='Gagal: '+err.message;
-        alert('Gagal ambil lokasi: '+err.message+' — Aktifkan GPS dan izinkan lokasi.');
-    }, {enableHighAccuracy:true, timeout:10000});
+            if (nRes.ok) {
+                const nData = await nRes.json();
+                const a = nData.address || {};
+                const nomStreet = a.road || a.pedestrian || a.street || '';
+                const houseNo = a.house_number ? ' No. ' + a.house_number : '';
+                const residential = a.residential || a.neighbourhood || '';
+                const district = a.suburb || a.city_district || districtName || '';
+                const city = a.city || a.town || cityName || 'Makassar';
+
+                if (!streetName || nomStreet) {
+                    streetName = nomStreet ? (nomStreet + houseNo) : streetName;
+                }
+
+                const parts = [streetName, residential, district, city].filter(Boolean).filter((v, i, arr) => arr.indexOf(v) === i);
+                const finalAddr = parts.length > 0 ? parts.join(', ') : (nData.display_name || `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+
+                lokasiData.addr = finalAddr;
+                addrIn.value = finalAddr;
+                alamat.innerHTML = `<strong>📍 ${finalAddr}</strong>`;
+                const lokPreview = document.getElementById('lokasiKameraPreview');
+                if (lokPreview) lokPreview.textContent = finalAddr;
+                return;
+            }
+        } catch (e) {}
+
+        const fallbackAddr = [streetName, districtName, cityName].filter(Boolean).join(', ') || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        lokasiData.addr = fallbackAddr;
+        addrIn.value = fallbackAddr;
+        alamat.innerHTML = `<strong>📍 ${fallbackAddr}</strong>`;
+        const lokPreview = document.getElementById('lokasiKameraPreview');
+        if (lokPreview) lokPreview.textContent = fallbackAddr;
+    }, err => {
+        status.textContent = 'Gagal: ' + err.message;
+        alert('Gagal mengambil lokasi GPS: ' + err.message + '\nHarap aktifkan GPS perangkat Anda dan izinkan akses lokasi.');
+    }, { enableHighAccuracy: true, timeout: 10000 });
 }
 
 function overlayCanvas(canvas, img, lokasi, jam){
@@ -325,11 +422,17 @@ function captureAbsen(){
 }
 
 function validateAbsen(form){
-    if(!form.latitude.value || !form.longitude.value){
-        if(!confirm('Lokasi belum ada — tetap kirim absen tanpa lokasi?')) return false;
+    if(!form.latitude.value || !form.longitude.value || form.latitude.value === '0'){
+        alert('Lokasi GPS wajib didapat sebelum absen. Silakan klik tombol "📍 Ambil Lokasi".');
+        return false;
     }
-    if(!form.photo.files || !form.photo.files[0]){ alert('Foto wajib — ambil via Kamera'); return false; }
-    if(form.photo.files[0].size>4*1024*1024){ alert('Foto >4MB'); return false; }
+    const dist = getDistanceFromOutlet(parseFloat(form.latitude.value), parseFloat(form.longitude.value));
+    if (dist > MAX_OUTLET_RADIUS) {
+        alert('Akses Ditolak: Anda berada di luar area cuci motor!\n\nJarak posisi Anda: ' + Math.round(dist) + ' meter dari outlet (Batas maksimal: ' + MAX_OUTLET_RADIUS + ' meter).\nHarap lakukan absen saat sudah berada di lokasi outlet cuci motor.');
+        return false;
+    }
+    if(!form.photo.files || !form.photo.files[0]){ alert('Foto selfie wajib diambil via kamera aplikasi!'); return false; }
+    if(form.photo.files[0].size > 4*1024*1024){ alert('Ukuran foto terlalu besar (>4MB)'); return false; }
     return true;
 }
 // auto ambil lokasi saat load
