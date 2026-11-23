@@ -2051,8 +2051,9 @@ app.get('/reports', requireOwner, (req, res) => {
             const safePage = Math.min(pageNum, totalPages);
             const offset = (safePage - 1) * limitNum;
             db.all(`SELECT * FROM journals ${whereClause} ORDER BY date ASC LIMIT ? OFFSET ?`, [...params, limitNum, offset], (e, journals) => {
-                // Aggregate filtered (kas besar + kecil)
+                // Aggregate filtered (kas besar + kecil + QRIS + bank)
                 let fKas=0, fKasBesar=0, fKasKecil=0, fPendapatan=0, fBiaya=0;
+                const fAkunSaldo = {};
                 const isKas = (t)=> t!=='Pendapatan' && t!=='Biaya';
                 (allJournals||[]).forEach(j=>{
                     if(j.account_type==='Pendapatan') fPendapatan+= j.credit - j.debit;
@@ -2060,9 +2061,10 @@ app.get('/reports', requireOwner, (req, res) => {
                     if(isKas(j.account_type)){
                         const v=j.debit - j.credit;
                         fKas+=v;
-                        if(j.account_type==='Kas Besar') fKasBesar+=v;
-                        else if(j.account_type==='Kas Kecil') fKasKecil+=v;
-                        else fKasKecil+=v; // Kas lama anggap Kecil
+                        const normAkun = (j.account_type==='Kas') ? 'Kas Kecil' : j.account_type;
+                        fAkunSaldo[normAkun] = (fAkunSaldo[normAkun] || 0) + v;
+                        if(normAkun==='Kas Besar') fKasBesar+=v;
+                        else if(normAkun==='Kas Kecil') fKasKecil+=v;
                     }
                 });
                 const fLaba=fPendapatan - fBiaya;
@@ -2103,7 +2105,7 @@ app.get('/reports', requireOwner, (req, res) => {
                             res.render('reports', { 
                                 journals, allJournals, total, totalPages, currentPage: safePage, limit: limitNum, query:{from: from||'', to: to||''},
                                 totalPendapatan: fPendapatan, totalBiaya: fBiaya, totalKas: fKas, totalKasBesar: fKasBesar, totalKasKecil: fKasKecil, labaBersih: fLaba,
-                                ledger, biayaPerKategori: biayaPerKategori||[], totalStock, accounts: accounts||[], saldoMap,
+                                ledger, biayaPerKategori: biayaPerKategori||[], totalStock, accounts: accounts||[], saldoMap, fAkunSaldo,
                                 kpiToday: todayRow||{c:0, omzet:0}, kpiBulan: bulanRow||{omzetBulan:0}, tren: tren||[]
                             });
                         });
@@ -2143,7 +2145,8 @@ app.post('/kas/transfer', requireOwner, (req, res) => {
         function doTransfer(){
             const desc = description ? `Transfer ${from_kas}→${to_kas}: ${description}` : `Transfer ${from_kas} → ${to_kas}`;
             db.run("INSERT INTO journals (description, debit, credit, account_type) VALUES (?,?,?,?)", [desc, amt, 0, to_kas], ()=>{
-                db.run("INSERT INTO journals (description, debit, credit, account_type) VALUES (?,?,?,?)", [desc, 0, amt, from_kas], ()=>{
+                db.run("INSERT INTO journals (description, debit, credit, account_type) VALUES (?,?,?,?)", [desc, 0, amt, from_kas], async ()=>{
+                    try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Transfer] uploadDbNow error:', e.message); }
                     res.redirect('/reports');
                 });
             });
