@@ -1490,8 +1490,9 @@ app.post('/master/settings/telegram', requireOwner, (req, res) => {
         db.run("INSERT INTO settings (key, value) VALUES ('telegram_chat_id', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [chatId]);
         db.run("INSERT INTO settings (key, value) VALUES ('telegram_auto_send', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [autoSend]);
         db.run("INSERT INTO settings (key, value) VALUES ('telegram_auto_send_time', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [autoSendTime]);
-        db.run("INSERT INTO settings (key, value) VALUES ('telegram_timezone', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [timezone], (err) => {
+        db.run("INSERT INTO settings (key, value) VALUES ('telegram_timezone', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [timezone], async (err) => {
             if (err) return renderMaster(res, 'Gagal menyimpan pengaturan Telegram: ' + err.message);
+            try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Master] uploadDbNow error:', e.message); }
             renderMaster(res, null, 'Pengaturan Notifikasi & Jadwal Otomatis Telegram berhasil disimpan!');
         });
     });
@@ -1557,8 +1558,9 @@ app.post('/akun/tambah', requireOwner, (req, res) => {
     const allowedType=['Kas','Bank','QRIS','E-Wallet','Lainnya'];
     const t=allowedType.includes(type)? type : 'Kas';
     if (!isValidName(name,2)) return res.status(400).send('Nama akun min 2 karakter <a href="/akun">Kembali</a>');
-    db.run("INSERT INTO accounts (name, type) VALUES (?, ?)", [name.trim(), t], (err)=>{
+    db.run("INSERT INTO accounts (name, type) VALUES (?, ?)", [name.trim(), t], async (err)=>{
         if (err) return res.status(400).send('Nama akun sudah ada (unik) <a href="/akun">Kembali</a>');
+        try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Akun] uploadDbNow error:', e.message); }
         res.redirect('/akun');
     });
 });
@@ -1569,7 +1571,10 @@ app.post('/akun/hapus', requireOwner, (req, res) => {
         if (!acc) return res.redirect('/akun');
         db.get("SELECT COALESCE(SUM(debit-credit),0) as saldo FROM journals WHERE account_type=?", [acc.name], (e2, row)=>{
             if (row && row.saldo !==0) return res.status(400).send(`Tidak bisa hapus: saldo ${acc.name} Rp ${row.saldo.toLocaleString('id-ID')} masih ada (pindahkan dulu). <a href="/akun">Kembali</a>`);
-            db.run("DELETE FROM accounts WHERE id=?", [id], ()=> res.redirect('/akun'));
+            db.run("DELETE FROM accounts WHERE id=?", [id], async ()=> {
+                try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Akun] uploadDbNow error:', e.message); }
+                res.redirect('/akun');
+            });
         });
     });
 });
@@ -1592,7 +1597,8 @@ app.post('/akun/edit', requireOwner, (req, res) => {
                 // update jurnal agar saldo ikut pindah ke nama baru — bypass trigger via temp disable
                 db.run("DROP TRIGGER IF EXISTS no_update_journal", ()=>{
                     db.run("UPDATE journals SET account_type=? WHERE account_type=?", [newName, oldName], ()=>{
-                        db.run(`CREATE TRIGGER IF NOT EXISTS no_update_journal BEFORE UPDATE ON journals BEGIN SELECT RAISE(ABORT, 'Jurnal tidak boleh diupdate - gunakan reversal'); END;`, ()=>{
+                        db.run(`CREATE TRIGGER IF NOT EXISTS no_update_journal BEFORE UPDATE ON journals BEGIN SELECT RAISE(ABORT, 'Jurnal tidak boleh diupdate - gunakan reversal'); END;`, async ()=>{
+                            try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Akun] uploadDbNow error:', e.message); }
                             res.redirect('/akun');
                         });
                     });
