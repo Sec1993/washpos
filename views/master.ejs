@@ -358,14 +358,22 @@ function openRoleModal(id, username, currentRole) {
 
         <h6>Daftar Layanan</h6>
         <div class="table-responsive">
-            <table class="table table-sm table-hover">
-                <thead class="table-light"><tr><th>Nama Layanan & Edit</th><th>Harga Jual</th><th>Komisi Pencuci</th><th class="text-end">Aksi</th></tr></thead>
+            <table class="table table-sm table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Nama Layanan & Edit</th>
+                        <th>Harga Jual</th>
+                        <th>Komisi Pencuci</th>
+                        <th class="text-center">Status</th>
+                        <th class="text-end">Aksi</th>
+                    </tr>
+                </thead>
                 <tbody>
                     <% if (services.length === 0) { %>
-                        <tr><td colspan="4" class="text-center text-muted">Belum ada layanan.</td></tr>
+                        <tr><td colspan="5" class="text-center text-muted">Belum ada layanan.</td></tr>
                     <% } %>
                     <% services.forEach(s => { %>
-                    <tr>
+                    <tr class="<%= s.isActive === 0 ? 'table-secondary opacity-75' : '' %>">
                         <td style="min-width:380px">
                             <form action="/master/services/update" method="POST" class="d-flex gap-1 align-items-center" onsubmit="return validateRupiahForm(this) && confirm('Yakin update layanan <%= s.name %>?')">
                                 <input type="hidden" name="id" value="<%= s.id %>">
@@ -377,10 +385,29 @@ function openRoleModal(id, username, currentRole) {
                         </td>
                         <td><span class="fw-bold">Rp <%= s.price.toLocaleString('id-ID') %></span></td>
                         <td><span class="badge <%= (s.commission && s.commission > 0) ? 'bg-success' : 'bg-secondary' %>">Rp <%= (s.commission || 0).toLocaleString('id-ID') %></span></td>
+                        <td class="text-center">
+                            <% if (s.isActive !== 0) { %>
+                                <span class="badge bg-success">Aktif</span>
+                            <% } else { %>
+                                <span class="badge bg-secondary">Nonaktif</span>
+                            <% } %>
+                        </td>
                         <td class="text-end">
-                            <form action="/master/services/delete" method="POST" class="d-inline" onsubmit="return confirm('Hapus layanan <%= s.name %>?')">
+                            <form action="/master/services/toggle" method="POST" class="d-inline">
                                 <input type="hidden" name="id" value="<%= s.id %>">
-                                <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
+                                <% if (s.isActive !== 0) { %>
+                                    <button type="submit" class="btn btn-sm btn-outline-warning py-1 px-2" style="font-size:12px;" title="Nonaktifkan agar tidak muncul di kasir" onclick="return confirm('Nonaktifkan layanan <%= s.name %>? Layanan ini sementara tidak akan muncul di menu kasir.')">
+                                        ⏸️ Nonaktifkan
+                                    </button>
+                                <% } else { %>
+                                    <button type="submit" class="btn btn-sm btn-success py-1 px-2" style="font-size:12px;" title="Aktifkan kembali agar muncul di kasir" onclick="return confirm('Aktifkan kembali layanan <%= s.name %>? Layanan ini akan kembali muncul di menu kasir.')">
+                                        ▶️ Aktifkan
+                                    </button>
+                                <% } %>
+                            </form>
+                            <form action="/master/services/delete" method="POST" class="d-inline ms-1" onsubmit="return confirm('Hapus permanen layanan <%= s.name %>?')">
+                                <input type="hidden" name="id" value="<%= s.id %>">
+                                <button type="submit" class="btn btn-sm btn-outline-danger py-1 px-2" style="font-size:12px;">Hapus</button>
                             </form>
                         </td>
                     </tr>
@@ -389,7 +416,7 @@ function openRoleModal(id, username, currentRole) {
             </table>
         </div>
         <div class="alert alert-info py-2 mt-3 mb-0">
-            <small><strong>Tips:</strong> Atur <strong>Harga Jual</strong> dan <strong>Komisi Pencuci</strong> per layanan. Komisi <strong>boleh diisi 0</strong> untuk layanan yang tidak memerlukan bagi hasil/komisi pencuci.</small>
+            <small><strong>Tips:</strong> Atur <strong>Harga Jual</strong> dan <strong>Komisi Pencuci</strong> per layanan. Gunakan tombol <strong>"⏸️ Nonaktifkan"</strong> jika suatu layanan sedang tidak tersedia agar tidak muncul di kasir, tanpa menghapus riwayat laporan transaksi lama.</small>
         </div>
     </div>
 </div>

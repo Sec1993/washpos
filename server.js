@@ -1040,7 +1040,7 @@ app.post('/inventory/update', requireAdminOrOwner, (req, res) => {
 
 // Routes - Master Data (Owner Only) - Kelola Karyawan, Layanan, Kategori, & Akun Login Pengguna
 function renderMaster(res, error = null, success = null) {
-    db.all("SELECT * FROM services ORDER BY id ASC", (err, services) => {
+    db.all("SELECT * FROM services ORDER BY isActive DESC, id ASC", (err, services) => {
         db.all("SELECT * FROM workers ORDER BY CASE WHEN role='Admin' THEN 1 ELSE 2 END, id ASC", (err, workers) => {
             db.all("SELECT * FROM expense_categories ORDER BY name ASC", (err, expense_categories) => {
                 db.all("SELECT id, username, role FROM users ORDER BY id ASC", (err, users) => {
@@ -1209,6 +1209,14 @@ app.post('/master/services/update', requireOwner, (req, res) => {
 app.post('/master/services/delete', requireOwner, (req, res) => {
     const { id } = req.body;
     db.run("DELETE FROM services WHERE id = ?", [id], async () => {
+        try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Master] uploadDbNow error:', e.message); }
+        res.redirect('/master');
+    });
+});
+
+app.post('/master/services/toggle', requireOwner, (req, res) => {
+    const { id } = req.body;
+    db.run("UPDATE services SET isActive = CASE WHEN isActive = 1 THEN 0 ELSE 1 END WHERE id = ?", [id], async () => {
         try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Master] uploadDbNow error:', e.message); }
         res.redirect('/master');
     });
