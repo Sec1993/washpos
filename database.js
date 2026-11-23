@@ -68,6 +68,8 @@ db.serialize(() => {
     db.run(`ALTER TABLE workers ADD COLUMN phone TEXT`, (err) => {});
     db.run(`ALTER TABLE workers ADD COLUMN role TEXT DEFAULT 'Pencuci'`, (err) => {});
     db.run(`UPDATE workers SET role = 'Pencuci' WHERE role IS NULL OR role = ''`);
+    db.run(`ALTER TABLE workers ADD COLUMN bonus_rajin REAL DEFAULT 150000`, (err) => {});
+    db.run(`UPDATE workers SET bonus_rajin = 150000 WHERE bonus_rajin IS NULL`);
 
     // 4. Sales table
     db.run(`CREATE TABLE IF NOT EXISTS sales (

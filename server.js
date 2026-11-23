@@ -1173,16 +1173,17 @@ app.post('/master/services/delete', requireOwner, (req, res) => {
 });
 
 app.post('/master/workers/add', requireOwner, (req, res) => {
-    const { name, join_date, daily_salary, phone, role } = req.body;
+    const { name, join_date, daily_salary, phone, role, bonus_rajin } = req.body;
     if (!isValidName(name, 2)) {
         return renderMaster(res, 'Validasi gagal: Nama karyawan min 2 karakter.');
     }
     const finalJoinDate = join_date && join_date.trim() ? join_date.trim() : getWitaTime().toISOString().slice(0, 10);
     const parsedDailySalary = parseRupiah(daily_salary || 0);
+    const parsedBonusRajin = (bonus_rajin !== undefined && bonus_rajin !== '') ? parseRupiah(bonus_rajin) : 150000;
     const cleanPhone = phone ? phone.trim() : '';
     const cleanRole = (role === 'Admin' || role === 'admin') ? 'Admin' : 'Pencuci';
 
-    db.run("INSERT INTO workers (name, join_date, daily_salary, phone, role) VALUES (?, ?, ?, ?, ?)", [name.trim(), finalJoinDate, parsedDailySalary, cleanPhone, cleanRole], (err) => {
+    db.run("INSERT INTO workers (name, join_date, daily_salary, phone, role, bonus_rajin) VALUES (?, ?, ?, ?, ?, ?)", [name.trim(), finalJoinDate, parsedDailySalary, cleanPhone, cleanRole, parsedBonusRajin], (err) => {
         if (err) {
             return renderMaster(res, 'Validasi gagal: Nama karyawan sudah ada (unik).');
         }
@@ -1191,15 +1192,16 @@ app.post('/master/workers/add', requireOwner, (req, res) => {
 });
 
 app.post('/master/workers/update', requireOwner, (req, res) => {
-    const { id, name, join_date, daily_salary, phone, role } = req.body;
+    const { id, name, join_date, daily_salary, phone, role, bonus_rajin } = req.body;
     if (!id || !isValidName(name, 2)) {
         return renderMaster(res, 'Validasi gagal: ID atau nama karyawan tidak valid.');
     }
     const parsedDailySalary = parseRupiah(daily_salary || 0);
+    const parsedBonusRajin = (bonus_rajin !== undefined && bonus_rajin !== '') ? parseRupiah(bonus_rajin) : 150000;
     const cleanPhone = phone ? phone.trim() : '';
     const cleanRole = (role === 'Admin' || role === 'admin') ? 'Admin' : 'Pencuci';
 
-    db.run("UPDATE workers SET name = ?, join_date = ?, daily_salary = ?, phone = ?, role = ? WHERE id = ?", [name.trim(), join_date, parsedDailySalary, cleanPhone, cleanRole, id], (err) => {
+    db.run("UPDATE workers SET name = ?, join_date = ?, daily_salary = ?, phone = ?, role = ?, bonus_rajin = ? WHERE id = ?", [name.trim(), join_date, parsedDailySalary, cleanPhone, cleanRole, parsedBonusRajin, id], (err) => {
         if (err) {
             return renderMaster(res, 'Gagal memperbarui data karyawan: ' + err.message);
         }
@@ -1613,7 +1615,8 @@ app.get('/komisi', requireOwner, (req, res) => {
                             
                             // Cek apakah masuk full (di luar hari off 1x/minggu)
                             const isFull = (days >= targetWorkingDays) && (totalCalendarDays >= 14);
-                            const autoBonus = isFull ? fullBonusNominal : 0;
+                            const workerBonus = (w.bonus_rajin !== undefined && w.bonus_rajin !== null && !isNaN(w.bonus_rajin)) ? w.bonus_rajin : fullBonusNominal;
+                            const autoBonus = isFull ? workerBonus : 0;
                             const totalGaji = totalDailySalary + salesData.total_komisi + autoBonus;
                             const paidInfo = payMap[key] || null;
 
@@ -1630,6 +1633,7 @@ app.get('/komisi', requireOwner, (req, res) => {
                                 join_date: w.join_date || '-',
                                 days_present: days,
                                 daily_rate: dailyRate,
+                                bonus_rajin: workerBonus,
                                 total_daily_salary: totalDailySalary,
                                 total_motor: salesData.total_motor,
                                 total_omzet: salesData.total_omzet,
@@ -1854,7 +1858,8 @@ app.get('/komisi/slip/:workerName', requireOwner, (req, res) => {
                             totalOmzet += (r.price || 0);
                         });
 
-                        let defaultBonus = isFullAttendance ? fullBonusNominal : 0;
+                        const workerBonus = (worker && worker.bonus_rajin !== undefined && worker.bonus_rajin !== null && !isNaN(worker.bonus_rajin)) ? worker.bonus_rajin : fullBonusNominal;
+                        let defaultBonus = isFullAttendance ? workerBonus : 0;
                         const numBonus = (bonus !== undefined && bonus !== null && String(bonus).trim() !== '') 
                             ? parseRupiah(bonus || 0) 
                             : defaultBonus;
