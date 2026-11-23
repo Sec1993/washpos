@@ -103,12 +103,15 @@ async function uploadDb() {
 }
 
 /**
- * Upload langsung tanpa menunggu debounce (misal saat edit harga master / setting toko).
+ * Upload langsung tanpa menunggu debounce (misal saat edit harga master / setting toko / data karyawan).
  */
 async function uploadDbNow() {
     if (debounceTimer) {
         clearTimeout(debounceTimer);
         debounceTimer = null;
+    }
+    while (isUploading) {
+        await new Promise(r => setTimeout(r, 100));
     }
     return await uploadDb();
 }
@@ -116,7 +119,7 @@ async function uploadDbNow() {
 /**
  * Debounce upload agar tidak membebani network saat banyak transaksi beruntun.
  */
-function scheduleUpload(delayMs = 2500) {
+function scheduleUpload(delayMs = 1000) {
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
         debounceTimer = null;

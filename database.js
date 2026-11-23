@@ -325,17 +325,6 @@ db.serialize(() => {
             stmt.run('karyawan', karyawanHash, 'karyawan');
             stmt.finalize();
             console.log('Default accounts created: owner, admin, karyawan');
-        } else {
-            // Pastikan akun role admin ada jika belum ada
-            db.get("SELECT COUNT(*) as count FROM users WHERE role = 'admin'", (e, r) => {
-                if (r && r.count === 0) {
-                    const salt = bcrypt.genSaltSync(10);
-                    const adminHash = bcrypt.hashSync('admin123', salt);
-                    db.run("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", ['admin', adminHash, 'admin'], (err) => {
-                        if (!err) console.log('Default admin account created: admin / admin123');
-                    });
-                }
-            });
         }
     });
 
@@ -376,13 +365,6 @@ db.serialize(() => {
             stmt.run('Agus', 'Pencuci', 0);
             stmt.run('Admin', 'Admin', 0);
             stmt.finalize();
-        } else {
-            // Pastikan staf Admin tersedia di tabel workers agar bisa diabsen & dihitung gajinya
-            db.get("SELECT COUNT(*) as c FROM workers WHERE role = 'Admin' OR name = 'Admin'", (errA, rA) => {
-                if (rA && rA.c === 0) {
-                    db.run("INSERT OR IGNORE INTO workers (name, role, daily_salary, join_date) VALUES ('Admin', 'Admin', 0, DATE('now'))");
-                }
-            });
         }
     });
 

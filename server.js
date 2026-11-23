@@ -1283,10 +1283,11 @@ app.post('/master/workers/add', requireOwner, (req, res) => {
     const cleanPhone = phone ? phone.trim() : '';
     const cleanRole = (role === 'Admin' || role === 'admin') ? 'Admin' : 'Pencuci';
 
-    db.run("INSERT INTO workers (name, join_date, daily_salary, phone, role, bonus_rajin) VALUES (?, ?, ?, ?, ?, ?)", [name.trim(), finalJoinDate, parsedDailySalary, cleanPhone, cleanRole, parsedBonusRajin], (err) => {
+    db.run("INSERT INTO workers (name, join_date, daily_salary, phone, role, bonus_rajin) VALUES (?, ?, ?, ?, ?, ?)", [name.trim(), finalJoinDate, parsedDailySalary, cleanPhone, cleanRole, parsedBonusRajin], async (err) => {
         if (err) {
             return renderMaster(res, 'Validasi gagal: Nama karyawan sudah ada (unik).');
         }
+        try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Master] uploadDbNow error:', e.message); }
         res.redirect('/master');
     });
 });
@@ -1301,17 +1302,21 @@ app.post('/master/workers/update', requireOwner, (req, res) => {
     const cleanPhone = phone ? phone.trim() : '';
     const cleanRole = (role === 'Admin' || role === 'admin') ? 'Admin' : 'Pencuci';
 
-    db.run("UPDATE workers SET name = ?, join_date = ?, daily_salary = ?, phone = ?, role = ?, bonus_rajin = ? WHERE id = ?", [name.trim(), join_date, parsedDailySalary, cleanPhone, cleanRole, parsedBonusRajin, id], (err) => {
+    db.run("UPDATE workers SET name = ?, join_date = ?, daily_salary = ?, phone = ?, role = ?, bonus_rajin = ? WHERE id = ?", [name.trim(), join_date, parsedDailySalary, cleanPhone, cleanRole, parsedBonusRajin, id], async (err) => {
         if (err) {
             return renderMaster(res, 'Gagal memperbarui data karyawan: ' + err.message);
         }
+        try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Master] uploadDbNow error:', e.message); }
         res.redirect('/master');
     });
 });
 
 app.post('/master/workers/delete', requireOwner, (req, res) => {
     const { id } = req.body;
-    db.run("DELETE FROM workers WHERE id = ?", [id], () => res.redirect('/master'));
+    db.run("DELETE FROM workers WHERE id = ?", [id], async () => {
+        try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Master] uploadDbNow error:', e.message); }
+        res.redirect('/master');
+    });
 });
 
 app.post('/master/expense-categories/add', requireOwner, (req, res) => {
@@ -1319,17 +1324,21 @@ app.post('/master/expense-categories/add', requireOwner, (req, res) => {
     if (!isValidName(name,2)) {
         return renderMaster(res, 'Validasi gagal: Nama kategori min 2 karakter.');
     }
-    db.run("INSERT INTO expense_categories (name) VALUES (?)", [name.trim()], (err) => {
+    db.run("INSERT INTO expense_categories (name) VALUES (?)", [name.trim()], async (err) => {
         if (err) {
             return renderMaster(res, 'Validasi gagal: Kategori sudah ada (unik).');
         }
+        try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Master] uploadDbNow error:', e.message); }
         res.redirect('/master');
     });
 });
 
 app.post('/master/expense-categories/delete', requireOwner, (req, res) => {
     const { id } = req.body;
-    db.run("DELETE FROM expense_categories WHERE id = ?", [id], () => res.redirect('/master'));
+    db.run("DELETE FROM expense_categories WHERE id = ?", [id], async () => {
+        try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Master] uploadDbNow error:', e.message); }
+        res.redirect('/master');
+    });
 });
 
 // --- Master User (Kelola Akun Login Kasir & Owner) ---
@@ -1347,10 +1356,11 @@ app.post('/master/users/add', requireOwner, (req, res) => {
     }
     const cleanRole = ['owner', 'admin', 'karyawan'].includes(role) ? role : 'karyawan';
     const hash = bcrypt.hashSync(password, 10);
-    db.run("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", [cleanUsername, hash, cleanRole], (err) => {
+    db.run("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", [cleanUsername, hash, cleanRole], async (err) => {
         if (err) {
             return renderMaster(res, `Validasi gagal: Username "${cleanUsername}" sudah digunakan.`);
         }
+        try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Master] uploadDbNow error:', e.message); }
         res.redirect('/master');
     });
 });
@@ -1366,8 +1376,9 @@ app.post('/master/users/delete', requireOwner, (req, res) => {
         if (targetUser.username === 'owner') {
             return renderMaster(res, 'Validasi gagal: Akun utama "owner" tidak dapat dihapus.');
         }
-        db.run("DELETE FROM users WHERE id = ?", [targetId], (err) => {
+        db.run("DELETE FROM users WHERE id = ?", [targetId], async (err) => {
             if (err) return renderMaster(res, 'Gagal menghapus akun: ' + err.message);
+            try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Master] uploadDbNow error:', e.message); }
             res.redirect('/master');
         });
     });
@@ -1381,8 +1392,9 @@ app.post('/master/users/reset-password', requireOwner, (req, res) => {
         return renderMaster(res, 'Validasi gagal: Password baru minimal 4 karakter.');
     }
     const hash = bcrypt.hashSync(new_password, 10);
-    db.run("UPDATE users SET password = ? WHERE id = ?", [hash, targetId], (err) => {
+    db.run("UPDATE users SET password = ? WHERE id = ?", [hash, targetId], async (err) => {
         if (err) return renderMaster(res, 'Gagal mengganti password: ' + err.message);
+        try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Master] uploadDbNow error:', e.message); }
         res.redirect('/master');
     });
 });
@@ -1399,8 +1411,9 @@ app.post('/master/users/update-role', requireOwner, (req, res) => {
         if (targetUser.username === 'owner' && role !== 'owner') {
             return renderMaster(res, 'Validasi gagal: Role akun utama "owner" tidak dapat diubah.');
         }
-        db.run("UPDATE users SET role = ? WHERE id = ?", [role, targetId], (err) => {
+        db.run("UPDATE users SET role = ? WHERE id = ?", [role, targetId], async (err) => {
             if (err) return renderMaster(res, 'Gagal mengubah role: ' + err.message);
+            try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Master] uploadDbNow error:', e.message); }
             res.redirect('/master');
         });
     });
@@ -1451,8 +1464,9 @@ app.post('/master/settings/payroll', requireOwner, (req, res) => {
     const bonus = parseRupiah(req.body.full_attendance_bonus || 0);
     const bonusVal = isNaN(bonus) || bonus < 0 ? 0 : bonus;
 
-    db.run("INSERT INTO settings (key, value) VALUES ('full_attendance_bonus', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [String(bonusVal)], (err) => {
+    db.run("INSERT INTO settings (key, value) VALUES ('full_attendance_bonus', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [String(bonusVal)], async (err) => {
         if (err) return renderMaster(res, 'Gagal menyimpan pengaturan bonus: ' + err.message);
+        try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Master] uploadDbNow error:', e.message); }
         renderMaster(res, null, 'Pengaturan Bonus Kehadiran Penuh (Bonus Rajin) berhasil disimpan!');
     });
 });
