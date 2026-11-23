@@ -1122,6 +1122,48 @@ app.get('/master/backup/download', requireOwner, (req, res) => {
     res.download(dbPath, `pos_backup_${todayStr}.db`);
 });
 
+app.post('/master/reset-transactions', requireOwner, (req, res) => {
+    const { owner_password } = req.body;
+    const currentUsername = req.session.user ? req.session.user.username : 'owner';
+
+    db.get("SELECT password FROM users WHERE username = ?", [currentUsername], (errUser, userRow) => {
+        if (errUser || !userRow || !bcrypt.compareSync(owner_password || '', userRow.password)) {
+            return renderMaster(res, 'Validasi gagal: Kata sandi Owner salah. Reset data dibatalkan.');
+        }
+
+        db.serialize(() => {
+            const backupDir = path.resolve(__dirname, 'backups');
+            if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+            const backupPath = path.join(backupDir, `pos_before_reset_${Date.now()}.db`);
+            const currentDbPath = path.resolve(__dirname, 'data', 'pos.db');
+            if (fs.existsSync(currentDbPath)) {
+                try { fs.copyFileSync(currentDbPath, backupPath); } catch (e) {}
+            }
+
+            db.run("DELETE FROM sales");
+            db.run("DELETE FROM sale_commissions");
+            db.run("DELETE FROM expenses");
+            db.run("DROP TRIGGER IF EXISTS no_delete_journal");
+            db.run("DELETE FROM journals");
+            db.run("CREATE TRIGGER IF NOT EXISTS no_delete_journal BEFORE DELETE ON journals BEGIN SELECT RAISE(ABORT, 'Jurnal tidak boleh dihapus - gunakan reversal'); END;");
+            db.run("DELETE FROM payroll_records");
+            db.run("DELETE FROM attendance");
+            db.run("DELETE FROM stock_history");
+            db.run("UPDATE inventory SET stock = 0");
+            db.run("DELETE FROM sqlite_sequence WHERE name IN ('sales', 'sale_commissions', 'expenses', 'journals', 'payroll_records', 'attendance', 'stock_history')");
+            db.run("VACUUM", async () => {
+                try {
+                    await cloudSync.uploadDbNow();
+                    console.log('[Reset] Data transaksi berhasil dibersihkan dan pos.db telah disinkronkan ke Supabase Cloud.');
+                } catch (e) {
+                    console.error('[Reset Error uploadDbNow]', e.message);
+                }
+                renderMaster(res, null, 'Semua riwayat transaksi berhasil di-reset! Database kini bersih dan siap untuk pengujian ulang.');
+            });
+        });
+    });
+});
+
 app.post('/master/services/add', requireOwner, (req, res) => {
     const { name, price, commission } = req.body;
     const p = parseRupiah(price);
