@@ -629,13 +629,17 @@ app.get('/sales', requireAdminOrOwner, (req, res) => {
                 db.all("SELECT * FROM journals WHERE account_type IN ('Kas Kecil','Kas')", (e, kasRows)=>{
                     let kasKecil=0;
                     (kasRows||[]).forEach(j=> kasKecil+= j.debit - j.credit);
-                    db.get(`SELECT COUNT(*) as total FROM sales ${whereClause}`, params, (err, countRow) => {
-                        const total = countRow ? countRow.total : 0;
-                        const totalPages = Math.max(1, Math.ceil(total / limitNum));
-                        const safePage = Math.min(pageNum, totalPages);
-                        const safeOffset = (safePage - 1) * limitNum;
-                        db.all(`SELECT * FROM sales ${whereClause} ORDER BY id DESC LIMIT ? OFFSET ?`, [...params, limitNum, safeOffset], (err, recentSales) => {
-                            res.render('sales', { services, workers, accounts: akunBayar, recentSales, total, totalPages, currentPage: safePage, limit: limitNum, query: { from: from||'', to: to||'', search: search||'' }, kasKecil });
+                    db.all("SELECT * FROM journals WHERE account_type='QRIS'", (eQ, qrisRows)=>{
+                        let qrisSaldo=0;
+                        (qrisRows||[]).forEach(j=> qrisSaldo+= j.debit - j.credit);
+                        db.get(`SELECT COUNT(*) as total FROM sales ${whereClause}`, params, (err, countRow) => {
+                            const total = countRow ? countRow.total : 0;
+                            const totalPages = Math.max(1, Math.ceil(total / limitNum));
+                            const safePage = Math.min(pageNum, totalPages);
+                            const safeOffset = (safePage - 1) * limitNum;
+                            db.all(`SELECT * FROM sales ${whereClause} ORDER BY id DESC LIMIT ? OFFSET ?`, [...params, limitNum, safeOffset], (err, recentSales) => {
+                                res.render('sales', { services, workers, accounts: akunBayar, recentSales, total, totalPages, currentPage: safePage, limit: limitNum, query: { from: from||'', to: to||'', search: search||'' }, kasKecil, qrisSaldo });
+                            });
                         });
                     });
                 });
@@ -2182,6 +2186,60 @@ app.get('/kas/kecil', requireAdminOrOwner, (req, res) => {
                 });
                 const withSaldo=journals.map(j=> ({...j, saldo: map.get(j.id)||0}));
                 res.render('kas-kecil', { journals: withSaldo, total, totalPages, currentPage: safePage, limit: limitNum, query:{from:from||'', to:to||''}, saldo });
+            });
+        });
+    });
+});
+
+app.get('/kas/qris', requireAdminOrOwner, (req, res) => {
+    const { from, to, page, limit } = req.query;
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(100, Math.max(10, parseInt(limit) || 20));
+    const todayStr = getWitaTime().toISOString().slice(0, 10);
+
+    // Kriteria pencarian sales QRIS (akun_kas QRIS atau tipe akun QRIS)
+    let whereSales = ["(s.akun_kas = 'QRIS' OR s.akun_kas IN (SELECT name FROM accounts WHERE type = 'QRIS'))"];
+    let paramsSales = [];
+    if (from) { whereSales.push("date(s.date) >= date(?)"); paramsSales.push(from); }
+    if (to) { whereSales.push("date(s.date) <= date(?)"); paramsSales.push(to); }
+    const whereClauseSales = "WHERE " + whereSales.join(" AND ");
+
+    // Saldo akumulasi QRIS dari journals (debit - credit)
+    db.get("SELECT COALESCE(SUM(debit - credit), 0) as saldoTotal FROM journals WHERE account_type = 'QRIS'", (eSaldo, rowSaldo) => {
+        const saldoTotal = rowSaldo ? rowSaldo.saldoTotal : 0;
+
+        // Total transaksi & total rupiah QRIS sesuai filter
+        db.get(`SELECT COUNT(*) as totalTrx, COALESCE(SUM(s.price), 0) as totalNominal FROM sales s ${whereClauseSales}`, paramsSales, (eCount, rowCount) => {
+            const totalTrx = rowCount ? rowCount.totalTrx : 0;
+            const totalNominal = rowCount ? rowCount.totalNominal : 0;
+            const totalPages = Math.max(1, Math.ceil(totalTrx / limitNum));
+            const safePage = Math.min(pageNum, totalPages);
+            const offset = (safePage - 1) * limitNum;
+
+            // Ambil daftar transaksi sales QRIS (paginated)
+            db.all(`SELECT s.* FROM sales s ${whereClauseSales} ORDER BY s.date DESC, s.id DESC LIMIT ? OFFSET ?`, [...paramsSales, limitNum, offset], (eList, salesList) => {
+                
+                // Ambil juga mutasi penarikan / transfer keluar QRIS (jika ada)
+                let whereJournals = ["account_type = 'QRIS' AND credit > 0"];
+                let paramsJournals = [];
+                if (from) { whereJournals.push("date(date) >= date(?)"); paramsJournals.push(from); }
+                if (to) { whereJournals.push("date(date) <= date(?)"); paramsJournals.push(to); }
+                const whereClauseJ = "WHERE " + whereJournals.join(" AND ");
+
+                db.all(`SELECT * FROM journals ${whereClauseJ} ORDER BY date DESC LIMIT 10`, paramsJournals, (eTransfers, transferList) => {
+                    res.render('kas-qris', {
+                        sales: salesList || [],
+                        transfers: transferList || [],
+                        totalTrx,
+                        totalNominal,
+                        saldoTotal,
+                        totalPages,
+                        currentPage: safePage,
+                        limit: limitNum,
+                        todayStr,
+                        query: { from: from || '', to: to || '' }
+                    });
+                });
             });
         });
     });

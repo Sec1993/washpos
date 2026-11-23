@@ -1,9 +1,12 @@
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
     <h2 class="mb-0">Kas Kecil (Outlet) — History</h2>
-    <div class="d-flex gap-2 align-items-center">
+    <div class="d-flex gap-2 align-items-center flex-wrap">
         <span class="badge bg-success fs-6">Saldo: Rp <%= saldo.toLocaleString('id-ID') %></span>
+        <a href="/kas/qris" class="btn btn-sm btn-warning">📱 History QRIS</a>
         <a href="/sales" class="btn btn-sm btn-outline-secondary">Kembali Penjualan</a>
-        <a href="/reports" class="btn btn-sm btn-outline-primary">Laporan</a>
+        <% if (user && user.role === 'owner') { %>
+            <a href="/reports" class="btn btn-sm btn-outline-primary">Laporan</a>
+        <% } %>
     </div>
 </div>
 <small class="text-muted d-block mb-3">Semua transaksi pemasukan (penjualan) & pengeluaran outlet tercatat ke Kas Kecil. Karyawan hanya akses ini. Klik badge di Penjualan untuk ke sini.</small>

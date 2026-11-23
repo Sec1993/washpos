@@ -1,0 +1,228 @@
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h2 class="mb-0">History QRIS — Pencocokan Closing Kasir</h2>
+        <small class="text-muted">Rekonsiliasi transaksi pembayaran barcode QRIS outlet untuk pencocokan harian dengan aplikasi QRIS merchant.</small>
+    </div>
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+        <span class="badge bg-warning text-dark fs-6">Total Saldo QRIS: Rp <%= saldoTotal.toLocaleString('id-ID') %></span>
+        <a href="/kas/kecil" class="btn btn-sm btn-outline-success">💵 Kas Kecil (Tunai)</a>
+        <a href="/sales" class="btn btn-sm btn-outline-secondary">Kembali Penjualan</a>
+    </div>
+</div>
+
+<!-- Highlight Box Closing QRIS -->
+<div class="row g-3 mb-3">
+    <div class="col-md-4 col-sm-6">
+        <div class="card border-warning shadow-sm h-100">
+            <div class="card-body">
+                <span class="text-muted small d-block">Total Nominal QRIS (Sesuai Filter)</span>
+                <h3 class="mb-0 fw-bold text-dark mt-1">Rp <%= totalNominal.toLocaleString('id-ID') %></h3>
+                <small class="text-muted">Uang masuk pembayaran QRIS</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 col-sm-6">
+        <div class="card border-info shadow-sm h-100">
+            <div class="card-body">
+                <span class="text-muted small d-block">Jumlah Transaksi QRIS</span>
+                <h3 class="mb-0 fw-bold text-dark mt-1"><%= totalTrx %> <span class="fs-6 fw-normal text-muted">transaksi</span></h3>
+                <small class="text-muted">Total barcode berhasil di-scan</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 col-sm-12">
+        <div class="card border-secondary shadow-sm h-100">
+            <div class="card-body">
+                <span class="text-muted small d-block"><strong>Petunjuk Closing Shift:</strong></span>
+                <small class="text-muted d-block mt-1">
+                    Cocokkan nominal <strong>Rp <%= totalNominal.toLocaleString('id-ID') %></strong> dan <strong><%= totalTrx %> transaksi</strong> di sini dengan mutasi pada aplikasi QRIS Anda (BCA / Nobu / GoBiz / ShopeePay). Jika ragu, klik tombol <strong>📷 Lihat Bukti</strong>.
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Box -->
+<div class="card shadow-sm mb-3">
+    <div class="card-body">
+        <form method="GET" action="/kas/qris" class="row g-2 align-items-end">
+            <div class="col-md-3 col-sm-6">
+                <label class="form-label small mb-1">Dari Tanggal</label>
+                <input type="date" name="from" value="<%= query.from %>" class="form-control form-control-sm">
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <label class="form-label small mb-1">Sampai Tanggal</label>
+                <input type="date" name="to" value="<%= query.to %>" class="form-control form-control-sm">
+            </div>
+            <div class="col-md-4 col-sm-12 d-flex gap-1">
+                <button type="submit" class="btn btn-warning btn-sm flex-fill">Filter</button>
+                <a href="/kas/qris?from=<%= todayStr %>&to=<%= todayStr %>" class="btn btn-outline-dark btn-sm flex-fill">📅 Hari Ini</a>
+                <a href="/kas/qris" class="btn btn-outline-secondary btn-sm flex-fill">Semua</a>
+            </div>
+            <div class="col-md-2 col-sm-12 text-end">
+                <small class="text-muted d-block">Hal <%= currentPage %>/<%= totalPages %> • <%= totalTrx %> data</small>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Tabel Transaksi QRIS -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-qr-code"></i> Daftar Transaksi Pembayaran QRIS</span>
+        <span class="badge bg-warning text-dark"><%= totalTrx %> transaksi</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 50px;">#</th>
+                        <th>Waktu (WITA)</th>
+                        <th>Plat & Pelanggan</th>
+                        <th>Layanan & Pencuci</th>
+                        <th>Kasir</th>
+                        <th class="text-end">Nominal</th>
+                        <th class="text-center">Bukti QRIS</th>
+                        <th class="text-center">Struk</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% if (sales.length === 0) { %>
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-4">
+                                Tidak ada transaksi QRIS pada rentang tanggal yang dipilih.
+                            </td>
+                        </tr>
+                    <% } %>
+                    <% sales.forEach((s, idx) => { %>
+                        <tr>
+                            <td><%= ((currentPage - 1) * limit) + idx + 1 %></td>
+                            <td>
+                                <strong><%= formatWitaDate(s.date, true) %></strong>
+                            </td>
+                            <td>
+                                <span class="badge bg-dark font-monospace"><%= s.license_plate %></span>
+                                <div class="small text-muted"><%= s.customer_name %></div>
+                            </td>
+                            <td>
+                                <div><%= s.service_name %></div>
+                                <small class="text-muted">Pencuci: <%= s.worker_name %></small>
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-dark border"><%= s.admin_name || 'Admin' %></span>
+                            </td>
+                            <td class="text-end fw-bold text-success fs-6">
+                                Rp <%= Number(s.price).toLocaleString('id-ID') %>
+                            </td>
+                            <td class="text-center">
+                                <% if (s.photo) { %>
+                                    <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size:12px;" onclick="showBuktiModal('<%= s.photo %>', '<%= s.license_plate %>', '<%= Number(s.price).toLocaleString('id-ID') %>')">
+                                        📷 Lihat Bukti
+                                    </button>
+                                <% } else { %>
+                                    <span class="text-muted small">-</span>
+                                <% } %>
+                            </td>
+                            <td class="text-center">
+                                <a href="/receipt/<%= s.id %>" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:12px;" target="_blank">
+                                    🖨️ Struk
+                                </a>
+                            </td>
+                        </tr>
+                    <% }) %>
+                </tbody>
+                <% if (sales.length > 0) { %>
+                    <tfoot class="table-light">
+                        <tr>
+                            <th colspan="5" class="text-end">Total Halaman Ini:</th>
+                            <th class="text-end text-success fs-6">
+                                Rp <%= sales.reduce((sum, s) => sum + Number(s.price || 0), 0).toLocaleString('id-ID') %>
+                            </th>
+                            <th colspan="2"></th>
+                        </tr>
+                    </tfoot>
+                <% } %>
+            </table>
+        </div>
+    </div>
+    
+    <% if (totalPages > 1) { %>
+    <div class="card-footer d-flex justify-content-between align-items-center">
+        <small class="text-muted">Tampil <%= sales.length %> dari <%= totalTrx %></small>
+        <nav>
+            <ul class="pagination pagination-sm mb-0">
+                <li class="page-item <%= currentPage <= 1 ? 'disabled' : '' %>">
+                    <a class="page-link" href="/kas/qris?from=<%= query.from %>&to=<%= query.to %>&page=<%= currentPage - 1 %>&limit=<%= limit %>">«</a>
+                </li>
+                <% for(let i=1; i<=totalPages; i++) { %>
+                    <li class="page-item <%= i === currentPage ? 'active' : '' %>">
+                        <a class="page-link" href="/kas/qris?from=<%= query.from %>&to=<%= query.to %>&page=<%= i %>&limit=<%= limit %>"><%= i %></a>
+                    </li>
+                <% } %>
+                <li class="page-item <%= currentPage >= totalPages ? 'disabled' : '' %>">
+                    <a class="page-link" href="/kas/qris?from=<%= query.from %>&to=<%= query.to %>&page=<%= currentPage + 1 %>&limit=<%= limit %>">»</a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+    <% } %>
+</div>
+
+<!-- Riwayat Penarikan / Transfer Saldo QRIS (Jika ada) -->
+<% if (transfers && transfers.length > 0) { %>
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-light">
+        <strong>Riwayat Penarikan / Transfer Saldo QRIS ke Bank / Kas</strong>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-striped mb-0">
+                <thead class="table-light">
+                    <tr><th>Tanggal</th><th>Keterangan</th><th class="text-end">Nominal Keluar</th></tr>
+                </thead>
+                <tbody>
+                    <% transfers.forEach(t => { %>
+                    <tr>
+                        <td><small><%= formatWitaDate(t.date, true) %></small></td>
+                        <td><small><%= t.description %></small></td>
+                        <td class="text-end text-danger fw-bold">Rp <%= Number(t.credit).toLocaleString('id-ID') %></td>
+                    </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<% } %>
+
+<!-- Modal Preview Foto Bukti QRIS -->
+<div class="modal fade" id="buktiModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="buktiModalTitle">Bukti Pembayaran QRIS</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center p-2">
+                <img id="buktiModalImg" src="" alt="Bukti QRIS" class="img-fluid rounded border shadow-sm" style="max-height: 480px;">
+                <div class="mt-2 small text-muted" id="buktiModalDesc"></div>
+            </div>
+            <div class="modal-footer">
+                <a id="buktiModalDownload" href="" target="_blank" class="btn btn-sm btn-outline-primary">Buka Ukuran Penuh</a>
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Tutup</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function showBuktiModal(photoUrl, plat, nominal) {
+    document.getElementById('buktiModalImg').src = photoUrl;
+    document.getElementById('buktiModalDownload').href = photoUrl;
+    document.getElementById('buktiModalTitle').innerText = 'Bukti QRIS — ' + plat;
+    document.getElementById('buktiModalDesc').innerText = 'Nominal Transaksi: Rp ' + nominal;
+    const modal = new bootstrap.Modal(document.getElementById('buktiModal'));
+    modal.show();
+}
+</script>

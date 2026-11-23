@@ -1,10 +1,11 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h2 class="mb-0">Modul Penjualan</h2>
-    <div class="d-flex gap-2 align-items-center">
+    <div class="d-flex gap-2 align-items-center flex-wrap">
         <button type="button" class="btn btn-sm btn-outline-info text-dark fw-bold" data-bs-toggle="modal" data-bs-target="#modalTelegramReport">
             ✈️ Tutup Kasir / Telegram
         </button>
-        <a href="/kas/kecil" class="badge bg-success fs-6 text-decoration-none" title="Klik lihat history Kas Kecil">Kas Kecil (Outlet): Rp <%= kasKecil.toLocaleString('id-ID') %> • Klik history</a>
+        <a href="/kas/kecil" class="badge bg-success fs-6 text-decoration-none" title="Klik lihat history Kas Kecil">Kas Kecil: Rp <%= kasKecil.toLocaleString('id-ID') %></a>
+        <a href="/kas/qris" class="badge bg-warning text-dark fs-6 text-decoration-none" title="Klik lihat history QRIS untuk closing">📱 QRIS: Rp <%= (typeof qrisSaldo !== 'undefined' ? qrisSaldo : 0).toLocaleString('id-ID') %> • History Closing</a>
     </div>
 </div>
 <small class="text-muted d-block mb-3">Kas outlet real-time — setiap penjualan/pengeluaran mengubah Kas/QRIS terpilih. Karyawan: Kas Kecil & QRIS.</small>
