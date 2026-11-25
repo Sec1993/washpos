@@ -531,7 +531,7 @@ app.get('/', requireLogin, async (req, res) => {
                 if (j.account_type === 'Kas Besar') kasBesar += j.debit - j.credit;
                 else if (j.account_type === 'Kas Kecil' || j.account_type === 'Kas') kasKecil += j.debit - j.credit;
                 else if (j.account_type === 'QRIS') qrisSaldo += j.debit - j.credit;
-                else if (j.account_type !== 'Pendapatan' && j.account_type !== 'Biaya') bankSaldo += j.debit - j.credit;
+                else if (j.account_type !== 'Pendapatan' && j.account_type !== 'Biaya' && j.account_type !== 'Modal') bankSaldo += j.debit - j.credit;
             });
             const totalDana = kasBesar + kasKecil + qrisSaldo + bankSaldo;
 
@@ -1562,6 +1562,10 @@ app.post('/api/telegram/send', requireAdminOrOwner, async (req, res) => {
 });
 
 // --- Akun Kas/Bank/QRIS (Owner kelola) ---
+function isReservedAccountName(name) {
+    return ['pendapatan', 'biaya', 'modal'].includes(String(name || '').trim().toLowerCase());
+}
+
 app.get('/akun', requireOwner, (req, res) => {
     db.all("SELECT * FROM accounts ORDER BY type, name ASC", (err, accounts)=>{
         if (err) return res.status(500).send('DB error');
@@ -1569,8 +1573,9 @@ app.get('/akun', requireOwner, (req, res) => {
             const saldoMap={};
             (rows||[]).forEach(r=> saldoMap[r.account_type]=r.saldo);
             if(saldoMap['Kas'] && !saldoMap['Kas Kecil']) { saldoMap['Kas Kecil']=(saldoMap['Kas Kecil']||0)+saldoMap['Kas']; }
-            db.all("SELECT * FROM journals WHERE description LIKE 'Transfer %' ORDER BY date DESC, id DESC LIMIT 50", (e, history)=>{
-                res.render('akun', { accounts, saldoMap, history: history||[] });
+            db.all("SELECT * FROM journals WHERE (description LIKE 'Transfer %' OR (description LIKE 'Setor Modal %' AND account_type != 'Modal')) ORDER BY date DESC, id DESC LIMIT 50", (e, history)=>{
+                const todayWita = getWitaTime().toISOString().slice(0, 10);
+                res.render('akun', { accounts, saldoMap, history: history||[], todayWita });
             });
         });
     });
@@ -1581,6 +1586,9 @@ app.post('/akun/tambah', requireOwner, (req, res) => {
     const allowedType=['Kas','Bank','QRIS','E-Wallet','Lainnya'];
     const t=allowedType.includes(type)? type : 'Kas';
     if (!isValidName(name,2)) return res.status(400).send('Nama akun min 2 karakter <a href="/akun">Kembali</a>');
+    if (isReservedAccountName(name)) {
+        return res.status(400).send('Nama akun tersebut khusus pembukuan sistem. Gunakan nama lain. <a href="/akun">Kembali</a>');
+    }
     db.run("INSERT INTO accounts (name, type) VALUES (?, ?)", [name.trim(), t], async (err)=>{
         if (err) return res.status(400).send('Nama akun sudah ada (unik) <a href="/akun">Kembali</a>');
         try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Akun] uploadDbNow error:', e.message); }
@@ -1607,6 +1615,9 @@ app.post('/akun/edit', requireOwner, (req, res) => {
     const allowedType=['Kas','Bank','QRIS','E-Wallet','Lainnya'];
     const t=allowedType.includes(type)? type : 'Kas';
     if (!id || !isValidName(name,2)) return res.status(400).send('Nama akun min 2 karakter <a href="/akun">Kembali</a>');
+    if (isReservedAccountName(name)) {
+        return res.status(400).send('Nama akun tersebut khusus pembukuan sistem. Gunakan nama lain. <a href="/akun">Kembali</a>');
+    }
     db.get("SELECT * FROM accounts WHERE id=?", [id], (e, old)=>{
         if (!old) return res.status(404).send('Akun tidak ditemukan <a href="/akun">Kembali</a>');
         if (old.name===name.trim() && old.type===t) return res.redirect('/akun');
@@ -2077,7 +2088,7 @@ app.get('/reports', requireOwner, (req, res) => {
                 // Aggregate filtered (kas besar + kecil + QRIS + bank)
                 let fKas=0, fKasBesar=0, fKasKecil=0, fPendapatan=0, fBiaya=0;
                 const fAkunSaldo = {};
-                const isKas = (t)=> t!=='Pendapatan' && t!=='Biaya';
+                const isKas = (t)=> t!=='Pendapatan' && t!=='Biaya' && t!=='Modal';
                 (allJournals||[]).forEach(j=>{
                     if(j.account_type==='Pendapatan') fPendapatan+= j.credit - j.debit;
                     if(j.account_type==='Biaya') fBiaya+= j.debit - j.credit;
@@ -2099,7 +2110,7 @@ app.get('/reports', requireOwner, (req, res) => {
                     const prev=ledger[j.account_type].length? ledger[j.account_type][ledger[j.account_type].length-1].balance:0;
                     let delta=0;
                     if(isKas(j.account_type)) delta=j.debit - j.credit;
-                    else if(j.account_type==='Pendapatan') delta=j.credit - j.debit;
+                    else if(j.account_type==='Pendapatan' || j.account_type==='Modal') delta=j.credit - j.debit;
                     else delta=j.debit - j.credit;
                     const bal=prev+delta;
                     ledger[j.account_type].push({ ...j, balance: bal });
@@ -2137,6 +2148,48 @@ app.get('/reports', requireOwner, (req, res) => {
                             });
                         });
                     });
+                });
+            });
+        });
+    });
+});
+
+app.post('/kas/setor-modal', requireOwner, (req, res) => {
+    const { to_kas, amount, tx_date, description } = req.body;
+    const amt = parseRupiah(amount);
+    if (!to_kas || !String(to_kas).trim()) {
+        return res.status(400).send('Validasi gagal: Akun tujuan wajib dipilih. <a href="/akun">Kembali</a>');
+    }
+    if (isNaN(amt) || amt < 1000) {
+        return res.status(400).send('Validasi gagal: Nominal minimal Rp 1.000. <a href="/akun">Kembali</a>');
+    }
+    const cleanDate = tx_date && /^\d{4}-\d{2}-\d{2}$/.test(String(tx_date).trim()) ? String(tx_date).trim() : '';
+    const todayWita = getWitaTime().toISOString().slice(0, 10);
+    let journalDate;
+    if (!cleanDate || cleanDate === todayWita) {
+        const nowUtcDate = new Date().toISOString().slice(0, 10);
+        journalDate = (nowUtcDate === todayWita)
+            ? new Date().toISOString().slice(0, 19).replace('T', ' ')
+            : `${todayWita} 00:00:01`;
+    } else {
+        // Jam 09:00 WITA (01:00 UTC) agar filter tanggal & tampilan WITA selalu jatuh tepat di tanggal yang dipilih
+        journalDate = `${cleanDate} 01:00:00`;
+    }
+    const targetAcc = String(to_kas).trim();
+    const cleanDesc = description ? String(description).trim().slice(0, 120) : '';
+    const desc = cleanDesc ? `Setor Modal → ${targetAcc}: ${cleanDesc}` : `Setor Modal → ${targetAcc}`;
+
+    db.get("SELECT name FROM accounts WHERE name = ?", [targetAcc], (errAcc, accRow) => {
+        if (errAcc || !accRow) {
+            return res.status(400).send('Akun tujuan tidak ditemukan. <a href="/akun">Kembali</a>');
+        }
+        db.serialize(() => {
+            db.run("INSERT INTO journals (date, description, debit, credit, account_type) VALUES (?,?,?,0,?)", [journalDate, desc, amt, targetAcc], (err1) => {
+                if (err1) return res.status(500).send('Gagal mencatat modal: ' + err1.message + ' <a href="/akun">Kembali</a>');
+                db.run("INSERT INTO journals (date, description, debit, credit, account_type) VALUES (?,?,0,?,'Modal')", [journalDate, desc, amt], async (err2) => {
+                    if (err2) return res.status(500).send('Gagal mencatat kredit modal: ' + err2.message + ' <a href="/akun">Kembali</a>');
+                    try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[SetorModal] uploadDbNow error:', e.message); }
+                    res.redirect('/akun?success=' + encodeURIComponent(`Berhasil menambah Rp ${amt.toLocaleString('id-ID')} ke ${targetAcc}`));
                 });
             });
         });

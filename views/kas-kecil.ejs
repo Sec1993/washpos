@@ -5,6 +5,7 @@
         <a href="/kas/qris" class="btn btn-sm btn-warning">📱 History QRIS</a>
         <a href="/sales" class="btn btn-sm btn-outline-secondary">Kembali Penjualan</a>
         <% if (user && user.role === 'owner') { %>
+            <a href="/akun" class="btn btn-sm btn-success">💰 Tambah Modal / Transfer</a>
             <a href="/reports" class="btn btn-sm btn-outline-primary">Laporan</a>
         <% } %>
     </div>
@@ -37,7 +38,7 @@
                     <% if(journals.length===0){ %><tr><td colspan="5" class="text-center text-muted py-3">Tidak ada mutasi sesuai filter.</td></tr><% } %>
                     <% journals.forEach(j=>{ %>
                     <tr>
-                        <td><small><%= new Date(j.date).toLocaleString('id-ID', {dateStyle:'short', timeStyle:'medium'}) %></small><br><small class="text-muted"><%= new Date(j.date).toLocaleDateString('id-ID') %> <%= new Date(j.date).toLocaleTimeString('id-ID') %></small></td>
+                        <td><small><%= typeof formatWitaDate === 'function' ? formatWitaDate(j.date, true) : new Date(j.date).toLocaleString('id-ID', {dateStyle:'short', timeStyle:'medium'}) %></small></td>
                         <td><small><%= j.description %></small><br><span class="badge <%= j.debit>0?'bg-success':'bg-danger' %>"><%= j.debit>0?'Masuk':'Keluar' %></span></td>
                         <td class="text-end <%= j.debit>0?'fw-bold text-success':'' %>"><%= j.debit>0?'Rp '+j.debit.toLocaleString('id-ID'):'-' %></td>
                         <td class="text-end <%= j.credit>0?'fw-bold text-danger':'' %>"><%= j.credit>0?'Rp '+j.credit.toLocaleString('id-ID'):'-' %></td>
