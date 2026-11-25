@@ -176,8 +176,8 @@
         <button onclick="window.print()" style="padding: 10px 20px; font-weight: bold; background: #0284C7; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%; margin-bottom: 8px;">
             🖨️ Cetak Slip Gaji Sekarang
         </button>
-        <button onclick="window.close()" style="padding: 8px 15px; background: #64748B; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;">
-            Tutup Jendela
+        <button onclick="if (window.history.length > 1) { window.history.back(); } else { window.location.href = '/komisi'; } setTimeout(function(){ window.close(); }, 100);" style="padding: 8px 15px; background: #64748B; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;">
+            ⬅️ Kembali / Tutup
         </button>
     </div>
 </body>

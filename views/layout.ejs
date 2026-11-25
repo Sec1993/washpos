@@ -205,6 +205,21 @@
             const urlParams=new URLSearchParams(window.location.search);
             if(urlParams.get('success')) showToast(urlParams.get('success'));
             if(urlParams.get('error')) showToast(urlParams.get('error'),'danger');
+
+            // Saat dibuka di dalam APK WashPOS-Mobile, pastikan link internal target="_blank" tetap terbuka di dalam WebView APK
+            if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+                document.addEventListener('click', function(e) {
+                    const anchor = e.target && e.target.closest ? e.target.closest('a[target="_blank"]') : null;
+                    if (!anchor || !anchor.href) return;
+                    try {
+                        const targetUrl = new URL(anchor.href, window.location.href);
+                        if (targetUrl.origin === window.location.origin) {
+                            e.preventDefault();
+                            window.location.href = targetUrl.href;
+                        }
+                    } catch (err) {}
+                });
+            }
         });
     </script>
     <script>

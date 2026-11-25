@@ -189,8 +189,8 @@
             </a>
         <% } %>
 
-        <a href="/sales" class="btn-action btn-back">
-            ⬅️ Kembali ke Kasir
+        <a href="<%= (typeof isPreview !== 'undefined' && isPreview) ? '/master' : '/sales' %>" id="btnBackReceipt" class="btn-action btn-back">
+            <%= (typeof isPreview !== 'undefined' && isPreview) ? '⬅️ Kembali ke Master' : '⬅️ Kembali ke Kasir' %>
         </a>
     </div>
 
@@ -484,7 +484,7 @@
         document.addEventListener('message', handleNativeResponse);
 
         // Otomatis sesuaikan tombol cetak berdasarkan perangkat (Aplikasi Mobile vs Browser HP vs PC)
-        document.addEventListener("DOMContentLoaded", function() {
+        function applyBluetoothButtonMode() {
             const isAndroid = /Android/i.test(navigator.userAgent);
             const hasWebBt = !!(navigator.bluetooth && navigator.bluetooth.requestDevice);
             const btnBt = document.getElementById('btnBluetoothPrint');
@@ -513,7 +513,16 @@
                     btnRawBt.style.display = "none";
                 }
             }
-        });
+
+            // Jika dibuka dari History QRIS (tanpa preview), arahkan tombol Kembali ke History QRIS
+            const btnBack = document.getElementById('btnBackReceipt');
+            if (btnBack && document.referrer && document.referrer.includes('/kas/qris') && !window.location.pathname.includes('preview')) {
+                btnBack.href = '/kas/qris';
+                btnBack.innerHTML = '⬅️ Kembali ke History QRIS';
+            }
+        }
+        document.addEventListener("DOMContentLoaded", applyBluetoothButtonMode);
+        window.addEventListener("load", applyBluetoothButtonMode);
 
         // Cetak Langsung via Web Bluetooth (Untuk Google Chrome Laptop/PC)
         async function printBluetoothDirect() {
