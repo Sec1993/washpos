@@ -416,7 +416,7 @@ app.get('/absen', requireLogin, (req, res) => {
             (e, todayRows) => {
                 const whereRecent = isOwner ? "" : `WHERE ${WORKER_ATTENDANCE_MATCH_SQL}`;
                 const paramsRecent = isOwner ? [] : [lockedWorkerName, username, uid];
-                db.all(`SELECT * FROM attendance ${whereRecent} ORDER BY datetime DESC LIMIT 30`, paramsRecent, (e, recent)=>{
+                db.all(`SELECT * FROM attendance ${whereRecent} ORDER BY datetime DESC LIMIT 60`, paramsRecent, (e, recent)=>{
                     res.render('absen', { 
                         todayRows: todayRows||[], 
                         recent: recent||[], 
@@ -524,6 +524,71 @@ app.post('/absen/hapus', requireOwner, (req, res) => {
         try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Absen Hapus] uploadDbNow error:', e.message); }
         res.redirect('/absen?success=' + encodeURIComponent('Data absen berhasil dihapus.'));
     });
+});
+
+// Input Absen Susulan / Manual (Khusus Owner untuk koreksi tanggal terlewat)
+app.post('/absen/manual', requireOwner, async (req, res) => {
+    try {
+        const { worker_name, date, mode, time_in, time_out, note } = req.body;
+        if (!worker_name || !worker_name.trim()) {
+            return res.status(400).send('Validasi gagal: Karyawan wajib dipilih. <a href="/absen">Kembali</a>');
+        }
+        const cleanDate = (date && /^\d{4}-\d{2}-\d{2}$/.test(date.trim())) ? date.trim() : '';
+        if (!cleanDate) {
+            return res.status(400).send('Validasi gagal: Tanggal tidak valid. <a href="/absen">Kembali</a>');
+        }
+        const normalizeTime = (t, fallback) => {
+            const s = String(t || '').trim();
+            if (/^\d{2}:\d{2}:\d{2}$/.test(s)) return s;
+            if (/^\d{2}:\d{2}$/.test(s)) return s + ':00';
+            return fallback;
+        };
+        const tIn = normalizeTime(time_in, '08:00:00');
+        const tOut = normalizeTime(time_out, '18:00:00');
+        const typesToInsert = mode === 'masuk_keluar'
+            ? [{ type: 'masuk', time: tIn }, { type: 'keluar', time: tOut }]
+            : [{ type: (mode === 'keluar' ? 'keluar' : 'masuk'), time: (mode === 'keluar' ? tOut : tIn) }];
+
+        const targetWorker = worker_name.trim();
+        const userRow = await new Promise((resolve) => {
+            db.get("SELECT id, username FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1", [targetWorker], (e, r) => resolve(r || null));
+        });
+        const targetUid = userRow ? userRow.id : req.session.user.id;
+        const targetUsername = userRow ? userRow.username : targetWorker.toLowerCase();
+
+        const outletLat = parseFloat(cachedShopSettings.outlet_latitude || '-5.160076') || 0;
+        const outletLng = parseFloat(cachedShopSettings.outlet_longitude || '119.422938') || 0;
+        const baseAddr = cachedShopSettings.outlet_address || 'Outlet';
+        const cleanNote = note ? String(note).trim().slice(0, 80) : 'Input Manual Owner';
+        const finalAddr = `[${cleanNote}] ${baseAddr}`;
+
+        const existingRows = await new Promise((resolve) => {
+            db.all(`SELECT type FROM attendance WHERE date=? AND ${WORKER_ATTENDANCE_MATCH_SQL}`, [cleanDate, targetWorker, targetUsername, targetUid], (e, rows) => resolve(rows || []));
+        });
+        const existingTypes = new Set(existingRows.map(r => r.type));
+
+        let insertedCount = 0;
+        for (const item of typesToInsert) {
+            if (existingTypes.has(item.type)) continue;
+            const dtIso = `${cleanDate}T${item.time}.000Z`;
+            await new Promise((resolve, reject) => {
+                db.run(
+                    "INSERT INTO attendance (user_id, username, worker_name, date, time, datetime, type, photo, latitude, longitude, address) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    [targetUid, targetUsername, targetWorker, cleanDate, item.time, dtIso, item.type, null, outletLat, outletLng, finalAddr],
+                    (err) => err ? reject(err) : resolve()
+                );
+            });
+            insertedCount++;
+        }
+
+        if (insertedCount === 0) {
+            return res.redirect('/absen?error=' + encodeURIComponent(`Absen ${targetWorker} tanggal ${cleanDate} sudah tercatat sebelumnya.`));
+        }
+        try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Absen Manual] uploadDbNow error:', e.message); }
+        res.redirect('/absen?success=' + encodeURIComponent(`Berhasil menambahkan absen susulan ${targetWorker} tanggal ${cleanDate}.`));
+    } catch (err) {
+        res.status(500).send('Gagal menyimpan absen manual: ' + err.message + ' <a href="/absen">Kembali</a>');
+    }
 });
 
 // Route - Dashboard / Default (Executive Analytics + Low Stock + KPI + Kas)

@@ -82,7 +82,14 @@
 
     <div class="col-md-7">
         <div class="card shadow-sm mb-3">
-            <div class="card-header bg-secondary text-white">Absen Hari Ini (<%= isOwner ? 'semua karyawan — Owner' : 'saya' %>)</div>
+            <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <span>Absen Terbaru (<%= isOwner ? 'semua karyawan — Owner' : 'saya' %>)</span>
+                <% if (user && user.role === 'owner') { %>
+                    <button type="button" class="btn btn-sm btn-warning fw-bold py-0 px-2" data-bs-toggle="modal" data-bs-target="#modalAbsenManual">
+                        📝 + Absen Susulan (Owner)
+                    </button>
+                <% } %>
+            </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-sm table-hover mb-0 align-middle">
@@ -116,7 +123,7 @@
         </div>
 
         <div class="card shadow-sm">
-            <div class="card-header bg-dark text-white">History Absen Saya (30 terbaru)</div>
+            <div class="card-header bg-dark text-white">History Absen (60 terbaru)</div>
             <div class="card-body p-0">
                 <div class="table-responsive" style="max-height:300px; overflow-y:auto;">
                     <table class="table table-sm table-hover mb-0">
@@ -128,7 +135,7 @@
                                 <td><%= h.date %></td>
                                 <td><%= h.time %></td>
                                 <td><span class="badge <%= h.type==='masuk'?'bg-success':'bg-danger' %>"><%= h.type %></span></td>
-                                <td><% if(h.photo){ %><a href="<%= h.photo %>" target="_blank"><img src="<%= h.photo %>" style="width:45px; height:45px; object-fit:cover; border-radius:4px;"></a><% } %></td>
+                                <td><% if(h.photo){ %><a href="<%= h.photo %>" target="_blank"><img src="<%= h.photo %>" style="width:45px; height:45px; object-fit:cover; border-radius:4px;"></a><% } else { %><span class="text-muted">-</span><% } %></td>
                                 <td><small><%= h.address || (h.latitude+', '+h.longitude) %></small></td>
                             </tr>
                             <% }) %>
@@ -139,6 +146,73 @@
         </div>
     </div>
 </div>
+
+<% if (user && user.role === 'owner') { %>
+<!-- Modal Input Absen Susulan / Manual (Khusus Owner) -->
+<div class="modal fade" id="modalAbsenManual" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <form action="/absen/manual" method="POST" class="modal-content">
+      <div class="modal-header bg-warning text-dark">
+        <h6 class="modal-title fw-bold">📝 Input Absen Susulan / Manual (Owner Only)</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-light border small py-2 mb-3">
+          Khusus Owner untuk melengkapi tanggal kerja karyawan yang terlewat agar hari hadir masuk ke perhitungan Gaji &amp; Slip Gaji.
+        </div>
+        <div class="mb-2">
+          <label class="form-label small fw-bold mb-1">Karyawan</label>
+          <select name="worker_name" class="form-select form-select-sm" required>
+            <% (typeof workers !== 'undefined' ? workers : []).forEach(w => { %>
+              <option value="<%= w.name %>"><%= w.name %> (<%= w.role || 'Pencuci' %>)</option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="row g-2 mb-2">
+          <div class="col-6">
+            <label class="form-label small fw-bold mb-1">Tanggal</label>
+            <input type="date" name="date" value="<%= today %>" class="form-control form-control-sm" required>
+          </div>
+          <div class="col-6">
+            <label class="form-label small fw-bold mb-1">Jenis Absen</label>
+            <select name="mode" class="form-select form-select-sm" onchange="toggleManualTimes(this.value)">
+              <option value="masuk_keluar" selected>Masuk &amp; Keluar</option>
+              <option value="masuk">Masuk Saja</option>
+              <option value="keluar">Keluar Saja</option>
+            </select>
+          </div>
+        </div>
+        <div class="row g-2 mb-2">
+          <div class="col-6" id="wrapManualIn">
+            <label class="form-label small fw-bold mb-1">Jam Masuk</label>
+            <input type="time" name="time_in" value="08:00" class="form-control form-control-sm">
+          </div>
+          <div class="col-6" id="wrapManualOut">
+            <label class="form-label small fw-bold mb-1">Jam Keluar</label>
+            <input type="time" name="time_out" value="18:00" class="form-control form-control-sm">
+          </div>
+        </div>
+        <div class="mb-1">
+          <label class="form-label small fw-bold mb-1">Catatan (Opsional)</label>
+          <input type="text" name="note" class="form-control form-control-sm" maxlength="80" placeholder="Contoh: Koreksi kerja mulai tgl 23">
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
+        <button type="submit" class="btn btn-warning btn-sm fw-bold">💾 Simpan Absen Susulan</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+function toggleManualTimes(mode) {
+    const wIn = document.getElementById('wrapManualIn');
+    const wOut = document.getElementById('wrapManualOut');
+    if (wIn) wIn.style.display = (mode === 'keluar') ? 'none' : 'block';
+    if (wOut) wOut.style.display = (mode === 'masuk') ? 'none' : 'block';
+}
+</script>
+<% } %>
 
 <!-- Modal Kamera Absen -->
 <div class="modal fade" id="modalKameraAbsen" tabindex="-1">
