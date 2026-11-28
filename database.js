@@ -62,7 +62,9 @@ db.serialize(() => {
         join_date TEXT,
         daily_salary REAL DEFAULT 0,
         phone TEXT,
-        role TEXT DEFAULT 'Pencuci'
+        role TEXT DEFAULT 'Pencuci',
+        bonus_rajin REAL DEFAULT 150000,
+        bonus_enabled INTEGER DEFAULT 0
     )`);
     db.run(`ALTER TABLE workers ADD COLUMN join_date TEXT`, (err) => {});
     db.run(`ALTER TABLE workers ADD COLUMN daily_salary REAL DEFAULT 0`, (err) => {});
@@ -71,6 +73,8 @@ db.serialize(() => {
     db.run(`UPDATE workers SET role = 'Pencuci' WHERE role IS NULL OR role = ''`);
     db.run(`ALTER TABLE workers ADD COLUMN bonus_rajin REAL DEFAULT 150000`, (err) => {});
     db.run(`UPDATE workers SET bonus_rajin = 150000 WHERE bonus_rajin IS NULL`);
+    db.run(`ALTER TABLE workers ADD COLUMN bonus_enabled INTEGER DEFAULT 0`, (err) => {});
+    db.run(`UPDATE workers SET bonus_enabled = 0 WHERE bonus_enabled IS NULL`);
 
     // 4. Sales table
     db.run(`CREATE TABLE IF NOT EXISTS sales (

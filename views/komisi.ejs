@@ -78,28 +78,13 @@
 <!-- ============================================================== -->
 <div id="tabPayrollContent" style="<%= activeTab === 'payroll' ? 'display:block;' : 'display:none;' %>">
     <!-- Banner Penjelasan Aturan Penggajian -->
-    <div class="alert <%= fullBonusEnabled ? 'alert-primary' : 'alert-warning' %> shadow-sm py-2 mb-4">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <div class="d-flex align-items-center gap-2">
-                <span class="fs-4"><%= fullBonusEnabled ? '💡' : '⏸️' %></span>
-                <div class="small">
-                    <strong>Aturan Penggajian:</strong> Karyawan off 1x seminggu (hari libur/off tidak dihitung gaji). Total Gaji Bersih = Gaji Kehadiran + Komisi (Cuci / Konten Admin) + Bonus Masuk Full.
-                    <br>
-                    <% if (fullBonusEnabled) { %>
-                        🎯 <strong>Bonus Masuk Full:</strong> <span class="badge bg-success">AKTIF</span> Target periode ini: <strong><%= targetWorkingDays %> Hari</strong> (<%= totalCalendarDays %> hari kalender - <%= offDays %> hari off). Bonus otomatis jika hadir &ge; <%= targetWorkingDays %> hari.
-                    <% } else { %>
-                        ⏸️ <strong>Bonus Masuk Full:</strong> <span class="badge bg-secondary">DINONAKTIFKAN SEMENTARA</span> Semua karyawan mendapat Bonus Masuk Full <strong>Rp 0</strong> pada periode ini (bisa diaktifkan kembali kapan saja).
-                    <% } %>
-                </div>
+    <div class="alert alert-primary shadow-sm py-2 mb-4">
+        <div class="d-flex align-items-center gap-2">
+            <span class="fs-4">💡</span>
+            <div class="small">
+                <strong>Aturan Penggajian:</strong> Karyawan off 1x seminggu (hari libur/off tidak dihitung gaji). Total Gaji Bersih = Gaji Kehadiran + Komisi (Cuci / Konten Admin) + Bonus Masuk Full.
+                <br>🎯 <strong>Bonus Masuk Full (Per Akun):</strong> Target periode ini <strong><%= targetWorkingDays %> Hari</strong> (<%= totalCalendarDays %> hari kalender - <%= offDays %> hari off). Hanya dihitung bagi karyawan yang saklar Bonus-nya <strong>Aktif</strong> (bisa dinyalakan/matikan per orang di kolom <strong>Bonus Rajin</strong> di bawah).
             </div>
-            <form action="/komisi/toggle-bonus" method="POST" class="flex-shrink-0">
-                <input type="hidden" name="from" value="<%= from %>">
-                <input type="hidden" name="to" value="<%= to %>">
-                <input type="hidden" name="enabled" value="<%= fullBonusEnabled ? '0' : '1' %>">
-                <button type="submit" class="btn btn-sm <%= fullBonusEnabled ? 'btn-outline-danger' : 'btn-success' %> fw-bold">
-                    <%= fullBonusEnabled ? '⏸️ Nonaktifkan Bonus Masuk Full' : '▶️ Aktifkan Bonus Masuk Full' %>
-                </button>
-            </form>
         </div>
     </div>
 
@@ -232,12 +217,23 @@
                                     <% } %>
                                 </td>
                                 <td class="text-end fw-bold">
-                                    <% if (!fullBonusEnabled) { %>
-                                        <span class="badge bg-secondary" style="font-size:10px;">Nonaktif</span>
-                                    <% } else if (p.auto_bonus > 0) { %>
+                                    <% if (p.bonus_enabled && p.auto_bonus > 0) { %>
                                         <span class="badge bg-warning text-dark fs-6">+ Rp <%= p.auto_bonus.toLocaleString('id-ID') %></span>
+                                    <% } else if (p.bonus_enabled) { %>
+                                        <span class="badge bg-success bg-opacity-25 text-success border border-success" style="font-size:10px;">Aktif (Rp <%= (p.bonus_rajin || 0).toLocaleString('id-ID') %>)</span>
                                     <% } else { %>
-                                        <span class="text-muted small">-</span>
+                                        <span class="badge bg-secondary" style="font-size:10px;">Nonaktif</span>
+                                    <% } %>
+                                    <% if (p.id) { %>
+                                        <form action="/komisi/worker-bonus-toggle" method="POST" class="mt-1">
+                                            <input type="hidden" name="worker_id" value="<%= p.id %>">
+                                            <input type="hidden" name="from" value="<%= from %>">
+                                            <input type="hidden" name="to" value="<%= to %>">
+                                            <input type="hidden" name="enabled" value="<%= p.bonus_enabled ? '0' : '1' %>">
+                                            <button type="submit" class="btn btn-xs <%= p.bonus_enabled ? 'btn-outline-secondary' : 'btn-outline-success' %> py-0 px-1" style="font-size:10px;">
+                                                <%= p.bonus_enabled ? '⏸️ Matikan' : '▶️ Aktifkan' %>
+                                            </button>
+                                        </form>
                                     <% } %>
                                 </td>
                                 <td class="text-end">

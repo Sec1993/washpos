@@ -57,6 +57,13 @@
                             <input type="text" name="phone" class="form-control form-control-sm" placeholder="08xxxxxxxxxx">
                             <small class="text-muted" style="font-size: 11px;">Untuk kirim rincian slip gaji via WA.</small>
                         </div>
+                        <div class="col-12">
+                            <div class="form-check form-switch mt-1">
+                                <input class="form-check-input" type="checkbox" role="switch" id="addWorkerBonusEnabled" name="bonus_enabled" value="1">
+                                <label class="form-check-label small fw-bold" for="addWorkerBonusEnabled">Aktifkan Bonus Masuk Full untuk karyawan ini</label>
+                                <small class="d-block text-muted" style="font-size: 11px;">Biarkan mati (Nonaktif) jika karyawan baru belum genap bekerja 1 bulan.</small>
+                            </div>
+                        </div>
                     </div>
                     <button class="btn btn-success btn-sm w-100" type="submit">+ Tambah Karyawan / Admin</button>
                     <small class="text-muted d-block mt-1">Owner dapat menentukan sendiri tarif gaji harian tiap karyawan & staf admin.</small>
@@ -96,8 +103,17 @@
                                 <td class="text-end fw-bold text-success">
                                     Rp <%= (w.daily_salary || 0).toLocaleString('id-ID') %>
                                 </td>
-                                <td class="text-end fw-bold text-warning">
-                                    Rp <%= (w.bonus_rajin !== undefined && w.bonus_rajin !== null ? w.bonus_rajin : (typeof fullAttendanceBonus !== 'undefined' ? fullAttendanceBonus : 150000)).toLocaleString('id-ID') %>
+                                <td class="text-end">
+                                    <div class="fw-bold text-warning">
+                                        Rp <%= (w.bonus_rajin !== undefined && w.bonus_rajin !== null ? w.bonus_rajin : (typeof fullAttendanceBonus !== 'undefined' ? fullAttendanceBonus : 150000)).toLocaleString('id-ID') %>
+                                    </div>
+                                    <form action="/master/workers/toggle-bonus" method="POST" class="d-inline">
+                                        <input type="hidden" name="id" value="<%= w.id %>">
+                                        <input type="hidden" name="enabled" value="<%= Number(w.bonus_enabled) === 1 ? '0' : '1' %>">
+                                        <button type="submit" class="btn btn-xs <%= Number(w.bonus_enabled) === 1 ? 'btn-success' : 'btn-outline-secondary' %> py-0 px-1 mt-1" style="font-size:10px;" title="Klik untuk ubah status Bonus Masuk Full untuk <%= w.name %>">
+                                            <%= Number(w.bonus_enabled) === 1 ? '✅ Aktif' : '⏸️ Nonaktif' %>
+                                        </button>
+                                    </form>
                                 </td>
                                 <td><small class="text-muted"><%= w.phone || '-' %></small></td>
                                 <td class="text-end">
@@ -421,22 +437,16 @@ function openRoleModal(id, username, currentRole) {
     </div>
 </div>
 
-<!-- PENGATURAN BONUS KEHADIRAN PENUH (BONUS RAJIN) & KOMISI KONTEN -->
+<!-- PENGATURAN DEFAULT BONUS MASUK FULL & KOMISI KONTEN -->
 <div class="card shadow-sm mb-4 border-warning">
     <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
-        <span class="fw-bold">🎁 Pengaturan Bonus Masuk Full & Komisi Konten Admin</span>
-        <span class="badge <%= (typeof fullAttendanceBonusEnabled !== 'undefined' && fullAttendanceBonusEnabled) ? 'bg-success' : 'bg-secondary' %>">
-            Bonus Masuk Full: <%= (typeof fullAttendanceBonusEnabled !== 'undefined' && fullAttendanceBonusEnabled) ? 'AKTIF' : 'NONAKTIF' %>
-        </span>
+        <span class="fw-bold">🎁 Pengaturan Tarif Default Bonus Masuk Full &amp; Komisi Konten</span>
+        <span class="badge bg-dark text-white">Aktif/Nonaktif Diatur Per Akun Karyawan</span>
     </div>
     <div class="card-body">
         <form action="/master/settings/payroll" method="POST" onsubmit="return validateRupiahForm(this)">
-            <div class="form-check form-switch mb-3 p-2 bg-light border rounded ps-5">
-                <input class="form-check-input" type="checkbox" role="switch" id="toggleBonusAktif" name="full_attendance_bonus_enabled" value="1" <%= (typeof fullAttendanceBonusEnabled !== 'undefined' && fullAttendanceBonusEnabled) ? 'checked' : '' %>>
-                <label class="form-check-label fw-bold" for="toggleBonusAktif">
-                    Aktifkan Bonus Masuk Full (Bonus Rajin)
-                    <small class="d-block fw-normal text-muted">Jika dimatikan, seluruh karyawan & admin otomatis tidak mendapat bonus masuk full sementara (nominal tersimpan tidak hilang, tinggal nyalakan lagi bulan depan).</small>
-                </label>
+            <div class="alert alert-light border py-2 mb-3 small">
+                💡 <strong>Catatan:</strong> Aktif/nonaktifnya Bonus Masuk Full kini diatur <strong>per karyawan (per akun)</strong> lewat tombol status di tabel Karyawan di atas atau langsung di menu <strong>Gaji &amp; Komisi</strong>.
             </div>
             <div class="row align-items-end g-3">
                 <div class="col-md-4 col-12">
@@ -839,7 +849,11 @@ async function testTelegram() {
                             <span class="input-group-text bg-warning bg-opacity-25 fw-bold">Rp</span>
                             <input type="text" name="bonus_rajin" id="editWorkerBonusRajin" class="form-control rupiah-input" placeholder="150.000">
                         </div>
-                        <small class="text-muted">Bonus otomatis jika karyawan/admin hadir memenuhi target periode (di luar jatah libur off 1x seminggu).</small>
+                        <div class="form-check form-switch mt-2">
+                            <input class="form-check-input" type="checkbox" role="switch" id="editWorkerBonusEnabled" name="bonus_enabled" value="1">
+                            <label class="form-check-label small fw-bold" for="editWorkerBonusEnabled">Aktifkan Bonus Masuk Full untuk karyawan ini</label>
+                        </div>
+                        <small class="text-muted">Bonus otomatis hanya dihitung jika saklar aktif &amp; karyawan hadir memenuhi target periode.</small>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-bold">No WhatsApp (Opsional)</label>
@@ -866,6 +880,7 @@ function openEditWorkerModal(worker) {
     const defaultBonus = <%= (typeof fullAttendanceBonus !== 'undefined') ? fullAttendanceBonus : 150000 %>;
     const workerBonus = (worker.bonus_rajin !== undefined && worker.bonus_rajin !== null && !isNaN(worker.bonus_rajin)) ? worker.bonus_rajin : defaultBonus;
     document.getElementById('editWorkerBonusRajin').value = Number(workerBonus).toLocaleString('id-ID');
+    document.getElementById('editWorkerBonusEnabled').checked = (Number(worker.bonus_enabled) === 1);
     document.getElementById('editWorkerPhone').value = worker.phone || '';
     
     const modal = new bootstrap.Modal(document.getElementById('modalEditWorker'));

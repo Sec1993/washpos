@@ -1356,17 +1356,18 @@ app.post('/master/services/toggle', requireOwner, (req, res) => {
 });
 
 app.post('/master/workers/add', requireOwner, (req, res) => {
-    const { name, join_date, daily_salary, phone, role, bonus_rajin } = req.body;
+    const { name, join_date, daily_salary, phone, role, bonus_rajin, bonus_enabled } = req.body;
     if (!isValidName(name, 2)) {
         return renderMaster(res, 'Validasi gagal: Nama karyawan min 2 karakter.');
     }
     const finalJoinDate = join_date && join_date.trim() ? join_date.trim() : getWitaTime().toISOString().slice(0, 10);
     const parsedDailySalary = parseRupiah(daily_salary || 0);
     const parsedBonusRajin = (bonus_rajin !== undefined && bonus_rajin !== '') ? parseRupiah(bonus_rajin) : 150000;
+    const bonusEnabledVal = (bonus_enabled === '1' || bonus_enabled === 'on') ? 1 : 0;
     const cleanPhone = phone ? phone.trim() : '';
     const cleanRole = (role === 'Admin' || role === 'admin') ? 'Admin' : 'Pencuci';
 
-    db.run("INSERT INTO workers (name, join_date, daily_salary, phone, role, bonus_rajin) VALUES (?, ?, ?, ?, ?, ?)", [name.trim(), finalJoinDate, parsedDailySalary, cleanPhone, cleanRole, parsedBonusRajin], async (err) => {
+    db.run("INSERT INTO workers (name, join_date, daily_salary, phone, role, bonus_rajin, bonus_enabled) VALUES (?, ?, ?, ?, ?, ?, ?)", [name.trim(), finalJoinDate, parsedDailySalary, cleanPhone, cleanRole, parsedBonusRajin, bonusEnabledVal], async (err) => {
         if (err) {
             return renderMaster(res, 'Validasi gagal: Nama karyawan sudah ada (unik).');
         }
@@ -1376,19 +1377,30 @@ app.post('/master/workers/add', requireOwner, (req, res) => {
 });
 
 app.post('/master/workers/update', requireOwner, (req, res) => {
-    const { id, name, join_date, daily_salary, phone, role, bonus_rajin } = req.body;
+    const { id, name, join_date, daily_salary, phone, role, bonus_rajin, bonus_enabled } = req.body;
     if (!id || !isValidName(name, 2)) {
         return renderMaster(res, 'Validasi gagal: ID atau nama karyawan tidak valid.');
     }
     const parsedDailySalary = parseRupiah(daily_salary || 0);
     const parsedBonusRajin = (bonus_rajin !== undefined && bonus_rajin !== '') ? parseRupiah(bonus_rajin) : 150000;
+    const bonusEnabledVal = (bonus_enabled === '1' || bonus_enabled === 'on') ? 1 : 0;
     const cleanPhone = phone ? phone.trim() : '';
     const cleanRole = (role === 'Admin' || role === 'admin') ? 'Admin' : 'Pencuci';
 
-    db.run("UPDATE workers SET name = ?, join_date = ?, daily_salary = ?, phone = ?, role = ?, bonus_rajin = ? WHERE id = ?", [name.trim(), join_date, parsedDailySalary, cleanPhone, cleanRole, parsedBonusRajin, id], async (err) => {
+    db.run("UPDATE workers SET name = ?, join_date = ?, daily_salary = ?, phone = ?, role = ?, bonus_rajin = ?, bonus_enabled = ? WHERE id = ?", [name.trim(), join_date, parsedDailySalary, cleanPhone, cleanRole, parsedBonusRajin, bonusEnabledVal, id], async (err) => {
         if (err) {
             return renderMaster(res, 'Gagal memperbarui data karyawan: ' + err.message);
         }
+        try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Master] uploadDbNow error:', e.message); }
+        res.redirect('/master');
+    });
+});
+
+app.post('/master/workers/toggle-bonus', requireOwner, (req, res) => {
+    const workerId = parseInt(req.body.id, 10);
+    const enabledVal = req.body.enabled === '1' ? 1 : 0;
+    if (isNaN(workerId)) return res.redirect('/master');
+    db.run("UPDATE workers SET bonus_enabled = ? WHERE id = ?", [enabledVal, workerId], async () => {
         try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Master] uploadDbNow error:', e.message); }
         res.redirect('/master');
     });
@@ -1542,21 +1554,19 @@ app.post('/master/settings/shop', requireOwner, (req, res) => {
     });
 });
 
-// --- Pengaturan Bonus Kehadiran Penuh (Bonus Rajin) & Tarif Komisi Konten ---
+// --- Pengaturan Bonus Masuk Full Default & Tarif Komisi Konten ---
 app.post('/master/settings/payroll', requireOwner, (req, res) => {
     const bonus = parseRupiah(req.body.full_attendance_bonus);
     const bonusVal = isNaN(bonus) || bonus < 0 ? 0 : bonus;
-    const bonusEnabled = (req.body.full_attendance_bonus_enabled === '1' || req.body.full_attendance_bonus_enabled === 'on') ? '1' : '0';
     const contentRateParsed = parseRupiah(req.body.admin_content_commission);
     const contentRateVal = (isNaN(contentRateParsed) || contentRateParsed < 0) ? 10000 : contentRateParsed;
 
     db.serialize(() => {
         db.run("INSERT INTO settings (key, value) VALUES ('full_attendance_bonus', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [String(bonusVal)]);
-        db.run("INSERT INTO settings (key, value) VALUES ('full_attendance_bonus_enabled', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [bonusEnabled]);
         db.run("INSERT INTO settings (key, value) VALUES ('admin_content_commission', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [String(contentRateVal)], async (err) => {
             if (err) return renderMaster(res, 'Gagal menyimpan pengaturan bonus & komisi: ' + err.message);
             try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Master] uploadDbNow error:', e.message); }
-            renderMaster(res, null, `Pengaturan Gaji & Bonus disimpan (Bonus Masuk Full: ${bonusEnabled === '1' ? 'AKTIF' : 'NONAKTIF'}).`);
+            renderMaster(res, null, 'Pengaturan tarif default Bonus Masuk Full & Komisi Konten berhasil disimpan!');
         });
     });
 });
@@ -1904,8 +1914,9 @@ app.get('/komisi', requireOwner, async (req, res) => {
                             const contentData = contentMap[key] || { total_content_count: 0, total_content_komisi: 0 };
                             const totalKomisiWorker = salesData.total_komisi + contentData.total_content_komisi;
 
-                            // Bonus Masuk Full hanya dihitung jika saklar bonus aktif, memenuhi target, dan periode >= 14 hari
-                            const isFull = fullBonusEnabled && (days >= targetWorkingDays) && (totalCalendarDays >= 14);
+                            // Bonus Masuk Full diatur per akun karyawan (w.bonus_enabled === 1)
+                            const workerBonusEnabled = Number(w.bonus_enabled) === 1;
+                            const isFull = workerBonusEnabled && (days >= targetWorkingDays) && (totalCalendarDays >= 14);
                             const workerBonus = (w.bonus_rajin !== undefined && w.bonus_rajin !== null && !isNaN(w.bonus_rajin)) ? w.bonus_rajin : fullBonusNominal;
                             const autoBonus = isFull ? workerBonus : 0;
                             const totalGaji = totalDailySalary + totalKomisiWorker + autoBonus;
@@ -1925,6 +1936,7 @@ app.get('/komisi', requireOwner, async (req, res) => {
                                 days_present: days,
                                 daily_rate: dailyRate,
                                 bonus_rajin: workerBonus,
+                                bonus_enabled: workerBonusEnabled,
                                 total_daily_salary: totalDailySalary,
                                 total_motor: salesData.total_motor,
                                 total_omzet: salesData.total_omzet,
@@ -1999,15 +2011,20 @@ app.get('/komisi', requireOwner, async (req, res) => {
     });
 });
 
-// Saklar cepat ON/OFF Bonus Masuk Full dari halaman Gaji & Komisi
-app.post('/komisi/toggle-bonus', requireOwner, (req, res) => {
-    const enabled = req.body.enabled === '1' ? '1' : '0';
+// Saklar cepat ON/OFF Bonus Masuk Full per akun karyawan dari halaman Gaji & Komisi
+app.post('/komisi/worker-bonus-toggle', requireOwner, (req, res) => {
+    const workerId = parseInt(req.body.worker_id, 10);
+    const enabled = req.body.enabled === '1' ? 1 : 0;
     const from = req.body.from || '';
     const to = req.body.to || '';
-    db.run("INSERT INTO settings (key, value) VALUES ('full_attendance_bonus_enabled', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [enabled], async () => {
-        try { await cloudSync.uploadDbNow(); } catch (e) {}
-        const msg = enabled === '1' ? 'Bonus Masuk Full diaktifkan.' : 'Bonus Masuk Full dinonaktifkan sementara (Rp 0).';
-        res.redirect(`/komisi?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&tab=payroll&msg=${encodeURIComponent(msg)}`);
+    if (isNaN(workerId)) return res.redirect('/komisi');
+    db.get("SELECT name FROM workers WHERE id = ?", [workerId], (e, w) => {
+        const wName = w ? w.name : 'Karyawan';
+        db.run("UPDATE workers SET bonus_enabled = ? WHERE id = ?", [enabled, workerId], async () => {
+            try { await cloudSync.uploadDbNow(); } catch (e2) {}
+            const msg = `Bonus Masuk Full untuk ${wName} ${enabled === 1 ? 'diaktifkan' : 'dinonaktifkan'}.`;
+            res.redirect(`/komisi?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&tab=payroll&msg=${encodeURIComponent(msg)}`);
+        });
     });
 });
 
@@ -2191,8 +2208,9 @@ app.get('/komisi/slip/:workerName', requireOwner, async (req, res) => {
                 const totalDailySalary = daysPresent * dailyRate;
 
                 const { totalCalendarDays, offDays, targetWorkingDays } = computeAttendanceTarget(from, to);
-                const { fullBonusNominal, fullBonusEnabled } = payrollSettings;
-                const isFullAttendance = fullBonusEnabled && (daysPresent >= targetWorkingDays) && (totalCalendarDays >= 14);
+                const { fullBonusNominal } = payrollSettings;
+                const workerBonusEnabled = worker ? (Number(worker.bonus_enabled) === 1) : false;
+                const isFullAttendance = workerBonusEnabled && (daysPresent >= targetWorkingDays) && (totalCalendarDays >= 14);
 
                 // Ambil rincian pengerjaan motor (dari sale_commissions)
                 const sql = `
@@ -2243,7 +2261,7 @@ app.get('/komisi/slip/:workerName', requireOwner, async (req, res) => {
                                 totalCalendarDays,
                                 offDays,
                                 isFullAttendance,
-                                fullBonusEnabled,
+                                fullBonusEnabled: workerBonusEnabled,
                                 dailyRate,
                                 totalDailySalary,
                                 rows: rows || [],
