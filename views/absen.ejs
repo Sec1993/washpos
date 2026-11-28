@@ -18,23 +18,23 @@
 
                 <form action="/absen" method="POST" enctype="multipart/form-data" onsubmit="return validateAbsen(this)">
                     <div class="mb-2">
-                        <label class="form-label fw-bold">Nama Karyawan <span class="text-danger">*</span></label>
-                        <select name="worker_name" id="workerSelect" class="form-select" required>
-                            <option value="">-- Pilih Nama Anda --</option>
-                            <% (typeof workers !== 'undefined' ? workers : []).forEach(w => { %>
-                                <option value="<%= w.name %>"><%= w.name %><%= (w.role === 'Admin') ? ' (Admin / Kasir)' : '' %></option>
-                            <% }) %>
-                        </select>
-                        <small class="text-muted">Pilih nama Anda sesuai daftar pekerja agar hari hadir tercatat ke slip gaji.</small>
+                        <label class="form-label fw-bold">Nama Karyawan</label>
+                        <% const activeName = (typeof lockedWorkerName !== 'undefined' && lockedWorkerName) ? lockedWorkerName : user.username; %>
+                        <div class="form-control bg-light fw-bold text-primary d-flex justify-content-between align-items-center">
+                            <span>👤 <%= activeName %></span>
+                            <span class="badge bg-secondary" style="font-size: 0.7rem;">1 Akun = 1 Nama</span>
+                        </div>
+                        <input type="hidden" name="worker_name" id="workerSelect" value="<%= activeName %>">
+                        <small class="text-muted">Terkunci otomatis sesuai akun login (<code><%= user.username %></code>). Karyawan lain wajib absen dengan akunnya sendiri.</small>
                     </div>
 
                     <div class="mb-2">
                         <label class="form-label fw-bold">Jenis Absen</label>
                         <select name="type" class="form-select" required>
-                            <option value="masuk" <%= !hasMasuk ? 'selected' : (hasKeluar?'disabled':'') %>>Masuk</option>
-                            <option value="keluar" <%= hasMasuk && !hasKeluar ? 'selected' : (!hasMasuk?'disabled':'') %>>Keluar</option>
+                            <option value="masuk" <%= !hasMasuk ? 'selected' : 'disabled' %>>Masuk</option>
+                            <option value="keluar" <%= (hasMasuk && !hasKeluar) ? 'selected' : 'disabled' %>>Keluar</option>
                         </select>
-                        <small class="text-muted">Satu kali per jenis per hari. Validasi server cegah double.</small>
+                        <small class="text-muted">Wajib absen Masuk dulu sebelum Keluar (1 kali per jenis per hari).</small>
                     </div>
 
                     <div class="mb-2">
@@ -73,7 +73,7 @@
                         <small class="text-muted">Jam diambil server saat submit + overlay di foto (<span id="jamOverlayPreview">-</span>).</small>
                     </div>
 
-                    <button type="submit" id="btnSubmitAbsen" class="btn btn-primary w-100">Kirim Absen</button>
+                    <button type="submit" id="btnSubmitAbsen" class="btn btn-primary w-100" <%= (hasMasuk && hasKeluar) ? 'disabled' : '' %>><%= (hasMasuk && hasKeluar) ? '✅ Absen Hari Ini Sudah Lengkap' : 'Kirim Absen' %></button>
                 </form>
                 <small class="text-muted d-block mt-2">Foto tersimpan di <code>public/uploads/absen</code>. Lokasi & jam tertampil di dalam foto (overlay).</small>
             </div>
@@ -97,7 +97,15 @@
                                 <td><% if(r.photo){ %><a href="<%= r.photo %>" target="_blank"><img src="<%= r.photo %>" style="width:60px; height:60px; object-fit:cover; border-radius:6px; border:1px solid #ddd;"></a><% } else { %>-<% } %></td>
                                 <td>
                                     <small><%= r.address || (r.latitude + ', ' + r.longitude) %></small><br>
-                                    <a href="https://www.google.com/maps?q=<%= r.latitude %>,<%= r.longitude %>" target="_blank" class="btn btn-sm btn-outline-primary py-0">Maps</a>
+                                    <div class="d-flex gap-1 mt-1 flex-wrap">
+                                        <a href="https://www.google.com/maps?q=<%= r.latitude %>,<%= r.longitude %>" target="_blank" class="btn btn-sm btn-outline-primary py-0">Maps</a>
+                                        <% if (user && user.role === 'owner') { %>
+                                            <form action="/absen/hapus" method="POST" class="d-inline" onsubmit="return confirm('Hapus data absen <%= r.worker_name || r.username %> (<%= r.type %> <%= r.time %>)?')">
+                                                <input type="hidden" name="id" value="<%= r.id %>">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger py-0">Hapus</button>
+                                            </form>
+                                        <% } %>
+                                    </div>
                                 </td>
                             </tr>
                             <% }) %>
@@ -184,6 +192,7 @@ function getDistanceFromOutlet(lat, lng) {
 }
 
 const MAX_OUTLET_RADIUS = <%= typeof outletRadius !== 'undefined' ? outletRadius : 100 %>;
+const ALREADY_COMPLETED_TODAY = <%= (hasMasuk && hasKeluar) ? 'true' : 'false' %>;
 let isWithinRange = true;
 
 function ambilLokasi(){
@@ -223,7 +232,7 @@ function ambilLokasi(){
                         <span class="badge bg-success">Valid</span>
                     </div>`;
             }
-            if (btnSubmit) btnSubmit.disabled = false;
+            if (btnSubmit) btnSubmit.disabled = ALREADY_COMPLETED_TODAY;
         } else {
             isWithinRange = false;
             if (rangeBadge) {
@@ -422,6 +431,10 @@ function captureAbsen(){
 }
 
 function validateAbsen(form){
+    if (ALREADY_COMPLETED_TODAY) {
+        alert('Anda sudah menyelesaikan absen Masuk & Keluar hari ini.');
+        return false;
+    }
     if(!form.latitude.value || !form.longitude.value || form.latitude.value === '0'){
         alert('Lokasi GPS wajib didapat sebelum absen. Silakan klik tombol "📍 Ambil Lokasi".');
         return false;
@@ -438,17 +451,6 @@ function validateAbsen(form){
 // auto ambil lokasi saat load
 window.addEventListener('load', ()=>{ 
     setTimeout(ambilLokasi, 800); 
-    const curUser = "<%= user.username %>".toLowerCase();
-    const sel = document.getElementById('workerSelect');
-    if (sel && curUser && sel.selectedIndex <= 0) {
-        for (let i = 0; i < sel.options.length; i++) {
-            const val = sel.options[i].value.toLowerCase();
-            if (val === curUser || val.includes(curUser) || curUser.includes(val)) {
-                sel.selectedIndex = i;
-                break;
-            }
-        }
-    }
 });
 </script>
 

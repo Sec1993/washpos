@@ -380,9 +380,27 @@ const absenUpload = multer({
     }
 });
 
+// Helper: petakan 1 akun login ke tepat 1 nama karyawan (1 akun = 1 nama)
+function resolveLockedWorkerName(user, workers) {
+    const uname = String(user && user.username ? user.username : '').trim();
+    const lower = uname.toLowerCase();
+    const normUser = lower.replace(/[^a-z0-9]/g, '');
+    const list = workers || [];
+    const exact = list.find(w => w.name && w.name.trim().toLowerCase() === lower);
+    if (exact) return exact.name.trim();
+    if (normUser) {
+        const normalized = list.find(w => w.name && w.name.toLowerCase().replace(/[^a-z0-9]/g, '') === normUser);
+        if (normalized) return normalized.name.trim();
+    }
+    return uname;
+}
+
+const WORKER_ATTENDANCE_MATCH_SQL = `(LOWER(TRIM(worker_name)) = LOWER(?) OR ((worker_name IS NULL OR TRIM(worker_name) = '') AND (LOWER(username) = LOWER(?) OR user_id = ?)))`;
+
 app.get('/absen', requireLogin, (req, res) => {
     const today = getWitaTime().toISOString().slice(0,10);
     const uid = req.session.user.id;
+    const username = req.session.user.username;
     const isOwner = req.session.user.role === 'owner' || req.session.user.role === 'admin';
     const outletLat = cachedShopSettings.outlet_latitude || '-5.149285';
     const outletLng = cachedShopSettings.outlet_longitude || '119.429529';
@@ -390,27 +408,31 @@ app.get('/absen', requireLogin, (req, res) => {
     const outletAddress = cachedShopSettings.outlet_address || 'Jalan Monginsidi Baru, Green City, Rappocini, Makassar';
 
     db.all("SELECT * FROM workers ORDER BY name ASC", (errW, workers) => {
-        // ambil absen hari ini untuk user ini / semua jika owner
-        const whereToday = isOwner ? "WHERE date=?" : "WHERE (user_id=? OR worker_name=?) AND date=?";
-        const paramsToday = isOwner ? [today] : [uid, req.session.user.username, today];
-        db.all(`SELECT * FROM attendance ${whereToday} ORDER BY time ASC`, paramsToday, (e, todayRows)=>{
-            const whereRecent = isOwner ? "" : "WHERE user_id=? OR worker_name=?";
-            const paramsRecent = isOwner ? [] : [uid, req.session.user.username];
-            db.all(`SELECT * FROM attendance ${whereRecent} ORDER BY datetime DESC LIMIT 30`, paramsRecent, (e, recent)=>{
-                res.render('absen', { 
-                    todayRows: todayRows||[], 
-                    recent: recent||[], 
-                    history: recent||[], 
-                    workers: workers||[], 
-                    isOwner, 
-                    today,
-                    outletLat,
-                    outletLng,
-                    outletRadius,
-                    outletAddress
+        const lockedWorkerName = resolveLockedWorkerName(req.session.user, workers);
+        // Ambil status absen hari ini khusus untuk akun/nama yang login saja (1 akun = 1 nama)
+        db.all(
+            `SELECT * FROM attendance WHERE date=? AND ${WORKER_ATTENDANCE_MATCH_SQL} ORDER BY time ASC`,
+            [today, lockedWorkerName, username, uid],
+            (e, todayRows) => {
+                const whereRecent = isOwner ? "" : `WHERE ${WORKER_ATTENDANCE_MATCH_SQL}`;
+                const paramsRecent = isOwner ? [] : [lockedWorkerName, username, uid];
+                db.all(`SELECT * FROM attendance ${whereRecent} ORDER BY datetime DESC LIMIT 30`, paramsRecent, (e, recent)=>{
+                    res.render('absen', { 
+                        todayRows: todayRows||[], 
+                        recent: recent||[], 
+                        history: recent||[], 
+                        workers: workers||[], 
+                        lockedWorkerName,
+                        isOwner, 
+                        today,
+                        outletLat,
+                        outletLng,
+                        outletRadius,
+                        outletAddress
+                    });
                 });
-            });
-        });
+            }
+        );
     });
 });
 
@@ -419,7 +441,14 @@ app.post('/absen', requireLogin, absenUpload.single('photo'), async (req, res) =
         const { type, latitude, longitude, address, worker_name } = req.body;
         const t = (type==='keluar' ? 'keluar' : 'masuk');
         if (!req.file) return res.status(400).send('Validasi gagal: Foto selfie wajib diambil dari kamera aplikasi. <a href="/absen">Kembali</a>');
-        const finalWorker = (worker_name && worker_name.trim()) ? worker_name.trim() : req.session.user.username;
+
+        const workers = await new Promise((resolve) => db.all("SELECT name FROM workers", (e, rows) => resolve(rows || [])));
+        const lockedWorkerName = resolveLockedWorkerName(req.session.user, workers);
+        if (worker_name && worker_name.trim() && worker_name.trim().toLowerCase() !== lockedWorkerName.toLowerCase()) {
+            try { fs.unlinkSync(req.file.path); } catch(e){}
+            return res.status(403).send(`Validasi gagal: 1 akun hanya dapat absen untuk 1 nama (${lockedWorkerName}). Untuk mengabsen "${worker_name.trim()}", wajib login menggunakan akunnya masing-masing. <a href="/absen">Kembali</a>`);
+        }
+        const finalWorker = lockedWorkerName;
         const lat = latitude ? parseFloat(latitude) : null;
         const lng = longitude ? parseFloat(longitude) : null;
 
@@ -450,31 +479,51 @@ app.post('/absen', requireLogin, absenUpload.single('photo'), async (req, res) =
         const uid = req.session.user.id;
         const username = req.session.user.username;
 
-        // Cek double absen untuk worker yang sama di tanggal & tipe yang sama
-        db.get("SELECT * FROM attendance WHERE (worker_name=? OR (worker_name IS NULL AND user_id=?)) AND date=? AND type=?", [finalWorker, uid, date, t], async (e,row)=>{
-            if (row) {
-                try { fs.unlinkSync(req.file.path); } catch(e){}
-                return res.status(400).send(`Karyawan "${finalWorker}" sudah absen ${t} hari ini jam ${row.time}. <a href="/absen">Kembali</a>`);
-            }
-            let photo = '/uploads/absen/' + path.basename(req.file.path);
-            const remoteName = 'absen/' + path.basename(req.file.path);
-            const cloudUrl = await uploadToSupabase(req.file.path, remoteName, req.file.mimetype);
-            if (cloudUrl) photo = cloudUrl;
+        // Cek status absen hari ini khusus untuk pekerja yang bersangkutan (wajib Masuk sebelum Keluar + cegah double)
+        db.all(
+            `SELECT * FROM attendance WHERE date=? AND ${WORKER_ATTENDANCE_MATCH_SQL}`,
+            [date, finalWorker, username, uid],
+            async (e, todayExisting) => {
+                const list = todayExisting || [];
+                const duplicate = list.find(r => r.type === t);
+                if (duplicate) {
+                    try { fs.unlinkSync(req.file.path); } catch(e){}
+                    return res.status(400).send(`Karyawan "${finalWorker}" sudah absen ${t} hari ini jam ${duplicate.time}. <a href="/absen">Kembali</a>`);
+                }
+                if (t === 'keluar' && !list.some(r => r.type === 'masuk')) {
+                    try { fs.unlinkSync(req.file.path); } catch(e){}
+                    return res.status(400).send(`Validasi gagal: Karyawan "${finalWorker}" belum absen Masuk hari ini. Harap absen Masuk terlebih dahulu sebelum absen Keluar. <a href="/absen">Kembali</a>`);
+                }
+                let photo = '/uploads/absen/' + path.basename(req.file.path);
+                const remoteName = 'absen/' + path.basename(req.file.path);
+                const cloudUrl = await uploadToSupabase(req.file.path, remoteName, req.file.mimetype);
+                if (cloudUrl) photo = cloudUrl;
 
-            db.run("INSERT INTO attendance (user_id, username, worker_name, date, time, datetime, type, photo, latitude, longitude, address) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                [uid, username, finalWorker, date, time, datetime, t, photo, finalLat, finalLng, finalAddr], async (err)=>{
-                    if (err) { 
-                        try { fs.unlinkSync(req.file.path); } catch(e){}
-                        return res.status(500).send('Gagal simpan absen: '+err.message); 
-                    }
-                    try { await cloudSync.uploadDbNow(); } catch (e) {}
-                    res.redirect('/absen');
-                });
-        });
+                db.run("INSERT INTO attendance (user_id, username, worker_name, date, time, datetime, type, photo, latitude, longitude, address) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    [uid, username, finalWorker, date, time, datetime, t, photo, finalLat, finalLng, finalAddr], async (err)=>{
+                        if (err) { 
+                            try { fs.unlinkSync(req.file.path); } catch(e){}
+                            return res.status(500).send('Gagal simpan absen: '+err.message); 
+                        }
+                        try { await cloudSync.uploadDbNow(); } catch (e) {}
+                        res.redirect('/absen');
+                    });
+            }
+        );
     } catch (err) {
         if (req.file && req.file.path) { try { fs.unlinkSync(req.file.path); } catch(e){} }
         return res.status(500).send('Terjadi kesalahan saat memproses absensi: ' + err.message + ' <a href="/absen">Kembali</a>');
     }
+});
+
+app.post('/absen/hapus', requireOwner, (req, res) => {
+    const id = parseInt(req.body.id, 10);
+    if (isNaN(id)) return res.redirect('/absen');
+    db.run("DELETE FROM attendance WHERE id = ?", [id], async (err) => {
+        if (err) return res.status(500).send('Gagal menghapus absen: ' + err.message);
+        try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Absen Hapus] uploadDbNow error:', e.message); }
+        res.redirect('/absen?success=' + encodeURIComponent('Data absen berhasil dihapus.'));
+    });
 });
 
 // Route - Dashboard / Default (Executive Analytics + Low Stock + KPI + Kas)
