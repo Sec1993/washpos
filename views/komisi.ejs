@@ -78,16 +78,28 @@
 <!-- ============================================================== -->
 <div id="tabPayrollContent" style="<%= activeTab === 'payroll' ? 'display:block;' : 'display:none;' %>">
     <!-- Banner Penjelasan Aturan Penggajian -->
-    <div class="alert alert-primary shadow-sm py-2 mb-4">
-        <div class="d-flex align-items-center gap-2">
-            <span class="fs-4">💡</span>
-            <div class="small">
-                <strong>Aturan Penggajian:</strong> Karyawan off 1x seminggu (hari libur/off tidak dihitung gaji).
-                Gaji pokok kehadiran murni dihitung dari <strong>Hari Hadir Absen Masuk × Tarif Gaji Harian</strong> (ditentukan Owner di menu Master). Total Gaji Bersih = Gaji Kehadiran + Komisi Cuci Motor + Bonus Kehadiran Penuh.
-                <% if (typeof targetWorkingDays !== 'undefined' && targetWorkingDays) { %>
-                    <br>🎯 <strong>Target Masuk Full Periode Ini:</strong> <%= targetWorkingDays %> Hari (<%= totalCalendarDays %> hari kalender - <%= offDays %> hari off mingguan). <strong>Bonus Rajin:</strong> Rp <%= (fullBonusNominal || 0).toLocaleString('id-ID') %> (otomatis ditambahkan jika hadir &ge; <%= targetWorkingDays %> hari).
-                <% } %>
+    <div class="alert <%= fullBonusEnabled ? 'alert-primary' : 'alert-warning' %> shadow-sm py-2 mb-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <span class="fs-4"><%= fullBonusEnabled ? '💡' : '⏸️' %></span>
+                <div class="small">
+                    <strong>Aturan Penggajian:</strong> Karyawan off 1x seminggu (hari libur/off tidak dihitung gaji). Total Gaji Bersih = Gaji Kehadiran + Komisi (Cuci / Konten Admin) + Bonus Masuk Full.
+                    <br>
+                    <% if (fullBonusEnabled) { %>
+                        🎯 <strong>Bonus Masuk Full:</strong> <span class="badge bg-success">AKTIF</span> Target periode ini: <strong><%= targetWorkingDays %> Hari</strong> (<%= totalCalendarDays %> hari kalender - <%= offDays %> hari off). Bonus otomatis jika hadir &ge; <%= targetWorkingDays %> hari.
+                    <% } else { %>
+                        ⏸️ <strong>Bonus Masuk Full:</strong> <span class="badge bg-secondary">DINONAKTIFKAN SEMENTARA</span> Semua karyawan mendapat Bonus Masuk Full <strong>Rp 0</strong> pada periode ini (bisa diaktifkan kembali kapan saja).
+                    <% } %>
+                </div>
             </div>
+            <form action="/komisi/toggle-bonus" method="POST" class="flex-shrink-0">
+                <input type="hidden" name="from" value="<%= from %>">
+                <input type="hidden" name="to" value="<%= to %>">
+                <input type="hidden" name="enabled" value="<%= fullBonusEnabled ? '0' : '1' %>">
+                <button type="submit" class="btn btn-sm <%= fullBonusEnabled ? 'btn-outline-danger' : 'btn-success' %> fw-bold">
+                    <%= fullBonusEnabled ? '⏸️ Nonaktifkan Bonus Masuk Full' : '▶️ Aktifkan Bonus Masuk Full' %>
+                </button>
+            </form>
         </div>
     </div>
 
@@ -114,9 +126,9 @@
         <div class="col-md-3 col-6">
             <div class="card text-bg-dark shadow-sm h-100">
                 <div class="card-body">
-                    <div class="text-uppercase small fw-bold opacity-75">Total Komisi Cuci</div>
+                    <div class="text-uppercase small fw-bold opacity-75">Total Komisi (Cuci + Konten)</div>
                     <h3 class="mb-0 mt-1 fw-bold">Rp <%= (grandTotalKomisi || 0).toLocaleString('id-ID') %></h3>
-                    <small class="opacity-75">Dari <%= grandTotalMotor || 0 %> unit motor</small>
+                    <small class="opacity-75"><%= grandTotalMotor || 0 %> motor<% if (typeof grandTotalContentCount !== 'undefined' && grandTotalContentCount > 0) { %> + <%= grandTotalContentCount %> konten<% } %></small>
                 </div>
             </div>
         </div>
@@ -147,8 +159,8 @@
                             <th class="text-center">Hari Hadir</th>
                             <th class="text-end">Tarif Harian</th>
                             <th class="text-end">Gaji Kehadiran</th>
-                            <th class="text-center">Motor Dicuci</th>
-                            <th class="text-end">Komisi Cuci</th>
+                            <th class="text-center">Motor / Konten</th>
+                            <th class="text-end">Komisi</th>
                             <th class="text-end">Bonus Rajin</th>
                             <th class="text-end">Total Gaji Bersih</th>
                             <th class="text-center">Status</th>
@@ -200,21 +212,29 @@
                                 </td>
                                 <td class="text-center">
                                     <% if (p.role === 'Admin') { %>
-                                        <span class="badge bg-light text-muted border">-</span>
-                                        <br><small class="text-muted" style="font-size:10px;">Kasir</small>
+                                        <span class="badge <%= (p.total_content_count > 0) ? 'bg-info text-dark fs-6' : 'bg-light text-muted border' %>"><%= p.total_content_count || 0 %> konten</span>
+                                        <br><small class="text-muted" style="font-size:10px;">Upload Konten</small>
                                     <% } else { %>
                                         <span class="badge bg-dark fs-6"><%= p.total_motor %> unit</span>
+                                        <% if (p.total_content_count > 0) { %>
+                                            <br><span class="badge bg-info text-dark mt-1" style="font-size:10px;">+<%= p.total_content_count %> konten</span>
+                                        <% } %>
                                     <% } %>
                                 </td>
                                 <td class="text-end fw-bold text-success">
-                                    <% if (p.role === 'Admin') { %>
-                                        <span class="text-muted">-</span>
-                                    <% } else { %>
+                                    <% if (p.total_komisi > 0) { %>
                                         Rp <%= p.total_komisi.toLocaleString('id-ID') %>
+                                        <% if (p.role === 'Admin' && p.total_content_komisi > 0) { %>
+                                            <br><small class="text-muted fw-normal" style="font-size:10px;">Konten Sosmed</small>
+                                        <% } %>
+                                    <% } else { %>
+                                        <span class="text-muted">-</span>
                                     <% } %>
                                 </td>
                                 <td class="text-end fw-bold">
-                                    <% if (p.auto_bonus > 0) { %>
+                                    <% if (!fullBonusEnabled) { %>
+                                        <span class="badge bg-secondary" style="font-size:10px;">Nonaktif</span>
+                                    <% } else if (p.auto_bonus > 0) { %>
                                         <span class="badge bg-warning text-dark fs-6">+ Rp <%= p.auto_bonus.toLocaleString('id-ID') %></span>
                                     <% } else { %>
                                         <span class="text-muted small">-</span>
@@ -235,6 +255,11 @@
                                 </td>
                                 <td class="text-center">
                                     <div class="d-flex justify-content-center gap-1 flex-wrap">
+                                        <% if (p.role === 'Admin') { %>
+                                        <button type="button" class="btn btn-xs btn-info text-dark py-1 px-2 fw-bold" style="font-size:12px;" onclick='scrollToKontenForm("<%= p.name %>")' title="Tambah Komisi Upload Konten Rp 10.000/konten">
+                                            🎬 +Konten
+                                        </button>
+                                        <% } %>
                                         <!-- Cetak Slip Gaji -->
                                         <a href="/komisi/slip/<%= encodeURIComponent(p.name) %>?from=<%= from %>&to=<%= to %>" target="_blank" class="btn btn-xs btn-outline-primary py-1 px-2" style="font-size:12px;" title="Cetak Slip Gaji Resmi">
                                             🧾 Slip
@@ -261,7 +286,7 @@
                             <td class="text-center text-success fs-6"><%= grandTotalHariHadir || 0 %> Hari</td>
                             <td></td>
                             <td class="text-end text-primary fs-6">Rp <%= (grandTotalGajiKehadiran || 0).toLocaleString('id-ID') %></td>
-                            <td class="text-center text-dark fs-6"><%= grandTotalMotor || 0 %> unit</td>
+                            <td class="text-center text-dark fs-6"><%= grandTotalMotor || 0 %> unit<% if (typeof grandTotalContentCount !== 'undefined' && grandTotalContentCount > 0) { %> <br><small>+<%= grandTotalContentCount %> konten</small><% } %></td>
                             <td class="text-end text-success fs-6">Rp <%= (grandTotalKomisi || 0).toLocaleString('id-ID') %></td>
                             <td class="text-end text-warning fs-6">Rp <%= (grandTotalBonus || 0).toLocaleString('id-ID') %></td>
                             <td class="text-end text-success fs-5">Rp <%= (grandTotalGajiBersih || 0).toLocaleString('id-ID') %></td>
@@ -269,6 +294,88 @@
                         </tr>
                     </tfoot>
                     <% } %>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- INPUT & RINCIAN KOMISI UPLOAD KONTEN ADMIN (RP 10.000 / KONTEN) -->
+    <!-- ============================================================== -->
+    <div class="card shadow-sm mb-4 border-info" id="cardKomisiKonten">
+        <div class="card-header bg-info text-dark d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span class="fw-bold">🎬 Input &amp; Rincian Komisi Upload Konten Admin (Rp <%= (typeof adminContentCommission !== 'undefined' ? adminContentCommission : 10000).toLocaleString('id-ID') %>/konten)</span>
+            <span class="badge bg-dark text-white">Total: <%= typeof grandTotalContentCount !== 'undefined' ? grandTotalContentCount : 0 %> konten (Rp <%= (typeof grandTotalContentKomisi !== 'undefined' ? grandTotalContentKomisi : 0).toLocaleString('id-ID') %>)</span>
+        </div>
+        <div class="card-body">
+            <form action="/komisi/konten/add" method="POST" id="formKomisiKonten" class="row g-2 align-items-end mb-3 pb-3 border-bottom" onsubmit="return validateRupiahForm(this)">
+                <input type="hidden" name="period_from" value="<%= from %>">
+                <input type="hidden" name="period_to" value="<%= to %>">
+                <div class="col-md-2 col-6">
+                    <label class="form-label small fw-bold mb-1">Admin / Penerima</label>
+                    <select name="worker_name" id="kontenWorkerSelect" class="form-select form-select-sm" required>
+                        <% workers.forEach(w => { %>
+                            <option value="<%= w.name %>" <%= w.role === 'Admin' ? 'selected' : '' %>><%= w.name %> (<%= w.role || 'Staf' %>)</option>
+                        <% }) %>
+                    </select>
+                </div>
+                <div class="col-md-2 col-6">
+                    <label class="form-label small fw-bold mb-1">Tanggal Upload</label>
+                    <input type="date" name="date" value="<%= (todayStr >= from && todayStr <= to) ? todayStr : to %>" class="form-control form-control-sm" required>
+                </div>
+                <div class="col-md-2 col-4">
+                    <label class="form-label small fw-bold mb-1">Jml Konten</label>
+                    <input type="number" name="content_count" min="1" max="100" value="1" class="form-control form-control-sm" required>
+                </div>
+                <div class="col-md-2 col-8">
+                    <label class="form-label small fw-bold mb-1">Komisi / Konten (Rp)</label>
+                    <input type="text" name="rate" value="<%= (typeof adminContentCommission !== 'undefined' ? adminContentCommission : 10000).toLocaleString('id-ID') %>" class="form-control form-control-sm rupiah" data-allow-zero="true" required>
+                </div>
+                <div class="col-md-2 col-12">
+                    <label class="form-label small fw-bold mb-1">Judul / Catatan (Opsional)</label>
+                    <input type="text" name="title" class="form-control form-control-sm" maxlength="150" placeholder="IG Reels / TikTok...">
+                </div>
+                <div class="col-md-2 col-12">
+                    <button type="submit" class="btn btn-info btn-sm w-100 fw-bold">+ Tambah Konten</button>
+                </div>
+            </form>
+
+            <div class="table-responsive" style="max-height: 260px; overflow-y: auto;">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead class="table-light sticky-top">
+                        <tr>
+                            <th>Tanggal</th>
+                            <th>Nama Admin</th>
+                            <th>Judul / Keterangan</th>
+                            <th class="text-center">Jumlah</th>
+                            <th class="text-end">Tarif</th>
+                            <th class="text-end">Total Komisi</th>
+                            <th class="text-end">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% if (typeof contentRows === 'undefined' || contentRows.length === 0) { %>
+                            <tr><td colspan="7" class="text-center text-muted py-3">Belum ada komisi upload konten dicatat pada periode <%= from %> s/d <%= to %>.</td></tr>
+                        <% } %>
+                        <% (typeof contentRows !== 'undefined' ? contentRows : []).forEach(c => { %>
+                        <tr>
+                            <td><small><%= c.date %></small></td>
+                            <td><strong><%= c.worker_name %></strong></td>
+                            <td><small class="text-muted"><%= c.title || 'Upload konten sosmed' %></small></td>
+                            <td class="text-center"><span class="badge bg-info text-dark"><%= c.content_count %> konten</span></td>
+                            <td class="text-end"><small>Rp <%= Number(c.rate || 0).toLocaleString('id-ID') %></small></td>
+                            <td class="text-end fw-bold text-success">Rp <%= Number(c.total_commission || 0).toLocaleString('id-ID') %></td>
+                            <td class="text-end">
+                                <form action="/komisi/konten/delete" method="POST" class="d-inline" onsubmit="return confirm('Hapus komisi konten <%= c.worker_name %> (Rp <%= Number(c.total_commission || 0).toLocaleString('id-ID') %>)?')">
+                                    <input type="hidden" name="id" value="<%= c.id %>">
+                                    <input type="hidden" name="from" value="<%= from %>">
+                                    <input type="hidden" name="to" value="<%= to %>">
+                                    <button type="submit" class="btn btn-xs btn-outline-danger py-0 px-2" style="font-size:11px;">Hapus</button>
+                                </form>
+                            </td>
+                        </tr>
+                        <% }) %>
+                    </tbody>
                 </table>
             </div>
         </div>
@@ -421,6 +528,7 @@
                     <input type="hidden" name="daily_rate" id="payDailyRate">
                     <input type="hidden" name="total_daily_salary" id="payTotalDailySalary">
                     <input type="hidden" name="total_motor" id="payTotalMotor">
+                    <input type="hidden" name="total_content_count" id="payTotalContentCount">
                     <input type="hidden" name="total_commission" id="payTotalCommission">
 
                     <div class="alert alert-light border py-2 mb-3">
@@ -440,7 +548,7 @@
                             <input type="text" id="displayGajiHadir" class="form-control form-control-sm bg-light fw-bold text-primary" readonly>
                         </div>
                         <div class="col-6">
-                            <label class="form-label small text-muted mb-1">Komisi Cuci (<span id="displayMotor">0</span> motor)</label>
+                            <label class="form-label small text-muted mb-1" id="labelKomisiModal">Komisi (<span id="displayMotor">0</span>)</label>
                             <input type="text" id="displayKomisiCuci" class="form-control form-control-sm bg-light fw-bold text-success" readonly>
                         </div>
                         <div class="col-6">
@@ -533,6 +641,15 @@ function setPeriode(type) {
     form.submit();
 }
 
+function scrollToKontenForm(workerName) {
+    const card = document.getElementById('cardKomisiKonten');
+    const sel = document.getElementById('kontenWorkerSelect');
+    if (sel && workerName) sel.value = workerName;
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const cntInp = document.querySelector('#formKomisiKonten input[name="content_count"]');
+    if (cntInp) setTimeout(() => cntInp.focus(), 350);
+}
+
 function openBayarGajiModal(p, fromDate, toDate) {
     document.getElementById('payWorkerName').value = p.name;
     document.getElementById('displayWorkerName').textContent = p.name;
@@ -547,7 +664,17 @@ function openBayarGajiModal(p, fromDate, toDate) {
     document.getElementById('displayGajiHadir').value = 'Rp ' + p.total_daily_salary.toLocaleString('id-ID');
 
     document.getElementById('payTotalMotor').value = p.total_motor;
-    document.getElementById('displayMotor').textContent = p.total_motor;
+    document.getElementById('payTotalContentCount').value = p.total_content_count || 0;
+    const lblModal = document.getElementById('labelKomisiModal');
+    if (lblModal) {
+        if (p.role === 'Admin') {
+            lblModal.innerHTML = 'Komisi Konten (' + (p.total_content_count || 0) + ' konten)';
+        } else if (p.total_content_count > 0) {
+            lblModal.innerHTML = 'Komisi (' + p.total_motor + ' mtr, ' + p.total_content_count + ' kntn)';
+        } else {
+            lblModal.innerHTML = 'Komisi Cuci (' + p.total_motor + ' motor)';
+        }
+    }
     document.getElementById('payTotalCommission').value = p.total_komisi;
     document.getElementById('displayKomisiCuci').value = 'Rp ' + p.total_komisi.toLocaleString('id-ID');
 
@@ -581,8 +708,8 @@ function kirimWaGaji(p, fromDate, toDate) {
     const waNumber = cleanPhone.startsWith('0') ? '62' + cleanPhone.slice(1) : cleanPhone;
     
     const komisiText = p.role === 'Admin'
-        ? `💼 *Tugas:* Operasional Kasir & Administrasi\n`
-        : `🏍 *Komisi Cuci Motor:* ${p.total_motor} Unit = *Rp ${p.total_komisi.toLocaleString('id-ID')}*\n`;
+        ? `💼 *Tugas:* Operasional Kasir & Administrasi\n` + ((p.total_content_count && p.total_content_count > 0) ? `🎬 *Komisi Upload Konten:* ${p.total_content_count} Konten = *Rp ${(p.total_content_komisi || 0).toLocaleString('id-ID')}*\n` : '')
+        : `🏍 *Komisi Cuci Motor:* ${p.total_motor} Unit = *Rp ${(p.total_komisi_cuci !== undefined ? p.total_komisi_cuci : p.total_komisi).toLocaleString('id-ID')}*\n` + ((p.total_content_count && p.total_content_count > 0) ? `🎬 *Komisi Upload Konten:* ${p.total_content_count} Konten = *Rp ${(p.total_content_komisi || 0).toLocaleString('id-ID')}*\n` : '');
 
     const bonusText = (p.auto_bonus && p.auto_bonus > 0)
         ? `🎁 *Bonus Kehadiran Penuh (Rajin):* +Rp ${p.auto_bonus.toLocaleString('id-ID')}\n`

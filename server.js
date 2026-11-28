@@ -1188,6 +1188,8 @@ function renderMaster(res, error = null, success = null) {
                         const telegramTimezone = settingsMap.telegram_timezone || 'Asia/Makassar';
                         const telegramLastReportDate = settingsMap.telegram_last_auto_report_date || '';
                         const fullAttendanceBonus = parseInt(settingsMap.full_attendance_bonus || '150000', 10);
+                        const fullAttendanceBonusEnabled = settingsMap.full_attendance_bonus_enabled === '1';
+                        const adminContentCommission = parseInt(settingsMap.admin_content_commission || '10000', 10);
                         const outletLatitude = settingsMap.outlet_latitude || '-5.149285';
                         const outletLongitude = settingsMap.outlet_longitude || '119.429529';
                         const outletRadiusMeters = parseInt(settingsMap.outlet_radius_meters || '100', 10);
@@ -1222,6 +1224,8 @@ function renderMaster(res, error = null, success = null) {
                             telegramTimezone,
                             telegramLastReportDate,
                             fullAttendanceBonus,
+                            fullAttendanceBonusEnabled,
+                            adminContentCommission,
                             outletLatitude,
                             outletLongitude,
                             outletRadiusMeters,
@@ -1275,10 +1279,11 @@ app.post('/master/reset-transactions', requireOwner, (req, res) => {
             db.run("DELETE FROM journals");
             db.run("CREATE TRIGGER IF NOT EXISTS no_delete_journal BEFORE DELETE ON journals BEGIN SELECT RAISE(ABORT, 'Jurnal tidak boleh dihapus - gunakan reversal'); END;");
             db.run("DELETE FROM payroll_records");
+            db.run("DELETE FROM content_commissions");
             db.run("DELETE FROM attendance");
             db.run("DELETE FROM stock_history");
             db.run("UPDATE inventory SET stock = 0");
-            db.run("DELETE FROM sqlite_sequence WHERE name IN ('sales', 'sale_commissions', 'expenses', 'journals', 'payroll_records', 'attendance', 'stock_history')");
+            db.run("DELETE FROM sqlite_sequence WHERE name IN ('sales', 'sale_commissions', 'expenses', 'journals', 'payroll_records', 'content_commissions', 'attendance', 'stock_history')");
             db.run("VACUUM", async () => {
                 try {
                     await cloudSync.uploadDbNow();
@@ -1537,15 +1542,22 @@ app.post('/master/settings/shop', requireOwner, (req, res) => {
     });
 });
 
-// --- Pengaturan Bonus Kehadiran Penuh (Bonus Rajin) ---
+// --- Pengaturan Bonus Kehadiran Penuh (Bonus Rajin) & Tarif Komisi Konten ---
 app.post('/master/settings/payroll', requireOwner, (req, res) => {
-    const bonus = parseRupiah(req.body.full_attendance_bonus || 0);
+    const bonus = parseRupiah(req.body.full_attendance_bonus);
     const bonusVal = isNaN(bonus) || bonus < 0 ? 0 : bonus;
+    const bonusEnabled = (req.body.full_attendance_bonus_enabled === '1' || req.body.full_attendance_bonus_enabled === 'on') ? '1' : '0';
+    const contentRateParsed = parseRupiah(req.body.admin_content_commission);
+    const contentRateVal = (isNaN(contentRateParsed) || contentRateParsed < 0) ? 10000 : contentRateParsed;
 
-    db.run("INSERT INTO settings (key, value) VALUES ('full_attendance_bonus', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [String(bonusVal)], async (err) => {
-        if (err) return renderMaster(res, 'Gagal menyimpan pengaturan bonus: ' + err.message);
-        try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Master] uploadDbNow error:', e.message); }
-        renderMaster(res, null, 'Pengaturan Bonus Kehadiran Penuh (Bonus Rajin) berhasil disimpan!');
+    db.serialize(() => {
+        db.run("INSERT INTO settings (key, value) VALUES ('full_attendance_bonus', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [String(bonusVal)]);
+        db.run("INSERT INTO settings (key, value) VALUES ('full_attendance_bonus_enabled', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [bonusEnabled]);
+        db.run("INSERT INTO settings (key, value) VALUES ('admin_content_commission', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [String(contentRateVal)], async (err) => {
+            if (err) return renderMaster(res, 'Gagal menyimpan pengaturan bonus & komisi: ' + err.message);
+            try { await cloudSync.uploadDbNow(); } catch (e) { console.error('[Master] uploadDbNow error:', e.message); }
+            renderMaster(res, null, `Pengaturan Gaji & Bonus disimpan (Bonus Masuk Full: ${bonusEnabled === '1' ? 'AKTIF' : 'NONAKTIF'}).`);
+        });
     });
 });
 
@@ -1691,16 +1703,54 @@ app.post('/akun/edit', requireOwner, (req, res) => {
     });
 });
 
+// Helpers Penggajian (Periode Gaji WITA, Target Hari Kerja, & Pengaturan Bonus/Konten)
+function getDefaultPayrollPeriod(nowWita) {
+    const y = nowWita.getUTCFullYear();
+    const m = nowWita.getUTCMonth();
+    const d = nowWita.getUTCDate();
+    const todayStr = nowWita.toISOString().slice(0, 10);
+    // Saat gajian tanggal 1, otomatis hitung periode bulan lalu (tanggal 1 s/d akhir bulan 28/29/30/31)
+    if (d === 1) {
+        const lastPrev = new Date(Date.UTC(y, m, 0));
+        const to = lastPrev.toISOString().slice(0, 10);
+        const from = to.slice(0, 8) + '01';
+        return { from, to, todayStr };
+    }
+    const from = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
+    return { from, to: todayStr, todayStr };
+}
+
+function computeAttendanceTarget(from, to) {
+    const dFrom = new Date(from);
+    const dTo = new Date(to);
+    const diffTime = Math.max(0, dTo.getTime() - dFrom.getTime());
+    const totalCalendarDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    const offDays = Math.floor(totalCalendarDays / 7);
+    const targetWorkingDays = Math.max(1, totalCalendarDays - offDays);
+    return { totalCalendarDays, offDays, targetWorkingDays };
+}
+
+function getPayrollSettings() {
+    return new Promise((resolve) => {
+        db.all("SELECT key, value FROM settings WHERE key IN ('full_attendance_bonus', 'full_attendance_bonus_enabled', 'admin_content_commission')", (err, rows) => {
+            const map = {};
+            (rows || []).forEach(r => map[r.key] = r.value);
+            const fullBonusNominal = map.full_attendance_bonus !== undefined ? (parseRupiah(map.full_attendance_bonus) || 0) : 150000;
+            const fullBonusEnabled = map.full_attendance_bonus_enabled === '1';
+            const adminContentCommission = map.admin_content_commission !== undefined ? (parseRupiah(map.admin_content_commission) || 0) : 10000;
+            resolve({ fullBonusNominal, fullBonusEnabled, adminContentCommission });
+        });
+    });
+}
+
 // Routes - Rekap Komisi Pencuci & Penggajian Terintegrasi Absen (Khusus Owner)
-app.get('/komisi', requireOwner, (req, res) => {
+app.get('/komisi', requireOwner, async (req, res) => {
     let { from, to, worker, tab } = req.query;
     const nowWita = getWitaTime();
-    const todayStr = nowWita.toISOString().slice(0, 10);
-    const firstDayOfMonth = new Date(nowWita.getFullYear(), nowWita.getMonth(), 1).toISOString().slice(0, 10);
-    
-    // Default rentang tanggal adalah Bulan Berjalan (1 s/d hari ini) sesuai siklus bulanan
-    if (!from) from = firstDayOfMonth;
-    if (!to) to = todayStr;
+    const defPeriod = getDefaultPayrollPeriod(nowWita);
+    const todayStr = defPeriod.todayStr;
+    if (!from) from = defPeriod.from;
+    if (!to) to = defPeriod.to;
     const activeTab = tab || 'payroll';
 
     let where = ["date(date) >= date(?)", "date(date) <= date(?)"];
@@ -1712,6 +1762,7 @@ app.get('/komisi', requireOwner, (req, res) => {
     }
 
     const whereClause = "WHERE " + where.join(" AND ");
+    const payrollSettings = await getPayrollSettings();
 
     db.all("SELECT * FROM workers ORDER BY CASE WHEN role='Admin' THEN 1 ELSE 2 END, name ASC", (err, workers) => {
         const workerList = workers || [];
@@ -1757,37 +1808,56 @@ app.get('/komisi', requireOwner, (req, res) => {
                 const salesMap = {};
                 let grandTotalMotor = 0;
                 let grandTotalOmzet = 0;
-                let grandTotalKomisi = 0;
+                let grandTotalKomisiCuci = 0;
 
                 (workerSummary || []).forEach(w => {
                     grandTotalMotor += w.total_motor;
                     grandTotalOmzet += w.total_omzet;
-                    grandTotalKomisi += w.total_komisi;
+                    grandTotalKomisiCuci += w.total_komisi;
                     if (w.worker_name) {
                         salesMap[w.worker_name.toLowerCase().trim()] = w;
                     }
                 });
 
-                // 3. Ambil data riwayat pembayaran gaji pada periode ini
-                db.all("SELECT * FROM payroll_records WHERE date(period_from) = date(?) AND date(period_to) = date(?)", [from, to], (errPay, payRecords) => {
-                    const payMap = {};
-                    (payRecords || []).forEach(p => {
-                        if (p.worker_name) {
-                            payMap[p.worker_name.toLowerCase().trim()] = p;
+                // 2b. Hitung Komisi Upload Konten Admin dalam periode (Rp 10.000/konten)
+                let whereKonten = ["date(date) >= date(?)", "date(date) <= date(?)"];
+                let paramsKonten = [from, to];
+                if (worker && worker.trim() && worker !== 'all') {
+                    whereKonten.push("LOWER(TRIM(worker_name)) = LOWER(TRIM(?))");
+                    paramsKonten.push(worker.trim());
+                }
+                const whereClauseKonten = "WHERE " + whereKonten.join(" AND ");
+
+                db.all(`SELECT * FROM content_commissions ${whereClauseKonten} ORDER BY date DESC, id DESC`, paramsKonten, (errKon, contentRows) => {
+                    const contentList = contentRows || [];
+                    const contentMap = {};
+                    let grandTotalContentCount = 0;
+                    let grandTotalContentKomisi = 0;
+
+                    contentList.forEach(c => {
+                        const key = (c.worker_name || '').toLowerCase().trim();
+                        const cnt = Number(c.content_count || 0);
+                        const kom = Number(c.total_commission || 0);
+                        grandTotalContentCount += cnt;
+                        grandTotalContentKomisi += kom;
+                        if (key) {
+                            if (!contentMap[key]) contentMap[key] = { total_content_count: 0, total_content_komisi: 0 };
+                            contentMap[key].total_content_count += cnt;
+                            contentMap[key].total_content_komisi += kom;
                         }
                     });
 
-                    // Ambil nominal bonus kehadiran penuh dari settings
-                    db.get("SELECT value FROM settings WHERE key = 'full_attendance_bonus'", (errSet, setRow) => {
-                        const fullBonusNominal = setRow ? (parseRupiah(setRow.value) || 0) : 150000;
+                    // 3. Ambil data riwayat pembayaran gaji pada periode ini
+                    db.all("SELECT * FROM payroll_records WHERE date(period_from) = date(?) AND date(period_to) = date(?)", [from, to], (errPay, payRecords) => {
+                        const payMap = {};
+                        (payRecords || []).forEach(p => {
+                            if (p.worker_name) {
+                                payMap[p.worker_name.toLowerCase().trim()] = p;
+                            }
+                        });
 
-                        // Hitung hari kalender dan target hari kerja (total hari kalender - 1 hari off/minggu)
-                        const dFrom = new Date(from);
-                        const dTo = new Date(to);
-                        const diffTime = Math.max(0, dTo.getTime() - dFrom.getTime());
-                        const totalCalendarDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
-                        const offDays = Math.floor(totalCalendarDays / 7);
-                        const targetWorkingDays = Math.max(1, totalCalendarDays - offDays);
+                        const { fullBonusNominal, fullBonusEnabled, adminContentCommission } = payrollSettings;
+                        const { totalCalendarDays, offDays, targetWorkingDays } = computeAttendanceTarget(from, to);
 
                         // Gabungkan pekerja yang punya data komisi/absen tapi belum terdaftar di tabel workers
                         const existingNames = new Set(workerList.map(w => (w.name || '').toLowerCase().trim()));
@@ -1818,11 +1888,12 @@ app.get('/komisi', requireOwner, (req, res) => {
                             }
                         });
 
-                        // 4. Susun Payroll Summary Gabungan (Kehadiran Absen + Komisi Cuci Motor + Bonus Kehadiran)
+                        // 4. Susun Payroll Summary Gabungan (Kehadiran Absen + Komisi Cuci + Komisi Konten Admin + Bonus Kehadiran)
                         let grandTotalGajiKehadiran = 0;
                         let grandTotalGajiBersih = 0;
                         let grandTotalHariHadir = 0;
                         let grandTotalBonus = 0;
+                        const grandTotalKomisi = grandTotalKomisiCuci + grandTotalContentKomisi;
 
                         const payrollSummary = workerList.map(w => {
                             const key = (w.name || '').toLowerCase().trim();
@@ -1830,12 +1901,14 @@ app.get('/komisi', requireOwner, (req, res) => {
                             const dailyRate = w.daily_salary || 0;
                             const totalDailySalary = days * dailyRate;
                             const salesData = salesMap[key] || { total_motor: 0, total_omzet: 0, total_komisi: 0 };
-                            
-                            // Cek apakah masuk full (di luar hari off 1x/minggu)
-                            const isFull = (days >= targetWorkingDays) && (totalCalendarDays >= 14);
+                            const contentData = contentMap[key] || { total_content_count: 0, total_content_komisi: 0 };
+                            const totalKomisiWorker = salesData.total_komisi + contentData.total_content_komisi;
+
+                            // Bonus Masuk Full hanya dihitung jika saklar bonus aktif, memenuhi target, dan periode >= 14 hari
+                            const isFull = fullBonusEnabled && (days >= targetWorkingDays) && (totalCalendarDays >= 14);
                             const workerBonus = (w.bonus_rajin !== undefined && w.bonus_rajin !== null && !isNaN(w.bonus_rajin)) ? w.bonus_rajin : fullBonusNominal;
                             const autoBonus = isFull ? workerBonus : 0;
-                            const totalGaji = totalDailySalary + salesData.total_komisi + autoBonus;
+                            const totalGaji = totalDailySalary + totalKomisiWorker + autoBonus;
                             const paidInfo = payMap[key] || null;
 
                             grandTotalHariHadir += days;
@@ -1855,7 +1928,10 @@ app.get('/komisi', requireOwner, (req, res) => {
                                 total_daily_salary: totalDailySalary,
                                 total_motor: salesData.total_motor,
                                 total_omzet: salesData.total_omzet,
-                                total_komisi: salesData.total_komisi,
+                                total_komisi_cuci: salesData.total_komisi,
+                                total_content_count: contentData.total_content_count,
+                                total_content_komisi: contentData.total_content_komisi,
+                                total_komisi: totalKomisiWorker,
                                 is_full_attendance: isFull,
                                 auto_bonus: autoBonus,
                                 total_gaji: totalGaji,
@@ -1887,6 +1963,7 @@ app.get('/komisi', requireOwner, (req, res) => {
                                     payrollSummary,
                                     workerSummary: workerSummary || [],
                                     trxDetails: trxDetails || [],
+                                    contentRows: contentList,
                                     accounts: accountList,
                                     from,
                                     to,
@@ -1895,6 +1972,9 @@ app.get('/komisi', requireOwner, (req, res) => {
                                     grandTotalMotor,
                                     grandTotalOmzet,
                                     grandTotalKomisi,
+                                    grandTotalKomisiCuci,
+                                    grandTotalContentCount,
+                                    grandTotalContentKomisi,
                                     grandTotalHariHadir,
                                     grandTotalGajiKehadiran,
                                     grandTotalBonus,
@@ -1903,8 +1983,12 @@ app.get('/komisi', requireOwner, (req, res) => {
                                     totalCalendarDays,
                                     offDays,
                                     fullBonusNominal,
+                                    fullBonusEnabled,
+                                    adminContentCommission,
                                     todayStr,
-                                    successMsg: req.query.paid ? 'Pembayaran gaji berhasil dicatat dan masuk ke pengeluaran kas!' : null
+                                    successMsg: req.query.paid
+                                        ? 'Pembayaran gaji berhasil dicatat dan masuk ke pengeluaran kas!'
+                                        : (req.query.konten_saved ? 'Komisi upload konten berhasil ditambahkan ke rekap & slip gaji!' : (req.query.msg || null))
                                 });
                             });
                         });
@@ -1912,6 +1996,58 @@ app.get('/komisi', requireOwner, (req, res) => {
                 });
             });
         });
+    });
+});
+
+// Saklar cepat ON/OFF Bonus Masuk Full dari halaman Gaji & Komisi
+app.post('/komisi/toggle-bonus', requireOwner, (req, res) => {
+    const enabled = req.body.enabled === '1' ? '1' : '0';
+    const from = req.body.from || '';
+    const to = req.body.to || '';
+    db.run("INSERT INTO settings (key, value) VALUES ('full_attendance_bonus_enabled', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [enabled], async () => {
+        try { await cloudSync.uploadDbNow(); } catch (e) {}
+        const msg = enabled === '1' ? 'Bonus Masuk Full diaktifkan.' : 'Bonus Masuk Full dinonaktifkan sementara (Rp 0).';
+        res.redirect(`/komisi?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&tab=payroll&msg=${encodeURIComponent(msg)}`);
+    });
+});
+
+// Input Komisi Upload Konten Admin (Rp 10.000/konten) oleh Owner
+app.post('/komisi/konten/add', requireOwner, (req, res) => {
+    const { worker_name, date, content_count, rate, title, period_from, period_to } = req.body;
+    if (!worker_name || !worker_name.trim()) {
+        return res.status(400).send('Validasi gagal: Nama Admin/Staf wajib dipilih. <a href="/komisi">Kembali</a>');
+    }
+    const cleanDate = (date && /^\d{4}-\d{2}-\d{2}$/.test(date.trim())) ? date.trim() : getWitaTime().toISOString().slice(0, 10);
+    const countNum = Math.max(1, parseInt(content_count, 10) || 1);
+    const rateNum = parseRupiah(rate);
+    const finalRate = (!isNaN(rateNum) && rateNum >= 0) ? rateNum : 10000;
+    const totalComm = countNum * finalRate;
+    const cleanTitle = title ? String(title).trim().slice(0, 150) : '';
+    const createdBy = req.session.user ? req.session.user.username : 'owner';
+
+    db.run(
+        `INSERT INTO content_commissions (worker_name, date, content_count, rate, total_commission, title, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [worker_name.trim(), cleanDate, countNum, finalRate, totalComm, cleanTitle, createdBy],
+        async (err) => {
+            if (err) return res.status(500).send('Gagal menyimpan komisi konten: ' + err.message + ' <a href="/komisi">Kembali</a>');
+            try { await cloudSync.uploadDbNow(); } catch (e) {}
+            const qFrom = period_from || cleanDate.slice(0, 8) + '01';
+            const qTo = period_to || getWitaTime().toISOString().slice(0, 10);
+            res.redirect(`/komisi?from=${encodeURIComponent(qFrom)}&to=${encodeURIComponent(qTo)}&tab=payroll&konten_saved=1`);
+        }
+    );
+});
+
+// Hapus entri Komisi Upload Konten
+app.post('/komisi/konten/delete', requireOwner, (req, res) => {
+    const id = parseInt(req.body.id, 10);
+    const from = req.body.from || '';
+    const to = req.body.to || '';
+    if (isNaN(id)) return res.redirect('/komisi');
+    db.run("DELETE FROM content_commissions WHERE id = ?", [id], async () => {
+        try { await cloudSync.uploadDbNow(); } catch (e) {}
+        res.redirect(`/komisi?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&tab=payroll&msg=${encodeURIComponent('Entri komisi konten berhasil dihapus.')}`);
     });
 });
 
@@ -1925,6 +2061,7 @@ app.post('/payroll/pay', requireOwner, (req, res) => {
         daily_rate, 
         total_daily_salary, 
         total_motor, 
+        total_content_count,
         total_commission, 
         bonus, 
         kasbon, 
@@ -1945,6 +2082,7 @@ app.post('/payroll/pay', requireOwner, (req, res) => {
     const numDays = parseInt(days_present, 10) || 0;
     const numRate = parseRupiah(daily_rate || 0);
     const numTotalMotor = parseInt(total_motor, 10) || 0;
+    const numTotalContent = parseInt(total_content_count, 10) || 0;
     let account = (akun_kas && String(akun_kas).trim()) ? String(akun_kas).trim() : 'Kas Kecil';
     const currentUser = req.session.user ? req.session.user.username : 'owner';
     const nowWita = getWitaTime();
@@ -1960,7 +2098,10 @@ app.post('/payroll/pay', requireOwner, (req, res) => {
             let currentSaldo = rowSaldo ? rowSaldo.saldo : 0;
 
             const executePayment = () => {
-                const desc = `Gaji & Komisi: ${worker_name.trim()} (${numDays} hari hadir, ${numTotalMotor} motor) - Periode ${period_from} s/d ${period_to}`;
+                const komisiUnitLabel = numTotalContent > 0
+                    ? (numTotalMotor > 0 ? `${numTotalMotor} motor, ${numTotalContent} konten` : `${numTotalContent} konten`)
+                    : `${numTotalMotor} motor`;
+                const desc = `Gaji & Komisi: ${worker_name.trim()} (${numDays} hari hadir, ${komisiUnitLabel}) - Periode ${period_from} s/d ${period_to}`;
 
                 db.serialize(() => {
                     // 1. Catat ke tabel expenses (kategori 'Gaji')
@@ -2026,14 +2167,15 @@ app.post('/payroll/pay', requireOwner, (req, res) => {
 });
 
 // Route - Print Slip Gaji & Komisi Karyawan (Khusus Owner)
-app.get('/komisi/slip/:workerName', requireOwner, (req, res) => {
+app.get('/komisi/slip/:workerName', requireOwner, async (req, res) => {
     const workerName = req.params.workerName;
     let { from, to, bonus, kasbon } = req.query;
     const nowWita = getWitaTime();
-    const todayStr = nowWita.toISOString().slice(0, 10);
-    const firstDay = new Date(nowWita.getFullYear(), nowWita.getMonth(), 1).toISOString().slice(0, 10);
-    if (!from) from = firstDay;
-    if (!to) to = todayStr;
+    const defPeriod = getDefaultPayrollPeriod(nowWita);
+    if (!from) from = defPeriod.from;
+    if (!to) to = defPeriod.to;
+
+    const payrollSettings = await getPayrollSettings();
 
     db.get("SELECT * FROM workers WHERE name = ?", [workerName], (errW, worker) => {
         const dailyRate = worker ? (worker.daily_salary || 0) : 0;
@@ -2048,67 +2190,76 @@ app.get('/komisi/slip/:workerName', requireOwner, (req, res) => {
                 const daysPresent = attRow ? attRow.days_present : 0;
                 const totalDailySalary = daysPresent * dailyRate;
 
-                // Hitung target kehadiran penuh (total hari - off 1x/minggu)
-                const dFrom = new Date(from);
-                const dTo = new Date(to);
-                const diffTime = Math.max(0, dTo.getTime() - dFrom.getTime());
-                const totalCalendarDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
-                const offDays = Math.floor(totalCalendarDays / 7);
-                const targetWorkingDays = Math.max(1, totalCalendarDays - offDays);
-                const isFullAttendance = (daysPresent >= targetWorkingDays) && (totalCalendarDays >= 14);
+                const { totalCalendarDays, offDays, targetWorkingDays } = computeAttendanceTarget(from, to);
+                const { fullBonusNominal, fullBonusEnabled } = payrollSettings;
+                const isFullAttendance = fullBonusEnabled && (daysPresent >= targetWorkingDays) && (totalCalendarDays >= 14);
 
-                db.get("SELECT value FROM settings WHERE key = 'full_attendance_bonus'", (errSet, setRow) => {
-                    const fullBonusNominal = setRow ? (parseRupiah(setRow.value) || 0) : 150000;
-
-                    // Ambil rincian pengerjaan motor (dari sale_commissions)
-                    const sql = `
-                        SELECT sc.sale_id as id, sc.date, COALESCE(s.customer_name, 'Pelanggan') as customer_name, 
-                               sc.license_plate, sc.service_name, sc.price, sc.commission
-                        FROM sale_commissions sc
-                        LEFT JOIN sales s ON sc.sale_id = s.id
-                        WHERE sc.worker_name = ? AND date(sc.date) >= date(?) AND date(sc.date) <= date(?)
-                        ORDER BY sc.date ASC, sc.id ASC
-                    `;
-                    db.all(sql, [workerName, from, to], (err, rows) => {
-                        let totalKomisi = 0;
-                        let totalOmzet = 0;
-                        (rows || []).forEach(r => {
-                            totalKomisi += (r.commission || 0);
-                            totalOmzet += (r.price || 0);
-                        });
-
-                        const workerBonus = (worker && worker.bonus_rajin !== undefined && worker.bonus_rajin !== null && !isNaN(worker.bonus_rajin)) ? worker.bonus_rajin : fullBonusNominal;
-                        let defaultBonus = isFullAttendance ? workerBonus : 0;
-                        const numBonus = (bonus !== undefined && bonus !== null && String(bonus).trim() !== '') 
-                            ? parseRupiah(bonus || 0) 
-                            : defaultBonus;
-                        const numKasbon = parseRupiah(kasbon || 0);
-                        const grandTotalGaji = totalDailySalary + totalKomisi + numBonus - numKasbon;
-
-                        res.render('komisi-slip', {
-                            layout: false,
-                            workerName,
-                            workerRole: worker ? (worker.role || 'Pencuci') : 'Pencuci',
-                            workerPhone,
-                            from,
-                            to,
-                            daysPresent,
-                            targetWorkingDays,
-                            totalCalendarDays,
-                            offDays,
-                            isFullAttendance,
-                            dailyRate,
-                            totalDailySalary,
-                            rows: rows || [],
-                            totalMotor: (rows || []).length,
-                            totalKomisi,
-                            totalOmzet,
-                            bonus: numBonus,
-                            kasbon: numKasbon,
-                            grandTotalGaji,
-                            printedAt: getWitaTime()
-                        });
+                // Ambil rincian pengerjaan motor (dari sale_commissions)
+                const sql = `
+                    SELECT sc.sale_id as id, sc.date, COALESCE(s.customer_name, 'Pelanggan') as customer_name, 
+                           sc.license_plate, sc.service_name, sc.price, sc.commission
+                    FROM sale_commissions sc
+                    LEFT JOIN sales s ON sc.sale_id = s.id
+                    WHERE sc.worker_name = ? AND date(sc.date) >= date(?) AND date(sc.date) <= date(?)
+                    ORDER BY sc.date ASC, sc.id ASC
+                `;
+                db.all(sql, [workerName, from, to], (err, rows) => {
+                    let totalKomisi = 0;
+                    let totalOmzet = 0;
+                    (rows || []).forEach(r => {
+                        totalKomisi += (r.commission || 0);
+                        totalOmzet += (r.price || 0);
                     });
+
+                    // Ambil rincian komisi upload konten admin dalam periode
+                    db.all(
+                        `SELECT * FROM content_commissions WHERE LOWER(TRIM(worker_name)) = LOWER(TRIM(?)) AND date(date) >= date(?) AND date(date) <= date(?) ORDER BY date ASC, id ASC`,
+                        [workerName, from, to],
+                        (errKon, contentRows) => {
+                            let totalContentCount = 0;
+                            let totalContentKomisi = 0;
+                            (contentRows || []).forEach(c => {
+                                totalContentCount += Number(c.content_count || 0);
+                                totalContentKomisi += Number(c.total_commission || 0);
+                            });
+
+                            const workerBonus = (worker && worker.bonus_rajin !== undefined && worker.bonus_rajin !== null && !isNaN(worker.bonus_rajin)) ? worker.bonus_rajin : fullBonusNominal;
+                            let defaultBonus = isFullAttendance ? workerBonus : 0;
+                            const numBonus = (bonus !== undefined && bonus !== null && String(bonus).trim() !== '') 
+                                ? parseRupiah(bonus || 0) 
+                                : defaultBonus;
+                            const numKasbon = parseRupiah(kasbon || 0);
+                            const grandTotalGaji = totalDailySalary + totalKomisi + totalContentKomisi + numBonus - numKasbon;
+
+                            res.render('komisi-slip', {
+                                layout: false,
+                                workerName,
+                                workerRole: worker ? (worker.role || 'Pencuci') : 'Pencuci',
+                                workerPhone,
+                                from,
+                                to,
+                                daysPresent,
+                                targetWorkingDays,
+                                totalCalendarDays,
+                                offDays,
+                                isFullAttendance,
+                                fullBonusEnabled,
+                                dailyRate,
+                                totalDailySalary,
+                                rows: rows || [],
+                                totalMotor: (rows || []).length,
+                                totalKomisi,
+                                totalOmzet,
+                                contentRows: contentRows || [],
+                                totalContentCount,
+                                totalContentKomisi,
+                                bonus: numBonus,
+                                kasbon: numKasbon,
+                                grandTotalGaji,
+                                printedAt: getWitaTime()
+                            });
+                        }
+                    );
                 });
             }
         );

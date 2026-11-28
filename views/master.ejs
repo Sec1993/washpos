@@ -421,32 +421,42 @@ function openRoleModal(id, username, currentRole) {
     </div>
 </div>
 
-<!-- PENGATURAN BONUS KEHADIRAN PENUH (BONUS RAJIN) -->
+<!-- PENGATURAN BONUS KEHADIRAN PENUH (BONUS RAJIN) & KOMISI KONTEN -->
 <div class="card shadow-sm mb-4 border-warning">
     <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
-        <span class="fw-bold">🎁 Pengaturan Bonus Kehadiran Penuh (Bonus Rajin)</span>
-        <span class="badge bg-dark text-white">Insentif Karyawan & Admin</span>
+        <span class="fw-bold">🎁 Pengaturan Bonus Masuk Full & Komisi Konten Admin</span>
+        <span class="badge <%= (typeof fullAttendanceBonusEnabled !== 'undefined' && fullAttendanceBonusEnabled) ? 'bg-success' : 'bg-secondary' %>">
+            Bonus Masuk Full: <%= (typeof fullAttendanceBonusEnabled !== 'undefined' && fullAttendanceBonusEnabled) ? 'AKTIF' : 'NONAKTIF' %>
+        </span>
     </div>
     <div class="card-body">
         <form action="/master/settings/payroll" method="POST" onsubmit="return validateRupiahForm(this)">
-            <div class="row align-items-center g-3">
-                <div class="col-md-5 col-12">
-                    <label class="form-label small fw-bold mb-1">Nominal Bonus Masuk Full (Rp)</label>
-                    <div class="input-group">
+            <div class="form-check form-switch mb-3 p-2 bg-light border rounded ps-5">
+                <input class="form-check-input" type="checkbox" role="switch" id="toggleBonusAktif" name="full_attendance_bonus_enabled" value="1" <%= (typeof fullAttendanceBonusEnabled !== 'undefined' && fullAttendanceBonusEnabled) ? 'checked' : '' %>>
+                <label class="form-check-label fw-bold" for="toggleBonusAktif">
+                    Aktifkan Bonus Masuk Full (Bonus Rajin)
+                    <small class="d-block fw-normal text-muted">Jika dimatikan, seluruh karyawan & admin otomatis tidak mendapat bonus masuk full sementara (nominal tersimpan tidak hilang, tinggal nyalakan lagi bulan depan).</small>
+                </label>
+            </div>
+            <div class="row align-items-end g-3">
+                <div class="col-md-4 col-12">
+                    <label class="form-label small fw-bold mb-1">Nominal Bonus Masuk Full Default (Rp)</label>
+                    <div class="input-group input-group-sm">
                         <span class="input-group-text bg-light fw-bold">Rp</span>
-                        <input type="text" name="full_attendance_bonus" class="form-control rupiah" value="<%= (typeof fullAttendanceBonus !== 'undefined') ? fullAttendanceBonus.toLocaleString('id-ID') : '150.000' %>" placeholder="150.000" required>
+                        <input type="text" name="full_attendance_bonus" class="form-control rupiah" data-allow-zero="true" value="<%= (typeof fullAttendanceBonus !== 'undefined') ? fullAttendanceBonus.toLocaleString('id-ID') : '150.000' %>" placeholder="150.000" required>
                     </div>
-                    <small class="text-muted" style="font-size: 11px;">Otomatis masuk ke rekap gaji jika karyawan/admin masuk full.</small>
+                    <small class="text-muted" style="font-size: 11px;">Tarif bawaan untuk karyawan baru (off 1x/minggu).</small>
                 </div>
                 <div class="col-md-4 col-12">
-                    <label class="form-label small fw-bold mb-1">Aturan Libur Mingguan</label>
-                    <div class="p-2 bg-light border rounded small">
-                        <strong>Off 1x Seminggu</strong>
-                        <div class="text-muted" style="font-size: 11px;">Target masuk full = Total hari kalender periode dikurangi 1 hari off per minggu (contoh: 30 hari - 4 hari off = minimal 26 hari hadir).</div>
+                    <label class="form-label small fw-bold mb-1">🎬 Komisi Upload Konten Admin (Rp / Konten)</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-light fw-bold">Rp</span>
+                        <input type="text" name="admin_content_commission" class="form-control rupiah" data-allow-zero="true" value="<%= (typeof adminContentCommission !== 'undefined') ? adminContentCommission.toLocaleString('id-ID') : '10.000' %>" placeholder="10.000" required>
                     </div>
+                    <small class="text-muted" style="font-size: 11px;">Tarif default saat Owner menginput konten Admin di Gaji & Komisi.</small>
                 </div>
-                <div class="col-md-3 col-12 d-flex align-items-end">
-                    <button type="submit" class="btn btn-warning fw-bold w-100 py-2">💾 Simpan Bonus Rajin</button>
+                <div class="col-md-4 col-12">
+                    <button type="submit" class="btn btn-warning fw-bold w-100 py-2">💾 Simpan Pengaturan Gaji & Bonus</button>
                 </div>
             </div>
         </form>

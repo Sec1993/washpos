@@ -218,6 +218,8 @@ db.serialize(() => {
             ['receipt_show_qr', '1'],
             ['shop_logo', '/img/logo.png'],
             ['full_attendance_bonus', '150000'],
+            ['full_attendance_bonus_enabled', '0'],
+            ['admin_content_commission', '10000'],
             ['outlet_latitude', '-5.149285'],
             ['outlet_longitude', '119.429529'],
             ['outlet_radius_meters', '100'],
@@ -303,6 +305,20 @@ db.serialize(() => {
     db.run(`CREATE INDEX IF NOT EXISTS idx_sale_comm_sale ON sale_commissions(sale_id)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_sale_comm_worker ON sale_commissions(worker_name)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_sale_comm_date ON sale_commissions(date)`);
+
+    // 14. Komisi Upload Konten Admin (Rp 10.000/konten, diinput oleh Owner)
+    db.run(`CREATE TABLE IF NOT EXISTS content_commissions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        worker_name TEXT NOT NULL,
+        date TEXT NOT NULL,
+        content_count INTEGER DEFAULT 1,
+        rate REAL DEFAULT 10000,
+        total_commission REAL DEFAULT 0,
+        title TEXT,
+        created_by TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_content_comm_worker_date ON content_commissions(worker_name, date)`);
 
     // Migrasi Backfill: Pastikan transaksi lama di sales tercatat di sale_commissions
     db.run(`

@@ -77,15 +77,44 @@
     <hr>
 
     <% if (typeof workerRole !== 'undefined' && workerRole === 'Admin') { %>
-    <!-- 2. Rincian Tugas Admin -->
-    <div class="section-title">2. RINCIAN TUGAS</div>
+    <!-- 2. Rincian Tugas & Komisi Upload Konten Admin -->
+    <div class="section-title">2. TUGAS &amp; KOMISI UPLOAD KONTEN ADMIN</div>
     <div class="row">
         <span>Tanggung Jawab:</span>
-        <span class="fw-bold">Kasir, Pencatatan & Administrasi</span>
+        <span class="fw-bold">Kasir &amp; Administrasi</span>
     </div>
-    <div style="font-size: 10px; font-style: italic; color: #444; margin-top: 2px;">
-        *Gaji dihitung penuh berdasarkan akumulasi hari hadir kerja.
+    <div class="row">
+        <span>Total Upload Konten:</span>
+        <span class="fw-bold"><%= typeof totalContentCount !== 'undefined' ? totalContentCount : 0 %> konten</span>
     </div>
+    <div class="row fw-bold" style="margin-top: 2px;">
+        <span>Subtotal Komisi Konten:</span>
+        <span>Rp <%= (typeof totalContentKomisi !== 'undefined' ? totalContentKomisi : 0).toLocaleString('id-ID') %></span>
+    </div>
+    <% if (typeof contentRows !== 'undefined' && contentRows && contentRows.length > 0) { %>
+    <div style="margin-top: 6px; font-size: 11px; font-weight: bold;">Rincian Konten Diupload:</div>
+    <table>
+        <thead>
+            <tr>
+                <th>Tgl / Judul Konten</th>
+                <th class="text-center">Jml</th>
+                <th class="text-end">Komisi</th>
+            </tr>
+        </thead>
+        <tbody>
+            <% contentRows.forEach(c => { %>
+                <tr>
+                    <td>
+                        <span class="fw-bold"><%= c.title || 'Upload konten sosmed' %></span><br>
+                        <small style="font-size:10px;"><%= c.date %></small>
+                    </td>
+                    <td class="text-center"><%= c.content_count %>x</td>
+                    <td class="text-end fw-bold">Rp <%= Number(c.total_commission || 0).toLocaleString('id-ID') %></td>
+                </tr>
+            <% }) %>
+        </tbody>
+    </table>
+    <% } %>
     <% } else { %>
     <!-- 2. Rincian Komisi Cuci Motor -->
     <div class="section-title">2. KOMISI HASIL CUCI MOTOR</div>
@@ -101,6 +130,12 @@
         <span>Subtotal Komisi Cuci:</span>
         <span>Rp <%= totalKomisi.toLocaleString('id-ID') %></span>
     </div>
+    <% if (typeof totalContentCount !== 'undefined' && totalContentCount > 0) { %>
+    <div class="row fw-bold" style="margin-top: 2px;">
+        <span>Komisi Upload Konten (<%= totalContentCount %> konten):</span>
+        <span>Rp <%= (totalContentKomisi || 0).toLocaleString('id-ID') %></span>
+    </div>
+    <% } %>
 
     <% if (rows && rows.length > 0) { %>
     <div style="margin-top: 6px; font-size: 11px; font-weight: bold;">Rincian Unit Motor:</div>
@@ -147,6 +182,10 @@
         *Hadir <%= daysPresent %> hari (mencapai target &ge; <%= targetWorkingDays %> hari kerja di luar <%= offDays %> hari off mingguan).
     </div>
     <% } %>
+    <% } else if (typeof fullBonusEnabled !== 'undefined' && !fullBonusEnabled) { %>
+    <div style="font-size: 10px; font-style: italic; color: #555; margin-bottom: 4px;">
+        *Bonus Masuk Full: Dinonaktifkan sementara (Rp 0).
+    </div>
     <% } %>
     <% if (kasbon > 0) { %>
     <div class="row">
